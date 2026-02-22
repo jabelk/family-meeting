@@ -25,7 +25,7 @@ Sync Impact Report
 ### I. Integration Over Building
 
 All features MUST leverage existing services the family already uses
-(Google Calendar, Gmail, Notion, YNAB, Apple ecosystem) via their APIs
+(Google Calendar, Gmail, YNAB, Apple ecosystem) via their APIs
 rather than reimplementing equivalent functionality. Custom code exists
 only to orchestrate and connect these services. If a paid service
 solves the problem well, prefer subscribing over building.
@@ -69,7 +69,7 @@ or at minimum not conflict with:
 - **Communication**: Gmail / Google Workspace, iMessage, iPhones
 - **Calendar**: Google Calendar (shared family calendar)
 - **Finances**: YNAB (You Need A Budget)
-- **Productivity**: Notion (or similar — open to subscriptions)
+- **Productivity**: Open to subscriptions (e.g., Notion) if they fit
 - **AI Assistants**: Claude, ChatGPT
 - **Devices**: iPhones, MacBooks (Apple ecosystem)
 
@@ -103,4 +103,4 @@ Amendments to this constitution require:
   removal/redefinition, MINOR for additions, PATCH for clarifications)
 - Review of all in-progress specs/plans for compliance with changes
 
-**Version**: 1.0.0 | **Ratified**: 2026-02-21 | **Last Amended**: 2026-02-21
+**Version**: 1.0.1 | **Ratified**: 2026-02-21 | **Last Amended**: 2026-02-21
