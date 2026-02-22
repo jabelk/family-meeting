@@ -11,7 +11,7 @@ from src.config import CALENDAR_IDS
 
 logger = logging.getLogger(__name__)
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
 TOKEN_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "token.json")
 CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "credentials.json")
 
