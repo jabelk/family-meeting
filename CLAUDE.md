@@ -44,3 +44,10 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Each user story must be independently testable and deployable
 - Plans must comply with constitution principles; violations require explicit justification
 - Tasks specify full file paths and mark parallel-safe items with `[P]`
+
+## Active Technologies
+- Python 3.12 + anthropic SDK, fastapi, notion-client, google-api-python-client, ynab, uvicorn (001-ai-meeting-assistant)
+- Notion (databases for action items, meal plans, meetings, family profile) (001-ai-meeting-assistant)
+
+## Recent Changes
+- 001-ai-meeting-assistant: Added Python 3.12 + anthropic SDK, fastapi, notion-client, google-api-python-client, ynab, uvicorn
