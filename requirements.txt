@@ -8,3 +8,5 @@ google-auth-httplib2>=0.2.0
 ynab>=1.4.0
 python-dotenv>=1.0.0
 httpx>=0.28.0
+icalendar>=6.1.0
+recurring-ical-events>=3.5.0

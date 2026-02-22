@@ -23,7 +23,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 TOKEN_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "token.json")
 CREDENTIALS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "credentials.json")
 
@@ -38,6 +38,11 @@ def main():
     if os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
         print(f"Existing token found at {TOKEN_PATH}")
+        # Check if scope needs upgrading (readonly → events)
+        if creds and creds.scopes and "calendar.readonly" in str(creds.scopes):
+            print("Token has readonly scope — deleting to re-auth with calendar.events scope.")
+            os.remove(TOKEN_PATH)
+            creds = None
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:

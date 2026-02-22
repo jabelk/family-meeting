@@ -46,8 +46,10 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Tasks specify full file paths and mark parallel-safe items with `[P]`
 
 ## Active Technologies
-- Python 3.12 + anthropic SDK, fastapi, notion-client, google-api-python-client, ynab, uvicorn (001-ai-meeting-assistant)
-- Notion (databases for action items, meal plans, meetings, family profile) (001-ai-meeting-assistant)
+- Python 3.12 + FastAPI, anthropic SDK, notion-client, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn, httpx (001-ai-meeting-assistant)
+- Notion API (free plan) — 5 databases (Action Items, Meal Plans, Meetings, Backlog) + Family Profile page (001-ai-meeting-assistant)
+- Node.js sidecar (Express + codetheweb/anylist) for AnyList grocery integration (001-ai-meeting-assistant)
+- Docker Compose on NUC + Cloudflare Tunnel + n8n for scheduling (001-ai-meeting-assistant)
 
 ## Recent Changes
-- 001-ai-meeting-assistant: Added Python 3.12 + anthropic SDK, fastapi, notion-client, google-api-python-client, ynab, uvicorn
+- 001-ai-meeting-assistant: Plan Phase 1 complete — added Google Calendar write, Outlook ICS, AnyList sidecar, n8n contracts

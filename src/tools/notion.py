@@ -9,6 +9,8 @@ from src.config import (
     NOTION_MEAL_PLANS_DB,
     NOTION_MEETINGS_DB,
     NOTION_FAMILY_PROFILE_PAGE,
+    NOTION_BACKLOG_DB,
+    NOTION_GROCERY_HISTORY_DB,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,7 +123,12 @@ def complete_action_item(page_id: str) -> str:
 
 
 def rollover_incomplete_items() -> str:
-    """Find incomplete 'This Week' items and mark them as rolled over."""
+    """Find incomplete 'This Week' items, mark as rolled over, and include backlog review.
+
+    Returns a summary including both rolled-over action items and backlog items
+    surfaced this week for inclusion in the weekly meeting agenda.
+    """
+    # Roll over incomplete action items
     results = notion.databases.query(
         database_id=NOTION_ACTION_ITEMS_DB,
         filter={
@@ -135,7 +142,37 @@ def rollover_incomplete_items() -> str:
     for page in results["results"]:
         notion.pages.update(page_id=page["id"], properties={"Rolled Over": {"checkbox": True}})
         count += 1
-    return f"Rolled over {count} incomplete items."
+
+    summary = f"Rolled over {count} incomplete action items."
+
+    # Add backlog review summary if backlog is configured
+    if NOTION_BACKLOG_DB:
+        try:
+            # Get backlog items surfaced this week (Last Surfaced within last 7 days)
+            week_ago = (date.today() - timedelta(days=7)).isoformat()
+            surfaced = notion.databases.query(
+                database_id=NOTION_BACKLOG_DB,
+                filter={
+                    "and": [
+                        {"property": "Last Surfaced", "date": {"on_or_after": week_ago}},
+                    ]
+                },
+            )
+            if surfaced["results"]:
+                backlog_lines = []
+                for page in surfaced["results"]:
+                    props = page["properties"]
+                    desc = _get_title(props.get("Description", {}))
+                    status_val = _get_status(props.get("Status", {}))
+                    icon = "✅" if status_val == "Done" else "⬜"
+                    backlog_lines.append(f"  {icon} {desc}")
+                summary += f"\n\nBacklog items surfaced this week:\n" + "\n".join(backlog_lines)
+            else:
+                summary += "\n\nNo backlog items were surfaced this week."
+        except Exception as e:
+            logger.warning("Failed to get backlog review: %s", e)
+
+    return summary
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +306,244 @@ def get_meal_plan(week_start: str = "") -> str:
     blocks = notion.blocks.children.list(block_id=page_id)
     content = _blocks_to_text(blocks["results"])
     return f"{title}\n{content}"
+
+
+# ---------------------------------------------------------------------------
+# Backlog (T009)
+# ---------------------------------------------------------------------------
+
+def get_backlog_items(assignee: str = "", status: str = "") -> str:
+    """Query backlog items with optional filters. Returns formatted text."""
+    if not NOTION_BACKLOG_DB:
+        return "Backlog database not configured."
+
+    filters = []
+    if assignee:
+        filters.append({"property": "Assignee", "select": {"equals": assignee}})
+    if status:
+        if status.lower() == "open":
+            filters.append({"property": "Status", "status": {"does_not_equal": "Done"}})
+        else:
+            filters.append({"property": "Status", "status": {"equals": status}})
+
+    query_filter = {"and": filters} if len(filters) > 1 else (filters[0] if filters else None)
+    kwargs: dict = {"database_id": NOTION_BACKLOG_DB}
+    if query_filter:
+        kwargs["filter"] = query_filter
+
+    results = notion.databases.query(**kwargs)
+    items = []
+    for page in results["results"]:
+        props = page["properties"]
+        desc = _get_title(props.get("Description", {}))
+        assignee_val = _get_select(props.get("Assignee", {}))
+        category = _get_select(props.get("Category", {}))
+        priority = _get_select(props.get("Priority", {}))
+        status_val = _get_status(props.get("Status", {}))
+        items.append(
+            f"- {'✅' if status_val == 'Done' else '⬜'} {desc}"
+            + (f" [{category}]" if category else "")
+            + (f" — {priority}" if priority else "")
+            + (f" (assigned: {assignee_val})" if assignee_val else "")
+        )
+    if not items:
+        return "No backlog items found."
+    return "\n".join(items)
+
+
+def add_backlog_item(
+    description: str,
+    category: str = "Other",
+    assignee: str = "Erin",
+    priority: str = "Medium",
+) -> str:
+    """Add a new item to the Backlog database."""
+    if not NOTION_BACKLOG_DB:
+        return "Backlog database not configured."
+
+    properties: dict = {
+        "Description": {"title": [{"text": {"content": description}}]},
+        "Category": {"select": {"name": category}},
+        "Assignee": {"select": {"name": assignee}},
+        "Status": {"status": {"name": "Not Started"}},
+        "Priority": {"select": {"name": priority}},
+        "Created": {"date": {"start": date.today().isoformat()}},
+    }
+    notion.pages.create(parent={"database_id": NOTION_BACKLOG_DB}, properties=properties)
+    return f"Added to backlog: {description} [{category}]"
+
+
+def complete_backlog_item(page_id: str) -> str:
+    """Mark a backlog item as Done by its Notion page ID."""
+    notion.pages.update(
+        page_id=page_id,
+        properties={"Status": {"status": {"name": "Done"}}},
+    )
+    return "Backlog item marked as done."
+
+
+def get_next_backlog_suggestion() -> str:
+    """Get the least-recently-surfaced incomplete backlog item for daily plan.
+
+    Returns the item description and updates its Last Surfaced date.
+    """
+    if not NOTION_BACKLOG_DB:
+        return "No backlog items — enjoy the free time!"
+
+    results = notion.databases.query(
+        database_id=NOTION_BACKLOG_DB,
+        filter={"property": "Status", "status": {"does_not_equal": "Done"}},
+        sorts=[
+            {"property": "Last Surfaced", "direction": "ascending"},
+            {"property": "Priority", "direction": "ascending"},
+        ],
+        page_size=1,
+    )
+
+    if not results["results"]:
+        return "No backlog items — enjoy the free time!"
+
+    page = results["results"][0]
+    page_id = page["id"]
+    desc = _get_title(page["properties"].get("Description", {}))
+    category = _get_select(page["properties"].get("Category", {}))
+
+    # Update Last Surfaced to today
+    notion.pages.update(
+        page_id=page_id,
+        properties={"Last Surfaced": {"date": {"start": date.today().isoformat()}}},
+    )
+
+    label = f" [{category}]" if category else ""
+    return f"{desc}{label}"
+
+
+# ---------------------------------------------------------------------------
+# Routine Templates (T010 — stored in Family Profile page)
+# ---------------------------------------------------------------------------
+
+def get_routine_templates() -> str:
+    """Read the Routine Templates section from the Family Profile page.
+
+    Returns the raw text of the routine templates section, which contains
+    structured time block definitions for different daily scenarios.
+    """
+    blocks = notion.blocks.children.list(block_id=NOTION_FAMILY_PROFILE_PAGE)
+    in_section = False
+    lines = []
+    for block in blocks["results"]:
+        text = _get_block_text(block)
+        btype = block["type"]
+        if "heading" in btype and text and "routine template" in text.lower():
+            in_section = True
+            continue
+        if in_section:
+            if "heading" in btype:
+                break  # Next section — stop
+            if text:
+                lines.append(text)
+    if not lines:
+        return "No routine templates defined yet. Add them during the weekly meeting."
+    return "\n".join(lines)
+
+
+def save_routine_templates(templates_text: str) -> str:
+    """Write updated routine templates to the Family Profile page.
+
+    Finds the Routine Templates section and replaces its content.
+    """
+    blocks = notion.blocks.children.list(block_id=NOTION_FAMILY_PROFILE_PAGE)
+    section_start_id = None
+    blocks_to_delete = []
+    in_section = False
+
+    for block in blocks["results"]:
+        text = _get_block_text(block)
+        btype = block["type"]
+        if "heading" in btype and text and "routine template" in text.lower():
+            section_start_id = block["id"]
+            in_section = True
+            continue
+        if in_section:
+            if "heading" in btype:
+                break  # Next section — stop
+            blocks_to_delete.append(block["id"])
+
+    # Delete old content blocks
+    for block_id in blocks_to_delete:
+        try:
+            notion.blocks.delete(block_id=block_id)
+        except Exception as e:
+            logger.warning("Failed to delete block %s: %s", block_id, e)
+
+    # Add new content after the heading
+    target = section_start_id or NOTION_FAMILY_PROFILE_PAGE
+    new_blocks = []
+    for line in templates_text.split("\n"):
+        line = line.rstrip()
+        if not line:
+            continue
+        new_blocks.append({
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {"rich_text": [{"type": "text", "text": {"content": line}}]},
+        })
+
+    if new_blocks:
+        notion.blocks.children.append(block_id=target, children=new_blocks)
+    return "Routine templates updated."
+
+
+# ---------------------------------------------------------------------------
+# Grocery History (T011 — reference data for meal planning)
+# ---------------------------------------------------------------------------
+
+def get_grocery_history(category: str = "") -> str:
+    """Get grocery history items, optionally filtered by category."""
+    if not NOTION_GROCERY_HISTORY_DB:
+        return "Grocery history not configured."
+
+    kwargs: dict = {"database_id": NOTION_GROCERY_HISTORY_DB}
+    if category:
+        kwargs["filter"] = {"property": "Category", "select": {"equals": category}}
+    kwargs["sorts"] = [{"property": "Frequency", "direction": "descending"}]
+    kwargs["page_size"] = 50
+
+    results = notion.databases.query(**kwargs)
+    items = []
+    for page in results["results"]:
+        props = page["properties"]
+        name = _get_title(props.get("Item Name", {}))
+        cat = _get_select(props.get("Category", {}))
+        freq = props.get("Frequency", {}).get("number", 0)
+        staple = props.get("Staple", {}).get("checkbox", False)
+        items.append(f"- {name} [{cat}] — ordered {freq}x" + (" ⭐ staple" if staple else ""))
+
+    if not items:
+        return "No grocery history available."
+    return "\n".join(items)
+
+
+def get_staple_items() -> str:
+    """Get frequently purchased items (staples) for auto-suggestions."""
+    if not NOTION_GROCERY_HISTORY_DB:
+        return "Grocery history not configured."
+
+    results = notion.databases.query(
+        database_id=NOTION_GROCERY_HISTORY_DB,
+        filter={"property": "Staple", "checkbox": {"equals": True}},
+        sorts=[{"property": "Frequency", "direction": "descending"}],
+    )
+    items = []
+    for page in results["results"]:
+        props = page["properties"]
+        name = _get_title(props.get("Item Name", {}))
+        cat = _get_select(props.get("Category", {}))
+        items.append(f"- {name} [{cat}]")
+
+    if not items:
+        return "No staple items identified yet."
+    return "\n".join(items)
 
 
 # ---------------------------------------------------------------------------

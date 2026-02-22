@@ -10,6 +10,11 @@ dist/
 # Environment
 .env
 token.json
+credentials.json
+
+# Node.js (anylist-sidecar)
+node_modules/
+*.log
 
 # OS
 .DS_Store

@@ -26,7 +26,7 @@ The bot needs an API token to read/write your Notion databases.
 
 ## Step 3: Create the Databases
 
-You need to create 3 databases and 1 page. Create them all at the top level of your workspace.
+You need to create 5 databases and 1 page. Create them all at the top level of your workspace.
 
 ### Database 1: Action Items
 
@@ -71,6 +71,41 @@ You need to create 3 databases and 1 page. Create them all at the top level of y
 
 4. **Now go back to Action Items** and add the **Meeting** relation property pointing to this Meetings database.
 
+### Database 4: Backlog
+
+1. Click **"+ New page"** → **"Database"** (full page, table view)
+2. Title it **"Backlog"**
+3. Properties:
+
+| Property | Type | Configuration |
+|---|---|---|
+| Description | Title | (default) |
+| Category | Select | Options: `Home Improvement`, `Personal Growth`, `Side Work`, `Exercise`, `Other` |
+| Assignee | Select | Options: `Jason`, `Erin` |
+| Status | Status | Groups: `Not Started`, `In Progress`, `Done` |
+| Priority | Select | Options: `High`, `Medium`, `Low` |
+| Created | Date | (no special config) |
+| Last Surfaced | Date | (no special config — updated by the assistant when suggesting items) |
+
+### Database 5: Grocery History
+
+1. Click **"+ New page"** → **"Database"** (full page, table view)
+2. Title it **"Grocery History"**
+3. Properties:
+
+| Property | Type | Configuration |
+|---|---|---|
+| Item Name | Title | (default) |
+| Category | Select | Options: `Produce`, `Meat`, `Dairy`, `Pantry`, `Frozen`, `Bakery`, `Beverages`, `Other` |
+| Frequency | Number | Number format: Integer |
+| Last Ordered | Date | (no special config) |
+| Staple | Checkbox | (items the family buys regularly — 50%+ of orders) |
+
+**Tip**: You can populate this database from your Whole Foods order history using the import script:
+```
+python -m scripts.import_grocery_history orders.csv
+```
+
 ### Page: Family Profile
 
 1. Click **"+ New page"** (regular page, NOT a database)
@@ -95,6 +130,32 @@ You need to create 3 databases and 1 page. Create them all at the top level of y
 - Budget check-in
 - Goals and long-term items
 
+## Childcare Schedule
+- Zoey: with Erin most days, Jason's mom watches her 1-2 half days/week (varies)
+- Vienna: kindergarten at Roy Gomm, M-F, 9:30am drop-off
+
+## Routine Templates
+### Weekday with Zoey
+- 7:00-7:30 — Breakfast prep (check Jason's meetings for timing)
+- 7:30-8:00 — Kids breakfast + cleanup
+- 9:00-9:30 — Drive Vienna to school
+- 9:30-11:30 — Chore block (with Zoey)
+- 11:30-12:00 — Lunch
+- 12:00-2:00 — Zoey nap / Rest time (get out of house!)
+- 2:00-3:30 — Development block / Side work
+- 3:30-4:00 — Pick up Vienna
+
+### Weekday with Grandma
+- 7:00-7:30 — Breakfast prep
+- 7:30-8:00 — Kids breakfast + cleanup
+- 9:00-9:30 — Drive Vienna to school / Drop Zoey at grandma's
+- 9:30-11:30 — Extended chore block or errands
+- 11:30-12:00 — Lunch
+- 12:00-1:30 — Exercise / Gym
+- 1:30-3:00 — Development block / Side work
+- 3:00-3:30 — Pick up Zoey from grandma's
+- 3:30-4:00 — Pick up Vienna
+
 ## Configuration
 - Meeting day: Sunday
 ```
@@ -103,7 +164,7 @@ You need to create 3 databases and 1 page. Create them all at the top level of y
 
 This step is critical — your integration has **zero access** until you do this for each database/page.
 
-For **each** of the 4 items (Action Items, Meal Plans, Meetings, Family Profile):
+For **each** of the 6 items (Action Items, Meal Plans, Meetings, Backlog, Grocery History, Family Profile):
 
 1. Open the page
 2. Click the **"..." menu** (top-right corner)
@@ -126,6 +187,8 @@ Copy these into your `.env`:
 NOTION_ACTION_ITEMS_DB=<Action Items database ID>
 NOTION_MEAL_PLANS_DB=<Meal Plans database ID>
 NOTION_MEETINGS_DB=<Meetings database ID>
+NOTION_BACKLOG_DB=<Backlog database ID>
+NOTION_GROCERY_HISTORY_DB=<Grocery History database ID>
 ```
 
 For the **Family Profile page**, do the same — open it, Share → Copy link, extract the ID:
@@ -164,8 +227,11 @@ After setup, confirm:
 - [ ] `NOTION_ACTION_ITEMS_DB` is set (32-char hex string)
 - [ ] `NOTION_MEAL_PLANS_DB` is set
 - [ ] `NOTION_MEETINGS_DB` is set
+- [ ] `NOTION_BACKLOG_DB` is set
+- [ ] `NOTION_GROCERY_HISTORY_DB` is set
 - [ ] `NOTION_FAMILY_PROFILE_PAGE` is set
-- [ ] All 4 pages have the "Family Meeting Bot" integration connected
+- [ ] All 6 pages have the "Family Meeting Bot" integration connected
+- [ ] Family Profile includes Routine Templates section
 - [ ] Erin has been invited as a guest with full access
 - [ ] Both phones have the Notion app installed
 

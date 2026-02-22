@@ -16,7 +16,9 @@ REQUIRED_VARS = [
     "NOTION_MEAL_PLANS_DB",
     "NOTION_MEETINGS_DB",
     "NOTION_FAMILY_PROFILE_PAGE",
-    "GOOGLE_CALENDAR_ID",
+    "GOOGLE_CALENDAR_JASON_ID",
+    "GOOGLE_CALENDAR_ERIN_ID",
+    "GOOGLE_CALENDAR_FAMILY_ID",
     "YNAB_ACCESS_TOKEN",
     "YNAB_BUDGET_ID",
     "JASON_PHONE",
@@ -48,9 +50,22 @@ NOTION_ACTION_ITEMS_DB: str = os.environ["NOTION_ACTION_ITEMS_DB"]
 NOTION_MEAL_PLANS_DB: str = os.environ["NOTION_MEAL_PLANS_DB"]
 NOTION_MEETINGS_DB: str = os.environ["NOTION_MEETINGS_DB"]
 NOTION_FAMILY_PROFILE_PAGE: str = os.environ["NOTION_FAMILY_PROFILE_PAGE"]
+NOTION_BACKLOG_DB: str = os.environ.get("NOTION_BACKLOG_DB", "")
+NOTION_GROCERY_HISTORY_DB: str = os.environ.get("NOTION_GROCERY_HISTORY_DB", "")
 
-# Google Calendar
-GOOGLE_CALENDAR_ID: str = os.environ["GOOGLE_CALENDAR_ID"]
+# Google Calendar (3 calendars)
+GOOGLE_CALENDAR_JASON_ID: str = os.environ["GOOGLE_CALENDAR_JASON_ID"]
+GOOGLE_CALENDAR_ERIN_ID: str = os.environ["GOOGLE_CALENDAR_ERIN_ID"]
+GOOGLE_CALENDAR_FAMILY_ID: str = os.environ["GOOGLE_CALENDAR_FAMILY_ID"]
+
+CALENDAR_IDS: dict[str, str] = {
+    "jason": GOOGLE_CALENDAR_JASON_ID,
+    "erin": GOOGLE_CALENDAR_ERIN_ID,
+    "family": GOOGLE_CALENDAR_FAMILY_ID,
+}
+
+# Outlook (optional — Jason's work calendar ICS feed)
+OUTLOOK_CALENDAR_ICS_URL: str = os.environ.get("OUTLOOK_CALENDAR_ICS_URL", "")
 
 # YNAB
 YNAB_ACCESS_TOKEN: str = os.environ["YNAB_ACCESS_TOKEN"]
@@ -64,3 +79,6 @@ PHONE_TO_NAME: dict[str, str] = {
     JASON_PHONE: "Jason",
     ERIN_PHONE: "Erin",
 }
+
+# AnyList (optional — grocery integration)
+ANYLIST_SIDECAR_URL: str = os.environ.get("ANYLIST_SIDECAR_URL", "http://anylist-sidecar:3000")

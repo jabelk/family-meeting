@@ -1,6 +1,6 @@
 # Research: AI-Powered Weekly Family Meeting Assistant
 
-**Branch**: `001-ai-meeting-assistant` | **Date**: 2026-02-21
+**Branch**: `001-ai-meeting-assistant` | **Date**: 2026-02-22 (v2 — expanded scope)
 
 ## Decision 1: WhatsApp Integration Approach
 
@@ -8,121 +8,128 @@
 
 **Rationale**: For a low-volume family bot (~20-50 messages/week), the direct
 Meta Cloud API is simpler and cheaper than Twilio or other providers. All
-user-initiated (service) conversations are free since November 2024. Proactive
-template messages cost ~$0.004-0.015 each (negligible at this volume).
+user-initiated (service) conversations are free since November 2024.
 
-**Alternatives considered**:
-- Twilio WhatsApp: Adds middleman markup (~$0.005/msg extra) and another
-  account to manage. Sandbox is easier for prototyping but not sustainable.
-- Telegram Bot API: Free and excellent API, but both partners already use
-  WhatsApp — no new app install needed.
-- Custom mobile web app: Most control but violates constitution principle III
-  (Simplicity) — requires building a frontend.
-
-**Key details**:
-- Sandbox available for dev (5 test recipients, no business verification)
-- Production requires Meta Business verification (biggest friction point)
-- 24-hour reply window for free-form messages; proactive messages need
-  pre-approved templates
-- Dedicated phone number required (cannot use personal WhatsApp number)
-- Formatting: bold (`*text*`), italic (`_text_`), lists, monospace supported
-- 1,600 character limit per message
-- Interactive messages supported (buttons, list menus)
-
-**Estimated cost**: $0/month (user-initiated conversations are free)
+**Estimated cost**: $0/month
 
 ## Decision 2: AI Orchestration
 
 **Decision**: Anthropic Claude API with Python SDK tool runner
 
-**Rationale**: The Claude Messages API with `@beta_tool` decorator and tool
-runner provides a complete agentic loop out of the box. Define tools as Python
-functions → Claude decides which to call → SDK executes them → Claude formats
-response. No framework needed (LangChain, CrewAI add unnecessary complexity
-for this use case).
-
-**Alternatives considered**:
-- OpenAI Assistants API: More complex (thread management, run polling, file
-  storage). Heavier abstraction with more vendor lock-in.
-- LangChain/CrewAI: Unnecessary abstraction for a single-agent tool-calling
-  pattern. The Claude SDK already handles the agentic loop natively.
-- Anthropic Agent SDK: Designed for Claude Code-like agents (file editing,
-  command execution). Overkill for an API-calling assistant.
-- MCP servers: YNAB MCP server exists, Google Calendar MCP servers exist.
-  Promising but adds architectural complexity. Better as a Phase 2
-  optimization.
-
 **Model**: Claude Haiku 4.5 — 90% of Sonnet's performance on tool use, 3x
 cheaper, 3-4x faster. Can upgrade to Sonnet by changing one string.
 
-**Estimated cost**: ~$0.01-0.02 per 10-message session, ~$0.05-0.10/month
+**Estimated cost**: ~$0.05-0.10/month
 
 ## Decision 3: Data Persistence
 
-**Decision**: Notion API (free plan)
+**Decision**: Notion API (free plan) — decision may be revisited
 
-**Rationale**: Uniquely satisfies all four constraints — good programmatic API,
-zero cost, family-friendly browsable UI (web + mobile app), and editable by
-family members directly. Action items appear as a kanban board, meal plans as
-structured pages, meetings as a timeline. No frontend development needed.
+**Rationale**: Good programmatic API, zero cost, browsable UI. However, Erin
+will never open Notion — her only interface is WhatsApp. Jason could browse
+in Notion but is also comfortable with CLI/GitHub. The code is already written
+for Notion, so keeping it avoids rework. If maintenance becomes an issue, can
+migrate to SQLite on the NUC with minimal tool function changes.
 
-**Alternatives considered**:
-- Google Sheets: Free, no new accounts, but clunky API (spreadsheet not
-  database), no rich views (kanban, calendar). More boilerplate code.
-- Airtable: Excellent API and UI but 1,000-record free limit would cap out
-  in ~12 months. Paid plan ($20/user) exceeds budget for family use.
-- Supabase/Firebase: Best API and query power but no family-facing UI without
-  building a web app. Defeats the "minimal custom code" goal.
-- JSON files: No UI, no concurrent access. Not viable.
-
-**Key details**:
-- Free plan: unlimited blocks, up to 10 guests
-- API rate limit: 3 requests/second (fine for this volume)
-- No webhooks (must poll for changes — acceptable at weekly cadence)
-- Both partners install Notion app or use web on phone
+**Alternatives evaluated and deferred**:
+- SQLite on NUC: Simplest, zero dependency, but no browse UI without building one
+- Postgres on NUC: Overkill for 2 users
+- Obsidian: Nice mobile app but no query capability
+- Graphiti knowledge graph: Evaluated and rejected — overkill (LLM calls per write, graph DB overhead for 4 entities / 2 users)
+- JSON in GitHub repo: Simple but awkward for queries
 
 **Estimated cost**: $0/month
 
-## Decision 4: Google Calendar API
+## Decision 4: Google Calendar API — Expanded
 
-**Decision**: Google Calendar API v3 with Python client library
+**Decision**: Google Calendar API v3 with read AND write access
+
+**Change from v1**: Upgraded from `calendar.readonly` to `calendar.events` scope. The assistant now writes time blocks (chores, rest, development, exercise) to Erin's Google Calendar. These appear in her Apple Calendar app with push notifications.
 
 **Key details**:
-- OAuth2 authentication (Desktop app flow)
-- `calendar.readonly` scope sufficient
-- Free: 1M queries/day
-- Python library: `google-api-python-client` + `google-auth-oauthlib`
-- Gotcha: Testing-mode tokens expire every 7 days; consider service account
-  or submitting for verification to avoid re-auth
+- Scope: `https://www.googleapis.com/auth/calendar.events` (read + write events)
+- Requires re-running OAuth flow (delete token.json, re-authorize)
+- 3 Google Calendars: Jason's personal, Erin's personal, shared family calendar
+- Batch API for creating 25-40 events/week (one HTTP request)
+- `extendedProperties.private.createdBy = "family-meeting-assistant"` to tag our events
+- Delete-and-recreate pattern for weekly schedule refresh (simpler than diffing)
+- Color coding: use consistent `colorId` so Erin can visually distinguish auto-created blocks
 
-**Endpoint needed**: `GET /calendars/{calendarId}/events` with `timeMin`,
-`timeMax`, `singleEvents=true`, `orderBy=startTime`
+**Estimated cost**: $0/month
 
 ## Decision 5: YNAB API
 
-**Decision**: YNAB API v1 with Personal Access Token
+**Decision**: YNAB API v1 with Personal Access Token (unchanged from v1)
 
-**Key details**:
-- Static Personal Access Token (no expiry, no refresh needed)
-- Free with YNAB subscription ($14.99/month — already paying)
-- Rate limit: 200 requests/hour (irrelevant at this volume)
-- Python: `ynab` package or plain `requests`
-- Gotcha: All amounts in milliunits (divide by 1000)
-- Key endpoint: `GET /budgets/{id}/months/{month}` returns all categories
-  with budgeted, activity (spending), balance, and goal data
+**Estimated cost**: $0 (with existing YNAB subscription)
 
-## Decision 6: Hosting
+## Decision 6: Jason's Work Calendar (Outlook/Cisco)
 
-**Decision**: Cloud function or lightweight VPS
+**Decision**: Published ICS feed, polled directly from Python
 
-**Rationale**: The backend is a single webhook endpoint + AI tool runner.
-A cloud function (AWS Lambda, Google Cloud Functions, or Railway) handles
-this with zero infrastructure management. A $5/month VPS (Railway, Render,
-Fly.io) works if persistent state or long-running connections are needed.
+**Rationale**: Microsoft Graph API requires Cisco admin consent (since Oct 2025 policy change) — impractical for a personal family project. Syncing Outlook to Google Calendar has 24-48 hour delay — too stale for breakfast planning. The ICS feed approach is the simplest: Jason publishes his calendar once (2-minute setup), Python fetches the ICS URL on demand for always-fresh data.
 
-**Estimated cost**: $0-5/month
+**Setup**: Jason goes to outlook.office365.com → Settings → Calendar → Shared calendars → Publish → copy ICS link → add to `.env` as `OUTLOOK_CALENDAR_ICS_URL`
 
-## Cost Summary
+**Fallback**: If Cisco blocks calendar publishing, fall back to syncing Outlook → Google Calendar (accept stale data) or reading Apple Calendar via EventKit on Mac.
+
+**Dependencies**: `icalendar` + `recurring-ical-events` (pip)
+
+**Estimated cost**: $0
+
+## Decision 7: AnyList Grocery Integration
+
+**Decision**: Node.js sidecar wrapping the `codetheweb/anylist` npm package
+
+**Rationale**: AnyList has no official public API. The `codetheweb/anylist` package reverse-engineers their protobuf-based API and is battle-tested in the Home Assistant ecosystem. Running it as a small Express/Docker sidecar gives our Python app a clean REST interface via `localhost`.
+
+**Architecture**:
+```
+Python (FastAPI) → HTTP localhost → Node.js sidecar → AnyList servers
+```
+
+**Key operations**:
+- `GET /items?list=Grocery` — get current items
+- `POST /add` — add item to list
+- `POST /remove` — remove item
+- Clear-and-repopulate pattern for weekly meal plan refresh
+
+**Risks**: Unofficial API — could break if AnyList changes their backend. Build so grocery push is a nice-to-have, not a hard dependency.
+
+**Estimated cost**: AnyList $12/year
+
+## Decision 8: Hosting Architecture
+
+**Decision**: All services on the NUC via Docker Compose + Cloudflare Tunnel
+
+**Rationale**: Jason already has a NUC running Docker with n8n. Adding FastAPI, the AnyList sidecar, and a Cloudflare Tunnel container gives a complete self-hosted setup with zero ongoing hosting costs. Cloudflare Tunnel provides the public HTTPS URL that WhatsApp webhooks require — no port forwarding needed.
+
+**Architecture**:
+```
+Internet → Cloudflare Tunnel → NUC Docker network
+                                  ├── FastAPI (:8000)
+                                  ├── n8n (:5678)
+                                  └── AnyList sidecar (:3000)
+```
+
+**Fallback**: If home internet reliability is a problem, move FastAPI to Railway (~$5-7/mo). n8n stays on NUC (only makes outbound calls).
+
+**Requirements**: Domain managed by Cloudflare DNS (~$10/year)
+
+**Estimated cost**: $0/month (domain ~$10/year one-time)
+
+## Decision 9: Scheduled Automations (n8n)
+
+**Decision**: n8n on NUC with cron-triggered HTTP Request workflows
+
+**Workflows**:
+1. **Daily morning briefing** — 7am daily, `POST /api/v1/briefing/daily` → generates Erin's plan, sends to WhatsApp automatically
+2. **Weekly calendar population** — Sunday evening, `POST /api/v1/calendar/populate-week` → writes time blocks to Erin's Google Calendar
+3. **Grandma schedule prompt** — Monday 9am, sends WhatsApp asking which days grandma has Zoey
+
+**Key**: Set `GENERIC_TIMEZONE=America/Los_Angeles` in n8n Docker config.
+
+## Cost Summary (v2)
 
 | Service                | Monthly Cost |
 |------------------------|-------------|
@@ -130,9 +137,11 @@ Fly.io) works if persistent state or long-running connections are needed.
 | Claude API (Haiku 4.5) | ~$0.10      |
 | Notion                 | $0          |
 | Google Calendar API    | $0          |
-| YNAB API               | $0 (with subscription) |
-| Hosting                | $0-5        |
-| **Total**              | **~$0-6/month** |
+| YNAB API               | $0 (with sub) |
+| Hosting (NUC)          | $0          |
+| Cloudflare Tunnel      | $0          |
+| AnyList                | ~$1/month   |
+| Domain                 | ~$1/month   |
+| **Total**              | **~$2/month** |
 
-Well under the $30-50/month budget, leaving room for upgrades (Sonnet model,
-paid Notion plan, or additional services) as needed.
+Well under the $30-50/month budget.

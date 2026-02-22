@@ -149,6 +149,7 @@ After a meal plan is generated, the grocery list should flow into a delivery ord
 - AnyList chosen for grocery delivery bridge ($12/year) — Erin prefers it, connects to Instacart/Whole Foods
 - Jason has a local NUC server running n8n (workflow automation) on home WiFi — can be used for scheduled tasks (weekly calendar population, daily briefing cron, recurring syncs) without additional cloud hosting costs
 - Data backend decision deferred to planning phase. Options under consideration: Notion (current, code written), SQLite on NUC, Obsidian (markdown + git sync), Postgres on NUC, JSON in GitHub repo. Graphiti knowledge graph evaluated and ruled out (overkill for 2 users / 4 entities). Key criteria: "just works", minimal maintenance, Jason can browse data if needed, Erin never leaves WhatsApp.
+- Grocery history: Jason can do a one-time export of past Whole Foods orders from Amazon order history. This data lives on the agent side (Notion "Grocery History" database) — not in AnyList. Claude uses it for smarter meal planning (suggesting meals based on what the family actually buys), accurate item naming (matching Whole Foods product names for better Instacart matching), and staple detection (auto-suggesting frequently purchased items).
 
 ## Requirements *(mandatory)*
 
@@ -245,17 +246,6 @@ After a meal plan is generated, the grocery list should flow into a delivery ord
 
 ---
 
-## Implementation Progress (Paused 2026-02-22)
+## Implementation History
 
-**What's done:**
-- All source code written (Phases 1-6 complete, 31 of 36 tasks)
-- FastAPI webhook, Claude assistant with 12 tools, Notion/Calendar/YNAB integrations
-- Deployment configs (Procfile, render.yaml, railway.toml)
-- Google Calendar OAuth setup script
-
-**What's remaining:**
-- T005: Notion workspace setup — created account + integration token, need to create 3 databases + Family Profile page (guide at `docs/notion-setup.md`, paused mid-Step 1: Action Items database)
-- T036: End-to-end validation with live services
-- Fill remaining `.env` values (WhatsApp, Google Calendar, YNAB, phone numbers)
-
-**Resuming:** Pick up Notion database creation from `docs/notion-setup.md` Step 1, then continue through Steps 2-7
+> **Note**: A v1 implementation was completed 2026-02-22 covering core FastAPI webhook, Claude assistant (12 tools), Notion/Calendar/YNAB integrations, and deployment configs. The scope was subsequently expanded with User Stories 5 (Daily Planner) and 6 (Grocery Delivery), plus Outlook ICS, Google Calendar write, AnyList integration, and n8n automations. A new v2 `tasks.md` (T001-T045) is now the source of truth for all remaining work. The v1 task IDs are retired.
