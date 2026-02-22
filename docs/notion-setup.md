@@ -114,8 +114,8 @@ python -m scripts.import_grocery_history orders.csv
 
 ```
 ## Members
-- Jason (partner) — works from home at Cisco
-- Erin (partner) — stays at home with the kids
+- Jason (partner, father, husband) — works from home at Cisco
+- Erin (partner, wife, mother) — stays at home with the kids
 - Vienna (daughter, age 5) — kindergarten at Roy Gomm
 - Zoey (daughter, age 3)
 
@@ -142,7 +142,7 @@ python -m scripts.import_grocery_history orders.csv
 - 9:30-11:30 — Chore block (with Zoey)
 - 11:30-12:00 — Lunch
 - 12:00-2:00 — Zoey nap / Rest time (get out of house!)
-- 2:00-3:30 — Development block / Side work
+- 2:00-3:30 — Development block / Side work / Nap for Erin and Zoey
 - 3:30-4:00 — Pick up Vienna
 
 ### Weekday with Grandma
@@ -152,7 +152,7 @@ python -m scripts.import_grocery_history orders.csv
 - 9:30-11:30 — Extended chore block or errands
 - 11:30-12:00 — Lunch
 - 12:00-1:30 — Exercise / Gym
-- 1:30-3:00 — Development block / Side work
+- 1:30-3:00 — Development block / Side work / Nap for Erin and Zoey
 - 3:00-3:30 — Pick up Zoey from grandma's
 - 3:30-4:00 — Pick up Vienna
 

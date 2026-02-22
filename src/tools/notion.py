@@ -207,7 +207,7 @@ def create_meeting(meeting_date: str = "") -> str:
         properties={
             "Date": {"title": [{"text": {"content": display_date}}]},
             "When": {"date": {"start": meeting_date}},
-            "Status": {"select": {"name": "Planned"}},
+            "Status": {"status": {"name": "Planned"}},
         },
     )
     return page["id"]
@@ -244,7 +244,7 @@ def save_meal_plan(week_start: str, plan_content: str, grocery_list: str) -> str
         properties={
             "Week Of": {"title": [{"text": {"content": display}}]},
             "Start Date": {"date": {"start": week_start}},
-            "Status": {"select": {"name": "Active"}},
+            "Status": {"status": {"name": "Active"}},
         },
     )
     page_id = page["id"]
