@@ -46,10 +46,36 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Tasks specify full file paths and mark parallel-safe items with `[P]`
 
 ## Active Technologies
-- Python 3.12 + FastAPI, anthropic SDK, notion-client, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn, httpx (001-ai-meeting-assistant)
-- Notion API (free plan) — 5 databases (Action Items, Meal Plans, Meetings, Backlog) + Family Profile page (001-ai-meeting-assistant)
-- Node.js sidecar (Express + codetheweb/anylist) for AnyList grocery integration (001-ai-meeting-assistant)
-- Docker Compose on NUC + Cloudflare Tunnel + n8n for scheduling (001-ai-meeting-assistant)
+- Python 3.12 + FastAPI, anthropic SDK, notion-client, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn, httpx
+- Notion API (free plan) — 5 databases (Action Items, Meal Plans, Meetings, Backlog, Grocery History) + Family Profile page
+- Node.js sidecar (Express + codetheweb/anylist@^0.8.5) for AnyList grocery integration
+- Docker Compose on NUC (`warp-nuc`) + Cloudflare Tunnel + n8n for scheduling
+- WhatsApp Cloud API (Meta) for messaging interface
+- Public URL: `https://mombot.sierrastoryco.com`
+
+## Deployment (NUC)
+
+The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.152) via Docker Compose. SSH access is configured via `ssh warp-nuc`.
+
+**Helper script** — use `./scripts/nuc.sh` for all NUC operations:
+```bash
+./scripts/nuc.sh logs [service] [n]  # Show last n log lines (default: fastapi, 30)
+./scripts/nuc.sh follow [service]    # Follow logs in real-time
+./scripts/nuc.sh ps                  # Show container status
+./scripts/nuc.sh restart [service]   # Restart service (or all)
+./scripts/nuc.sh deploy              # Pull latest, rebuild, restart
+./scripts/nuc.sh env                 # Push .env from laptop to NUC + restart fastapi
+./scripts/nuc.sh ssh                 # Open SSH session
+./scripts/nuc.sh shell [service]     # Shell into container
+```
+
+**Services**: fastapi (port 8000), anylist-sidecar (port 3000), cloudflared (tunnel). n8n runs separately on the NUC (port 5678).
+
+**Updating code**: Edit locally, commit, push to main, then `./scripts/nuc.sh deploy`.
+**Updating .env**: Edit locally, then `./scripts/nuc.sh env` (copies .env and restarts fastapi).
 
 ## Recent Changes
-- 001-ai-meeting-assistant: Plan Phase 1 complete — added Google Calendar write, Outlook ICS, AnyList sidecar, n8n contracts
+- Mom Bot is live — WhatsApp → FastAPI → Claude Haiku → WhatsApp reply working end-to-end
+- Erin's schedule feedback incorporated: day-specific routine templates (Mon-Sun), US7-US9 drafted
+- Notion Family Profile updated with full weekly schedule, chore notes, 7 day-specific templates
+- Google Calendar read verified, Notion (all 6 resources) verified, YNAB verified
