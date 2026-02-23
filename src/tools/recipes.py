@@ -109,7 +109,7 @@ def extract_and_save_recipe(image_base64: str, mime_type: str, cookbook_name: st
     )
 
     response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-4-20250514",
         max_tokens=2000,
         messages=[{
             "role": "user",

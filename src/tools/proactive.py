@@ -187,7 +187,7 @@ def generate_meal_plan() -> dict:
     )
 
     response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-4-20250514",
         max_tokens=2000,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -294,7 +294,7 @@ def handle_meal_swap(plan: list[dict], day: str, new_meal: str) -> dict:
             entry["source"] = "general"
             # Get ingredients from Claude
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-sonnet-4-20250514",
                 max_tokens=500,
                 messages=[{
                     "role": "user",
@@ -368,7 +368,7 @@ def detect_conflicts(days_ahead: int = 1) -> list[dict]:
     )
 
     response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-4-20250514",
         max_tokens=1000,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -489,7 +489,7 @@ def format_budget_summary() -> dict:
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
     response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-4-20250514",
         max_tokens=1000,
         messages=[{
             "role": "user",

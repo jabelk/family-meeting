@@ -637,7 +637,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     # Agentic tool-use loop
     while True:
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-20250514",
             max_tokens=2048,
             system=SYSTEM_PROMPT,
             tools=TOOLS,
