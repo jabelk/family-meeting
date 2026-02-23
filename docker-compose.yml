@@ -35,23 +35,9 @@ services:
     networks:
       - family-net
 
-  n8n:
-    image: n8nio/n8n:latest
-    ports:
-      - "5678:5678"
-    environment:
-      - GENERIC_TIMEZONE=America/Los_Angeles
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_AUTH_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_AUTH_PASSWORD:-changeme}
-    volumes:
-      - n8n-data:/home/node/.n8n
-    restart: unless-stopped
-    networks:
-      - family-net
+  # n8n: already running on NUC as separate container (n8n-n8n-1 on port 5678)
+  # Use the existing instance — configure workflows to hit http://192.168.4.152:8000
 
-volumes:
-  n8n-data:
 
 networks:
   family-net:
