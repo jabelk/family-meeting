@@ -44,3 +44,12 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Each user story must be independently testable and deployable
 - Plans must comply with constitution principles; violations require explicit justification
 - Tasks specify full file paths and mark parallel-safe items with `[P]`
+
+## Active Technologies
+- Python 3.12 + FastAPI, anthropic SDK, notion-client, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn, httpx (001-ai-meeting-assistant)
+- Notion API (free plan) — 5 databases (Action Items, Meal Plans, Meetings, Backlog) + Family Profile page (001-ai-meeting-assistant)
+- Node.js sidecar (Express + codetheweb/anylist) for AnyList grocery integration (001-ai-meeting-assistant)
+- Docker Compose on NUC + Cloudflare Tunnel + n8n for scheduling (001-ai-meeting-assistant)
+
+## Recent Changes
+- 001-ai-meeting-assistant: Plan Phase 1 complete — added Google Calendar write, Outlook ICS, AnyList sidecar, n8n contracts

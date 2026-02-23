@@ -1,0 +1,13 @@
+{
+  "name": "anylist-sidecar",
+  "version": "1.0.0",
+  "description": "REST API bridge for AnyList grocery list integration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "anylist": "^2.1.0",
+    "express": "^4.21.0"
+  }
+}

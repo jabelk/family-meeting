@@ -1,0 +1,13 @@
+anthropic>=0.42.0
+fastapi>=0.115.0
+uvicorn>=0.34.0
+notion-client>=2.2.0,<2.3.0
+google-api-python-client>=2.160.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+ynab>=1.4.0
+python-dotenv>=1.0.0
+httpx>=0.28.0
+icalendar>=6.1.0
+recurring-ical-events>=3.5.0
+mcp[cli]>=1.0.0
