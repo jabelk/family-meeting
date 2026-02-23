@@ -99,12 +99,17 @@ You need to create 5 databases and 1 page. Create them all at the top level of y
 | Category | Select | Options: `Produce`, `Meat`, `Dairy`, `Pantry`, `Frozen`, `Bakery`, `Beverages`, `Other` |
 | Frequency | Number | Number format: Integer |
 | Last Ordered | Date | (no special config) |
+| Avg Reorder Days | Number | Number format: Number (average days between orders) |
+| Avg Price | Number | Number format: Dollar (average price across orders) |
 | Staple | Checkbox | (items the family buys regularly — 50%+ of orders) |
 
 **Tip**: You can populate this database from your Whole Foods order history using the import script:
 ```
 python -m scripts.import_grocery_history orders.csv
+python -m scripts.import_grocery_history receipt1.pdf receipt2.pdf
+python -m scripts.import_grocery_history data/receipts/    # all PDFs in dir
 ```
+PDF receipts are parsed with Claude to extract item names, quantities, prices, and order dates. The script calculates reorder frequency to help predict when you'll need items again.
 
 ### Page: Family Profile
 

@@ -56,7 +56,7 @@ CATEGORY_KEYWORDS = {
 
 
 def parse_pdfs(filepaths: list[str]) -> list[dict]:
-    """Extract grocery items from PDF receipts using Claude."""
+    """Extract grocery items with order dates from PDF receipts using Claude."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         print("Error: ANTHROPIC_API_KEY required for PDF parsing")
@@ -87,11 +87,13 @@ def parse_pdfs(filepaths: list[str]) -> list[dict]:
                     {
                         "type": "text",
                         "text": (
-                            "Extract every grocery/food item name from this Amazon/Whole Foods receipt. "
-                            "Return ONLY a JSON array of strings with the product names. "
+                            "Extract the order date and every grocery/food item from this Amazon/Whole Foods receipt. "
+                            "Return ONLY a JSON object with this structure:\n"
+                            '{"order_date": "YYYY-MM-DD", "items": [{"name": "Product Name", "qty": 1, "price": 4.99}, ...]}\n'
                             "Use the actual product name as shown (e.g., '365 Organic Whole Milk' not just 'milk'). "
+                            "Include quantity and price per item if shown. Default qty to 1 if not listed. "
                             "Exclude non-food items, fees, tips, taxes, and delivery charges. "
-                            "Example: [\"365 Organic Whole Milk\", \"Honeycrisp Apples\", \"Dave's Killer Bread\"]"
+                            "For the date, use the order/delivery date shown on the receipt."
                         ),
                     },
                 ],
@@ -99,20 +101,38 @@ def parse_pdfs(filepaths: list[str]) -> list[dict]:
         )
 
         text = response.content[0].text.strip()
-        # Extract JSON array from response
         try:
-            # Handle case where Claude wraps in markdown code block
             if "```" in text:
                 text = text.split("```")[1]
                 if text.startswith("json"):
                     text = text[4:]
                 text = text.strip()
-            items = json.loads(text)
+            data = json.loads(text)
+
+            order_date = data.get("order_date", "")
+            items = data.get("items", [])
             if isinstance(items, list):
-                for name in items:
-                    if isinstance(name, str) and name.strip():
-                        all_items.append({"name": name.strip(), "category": guess_category(name.strip())})
-                print(f"    Found {len(items)} items")
+                for item in items:
+                    if isinstance(item, str):
+                        # Backwards compat: plain string list
+                        all_items.append({
+                            "name": item.strip(),
+                            "category": guess_category(item.strip()),
+                            "order_date": order_date,
+                            "qty": 1,
+                            "price": None,
+                        })
+                    elif isinstance(item, dict) and item.get("name"):
+                        name = item["name"].strip()
+                        all_items.append({
+                            "name": name,
+                            "category": guess_category(name),
+                            "order_date": order_date,
+                            "qty": item.get("qty", 1),
+                            "price": item.get("price"),
+                        })
+                date_str = f" (ordered {order_date})" if order_date else ""
+                print(f"    Found {len(items)} items{date_str}")
             else:
                 print(f"    Warning: unexpected response format from {filepath}")
         except json.JSONDecodeError:
@@ -173,10 +193,14 @@ def parse_csv(filepath: str) -> list[dict]:
     return items
 
 
-def deduplicate(items: list[dict]) -> list[dict]:
-    """Count frequency for each item and deduplicate."""
+def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
+    """Count frequency for each item, track order dates, and deduplicate."""
+    from datetime import datetime
+
     name_counter: Counter = Counter()
     name_to_category: dict[str, str] = {}
+    name_to_dates: dict[str, list[str]] = {}
+    name_to_prices: dict[str, list[float]] = {}
 
     for item in items:
         normalized = item["name"].strip()
@@ -184,17 +208,46 @@ def deduplicate(items: list[dict]) -> list[dict]:
         if normalized not in name_to_category:
             name_to_category[normalized] = item["category"]
 
-    total_orders = max(name_counter.values()) if name_counter else 1
-    # Staple threshold: items appearing in 50%+ of orders (rough heuristic)
+        order_date = item.get("order_date", "")
+        if order_date:
+            name_to_dates.setdefault(normalized, []).append(order_date)
+
+        price = item.get("price")
+        if price is not None:
+            name_to_prices.setdefault(normalized, []).append(float(price))
+
+    if not total_orders:
+        total_orders = len(set(d for dates in name_to_dates.values() for d in dates)) or 1
     staple_threshold = max(total_orders * 0.5, 2)
 
     results = []
     for name, freq in name_counter.most_common():
+        dates = sorted(set(name_to_dates.get(name, [])))
+        prices = name_to_prices.get(name, [])
+
+        # Calculate average days between orders
+        avg_days = None
+        if len(dates) >= 2:
+            parsed = []
+            for d in dates:
+                try:
+                    parsed.append(datetime.strptime(d, "%Y-%m-%d"))
+                except ValueError:
+                    pass
+            if len(parsed) >= 2:
+                intervals = [(parsed[i+1] - parsed[i]).days for i in range(len(parsed)-1)]
+                avg_days = round(sum(intervals) / len(intervals))
+
         results.append({
             "name": name,
             "category": name_to_category[name],
             "frequency": freq,
             "staple": freq >= staple_threshold,
+            "order_dates": dates,
+            "first_ordered": dates[0] if dates else None,
+            "last_ordered": dates[-1] if dates else None,
+            "avg_reorder_days": avg_days,
+            "avg_price": round(sum(prices) / len(prices), 2) if prices else None,
         })
     return results
 
@@ -210,14 +263,22 @@ def upload_to_notion(items: list[dict]) -> int:
 
     for item in items:
         try:
+            properties = {
+                "Item Name": {"title": [{"text": {"content": item["name"]}}]},
+                "Category": {"select": {"name": item["category"]}},
+                "Frequency": {"number": item["frequency"]},
+                "Staple": {"checkbox": item["staple"]},
+            }
+            if item.get("last_ordered"):
+                properties["Last Ordered"] = {"date": {"start": item["last_ordered"]}}
+            if item.get("avg_reorder_days") is not None:
+                properties["Avg Reorder Days"] = {"number": item["avg_reorder_days"]}
+            if item.get("avg_price") is not None:
+                properties["Avg Price"] = {"number": item["avg_price"]}
+
             client.pages.create(
                 parent={"database_id": NOTION_GROCERY_HISTORY_DB},
-                properties={
-                    "Item Name": {"title": [{"text": {"content": item["name"]}}]},
-                    "Category": {"select": {"name": item["category"]}},
-                    "Frequency": {"number": item["frequency"]},
-                    "Staple": {"checkbox": item["staple"]},
-                },
+                properties=properties,
             )
             created += 1
             if created % 10 == 0:
@@ -275,7 +336,10 @@ def main():
     print("\nTop 10 items by frequency:")
     for item in deduped[:10]:
         star = " ⭐" if item["staple"] else ""
-        print(f"  {item['frequency']}x {item['name']} [{item['category']}]{star}")
+        reorder = f" (every ~{item['avg_reorder_days']}d)" if item.get("avg_reorder_days") else ""
+        price = f" ${item['avg_price']:.2f}" if item.get("avg_price") else ""
+        last = f" last:{item['last_ordered']}" if item.get("last_ordered") else ""
+        print(f"  {item['frequency']}x {item['name']} [{item['category']}]{price}{reorder}{last}{star}")
 
     print(f"\nUploading to Notion Grocery History database...")
     created = upload_to_notion(deduped)
