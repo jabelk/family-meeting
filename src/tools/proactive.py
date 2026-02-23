@@ -29,18 +29,30 @@ def check_reorder_items() -> dict:
     due_items = []
 
     try:
-        results = notion_client.databases.query(
-            database_id=NOTION_GROCERY_HISTORY_DB,
-            filter={
-                "and": [
-                    {"property": "Type", "select": {"is_not_empty": True}},
-                    {"property": "Avg Reorder Days", "number": {"is_not_empty": True}},
-                ]
-            },
-            page_size=100,
-        )
+        # Paginate through all qualifying items (may be >100)
+        all_pages = []
+        has_more = True
+        start_cursor = None
+        query_filter = {
+            "and": [
+                {"property": "Type", "select": {"is_not_empty": True}},
+                {"property": "Avg Reorder Days", "number": {"is_not_empty": True}},
+            ]
+        }
+        while has_more:
+            kwargs = {
+                "database_id": NOTION_GROCERY_HISTORY_DB,
+                "filter": query_filter,
+                "page_size": 100,
+            }
+            if start_cursor:
+                kwargs["start_cursor"] = start_cursor
+            results = notion_client.databases.query(**kwargs)
+            all_pages.extend(results["results"])
+            has_more = results.get("has_more", False)
+            start_cursor = results.get("next_cursor")
 
-        for page in results["results"]:
+        for page in all_pages:
             props = page["properties"]
             item_type = props.get("Type", {}).get("select", {})
             if not item_type:
