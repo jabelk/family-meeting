@@ -64,10 +64,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T013 [P] [US2] Create src/tools/laundry.py — implement start_laundry_session(washer_minutes=45, dryer_minutes=60): cancel any existing active laundry session (query Nudge Queue for laundry_* types with Pending/Sent status), generate session_id, create laundry_washer nudge (now + washer_minutes) and laundry_followup nudge (now + 2h45m), store dryer_minutes in Context JSON, check calendar for departure conflicts during expected dryer window
-- [ ] T014 [US2] Implement advance_laundry() in src/tools/laundry.py — find active laundry session, create laundry_dryer nudge (now + dryer_minutes from session context), cancel pending laundry_followup nudge, check calendar for conflicts with dryer completion time
-- [ ] T015 [US2] Implement cancel_laundry() in src/tools/laundry.py — find active laundry session, update all Pending laundry nudges for that session to Cancelled
-- [ ] T016 [US2] Register start_laundry, advance_laundry, and cancel_laundry tools in src/assistant.py — start_laundry with optional washer_minutes/dryer_minutes params, advance_laundry with no params, cancel_laundry with no params; all wired to laundry.py functions; add natural language triggers in system prompt ("never mind" / "didn't do laundry" → cancel_laundry)
+- [x] T013 [P] [US2] Create src/tools/laundry.py — implement start_laundry_session(washer_minutes=45, dryer_minutes=60): cancel any existing active laundry session (query Nudge Queue for laundry_* types with Pending/Sent status), generate session_id, create laundry_washer nudge (now + washer_minutes) and laundry_followup nudge (now + 2h45m), store dryer_minutes in Context JSON, check calendar for departure conflicts during expected dryer window
+- [x] T014 [US2] Implement advance_laundry() in src/tools/laundry.py — find active laundry session, create laundry_dryer nudge (now + dryer_minutes from session context), cancel pending laundry_followup nudge, check calendar for conflicts with dryer completion time
+- [x] T015 [US2] Implement cancel_laundry() in src/tools/laundry.py — find active laundry session, update all Pending laundry nudges for that session to Cancelled
+- [x] T016 [US2] Register start_laundry, advance_laundry, and cancel_laundry tools in src/assistant.py — start_laundry with optional washer_minutes/dryer_minutes params, advance_laundry with no params, cancel_laundry with no params; all wired to laundry.py functions; add natural language triggers in system prompt ("never mind" / "didn't do laundry" → cancel_laundry)
 
 **Checkpoint**: Laundry workflow end-to-end — washer done, dryer done, follow-up, cancel, calendar conflict warnings all working
 

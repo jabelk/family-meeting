@@ -4,7 +4,7 @@ import json
 import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges
+from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +152,11 @@ or "I know", dismiss the nudge (no more reminders for that event).
 23. If Erin says "quiet day", "no nudges today", or "leave me alone today", \
 call set_quiet_day to suppress all proactive nudges for the rest of the day. \
 She can still message you and get responses — only proactive nudges stop.
+24. When Erin says "started laundry", "doing a load", "washing clothes", etc., \
+call start_laundry. She can optionally specify times ("washer takes 50 min"). \
+When she says "moved to dryer" or "put it in the dryer", call advance_laundry. \
+If she says "never mind", "didn't do laundry", or "cancel laundry", call \
+cancel_laundry.
 
 The current sender's name will be provided with each message.
 """
@@ -496,6 +501,36 @@ TOOLS = [
         "description": "Suppress all proactive nudges (departure reminders, chore suggestions) for the rest of today. Use when Erin says 'quiet day', 'no nudges today', or 'leave me alone today'. She can still message the bot and get responses — only proactive nudges are paused.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "name": "start_laundry",
+        "description": "Start a laundry session with timed reminders. Creates washer-done nudge and follow-up nudge. Checks calendar for conflicts with dryer timing. Use when Erin says 'started laundry', 'doing a load', etc.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "washer_minutes": {
+                    "type": "integer",
+                    "description": "Washer cycle duration in minutes. Default 45.",
+                    "default": 45,
+                },
+                "dryer_minutes": {
+                    "type": "integer",
+                    "description": "Dryer cycle duration in minutes. Default 60.",
+                    "default": 60,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "advance_laundry",
+        "description": "Move laundry to dryer phase. Creates dryer-done nudge and cancels follow-up. Use when Erin says 'moved to dryer', 'put it in the dryer', etc.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "cancel_laundry",
+        "description": "Cancel the active laundry session and all pending laundry reminders. Use when Erin says 'never mind', 'didn't do laundry', or 'cancel laundry'.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     # --- Proactive tools (US2, US3) ---
     {
         "name": "check_reorder_items",
@@ -640,6 +675,11 @@ TOOL_FUNCTIONS = {
     "list_cookbooks": lambda **kw: recipes.list_cookbooks(),
     # Nudges (Feature 003)
     "set_quiet_day": lambda **kw: nudges.set_quiet_day(),
+    "start_laundry": lambda **kw: laundry.start_laundry_session(
+        kw.get("washer_minutes", 45), kw.get("dryer_minutes", 60)
+    ),
+    "advance_laundry": lambda **kw: laundry.advance_laundry(),
+    "cancel_laundry": lambda **kw: laundry.cancel_laundry(),
     # Proactive
     "check_reorder_items": lambda **kw: proactive.check_reorder_items(),
     "confirm_groceries_ordered": lambda **kw: proactive.handle_order_confirmation(),
