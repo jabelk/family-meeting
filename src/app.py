@@ -1,12 +1,18 @@
 """FastAPI app — WhatsApp webhook + n8n automation endpoints."""
 
 import base64
+import hashlib
+import hmac
 import logging
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Request, Response, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel
-from src.config import WHATSAPP_VERIFY_TOKEN, PHONE_TO_NAME, ERIN_PHONE, N8N_WEBHOOK_SECRET
+from src.config import (
+    WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET,
+    PHONE_TO_NAME, ERIN_PHONE, N8N_WEBHOOK_SECRET,
+)
 from src.whatsapp import extract_message, send_message, download_media
 from src.assistant import handle_message, generate_daily_plan
 from src.tools.calendar import delete_assistant_events, batch_create_events, get_events_for_date
@@ -22,13 +28,54 @@ app = FastAPI(title="Family Meeting Assistant")
 
 
 # ---------------------------------------------------------------------------
+# Webhook signature verification (security)
+# ---------------------------------------------------------------------------
+
+def _verify_webhook_signature(payload_body: bytes, signature_header: str) -> bool:
+    """Verify X-Hub-Signature-256 from Meta using HMAC-SHA256."""
+    if not WHATSAPP_APP_SECRET:
+        logger.warning("WHATSAPP_APP_SECRET not set — skipping signature verification")
+        return True  # Allow during initial setup, but log warning
+    if not signature_header:
+        return False
+    expected = "sha256=" + hmac.new(
+        WHATSAPP_APP_SECRET.encode(), payload_body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
+# ---------------------------------------------------------------------------
+# Per-phone rate limiting (security)
+# ---------------------------------------------------------------------------
+
+RATE_LIMIT_MAX = 5          # max messages per window
+RATE_LIMIT_WINDOW = 60.0    # window in seconds
+
+_rate_limit_log: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(phone: str) -> bool:
+    """Return True if the phone is within rate limits, False if exceeded."""
+    now = time.time()
+    # Prune old entries
+    _rate_limit_log[phone] = [
+        t for t in _rate_limit_log[phone] if now - t < RATE_LIMIT_WINDOW
+    ]
+    if len(_rate_limit_log[phone]) >= RATE_LIMIT_MAX:
+        return False
+    _rate_limit_log[phone].append(now)
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Auth dependency for n8n endpoints (T015)
 # ---------------------------------------------------------------------------
 
 async def verify_n8n_auth(x_n8n_auth: str = Header(None)):
     """Verify X-N8N-Auth header for /api/v1/* endpoints."""
     if not N8N_WEBHOOK_SECRET:
-        return  # No secret configured, skip auth
+        logger.error("N8N_WEBHOOK_SECRET not configured — rejecting request")
+        raise HTTPException(status_code=503, detail="n8n authentication not configured")
     if x_n8n_auth != N8N_WEBHOOK_SECRET:
         raise HTTPException(status_code=401, detail="Invalid or missing X-N8N-Auth header")
 
@@ -70,6 +117,13 @@ async def verify_webhook(request: Request):
 @app.post("/webhook")
 async def receive_message(request: Request, background_tasks: BackgroundTasks):
     """Handle incoming WhatsApp messages from Meta webhook."""
+    # Verify webhook signature from Meta
+    body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not _verify_webhook_signature(body, signature):
+        logger.warning("Invalid webhook signature — rejecting request")
+        return Response(status_code=403, content="Invalid signature")
+
     payload = await request.json()
     parsed = extract_message(payload)
 
@@ -83,6 +137,11 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
     if phone not in PHONE_TO_NAME:
         logger.warning("Message from unrecognized number: %s (%s)", phone, sender_name)
         return {"status": "ok"}
+
+    # Per-phone rate limiting
+    if not _check_rate_limit(phone):
+        logger.warning("Rate limit exceeded for %s (%s)", PHONE_TO_NAME[phone], phone)
+        return {"status": "ok"}  # Silently drop — don't waste API calls replying
 
     if parsed["type"] == "image":
         logger.info("Image from %s (caption: %s)", PHONE_TO_NAME[phone], parsed["text"][:100])

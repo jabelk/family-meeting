@@ -676,8 +676,16 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
 
     messages = [{"role": "user", "content": user_content}]
 
-    # Agentic tool-use loop
+    # Agentic tool-use loop (capped to prevent runaway API costs)
+    MAX_TOOL_ITERATIONS = 25
+    iteration = 0
+
     while True:
+        iteration += 1
+        if iteration > MAX_TOOL_ITERATIONS:
+            logger.warning("Tool loop hit max iterations (%d) — stopping", MAX_TOOL_ITERATIONS)
+            return "I hit my processing limit for this request. Please try a simpler question or break it into parts."
+
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=2048,
@@ -694,7 +702,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                 if block.type == "tool_use":
                     tool_name = block.name
                     tool_input = block.input
-                    logger.info("Tool call: %s(%s)", tool_name, json.dumps(tool_input))
+                    logger.info("Tool call [%d/%d]: %s(%s)", iteration, MAX_TOOL_ITERATIONS, tool_name, json.dumps(tool_input))
 
                     try:
                         func = TOOL_FUNCTIONS.get(tool_name)

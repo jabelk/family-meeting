@@ -38,6 +38,7 @@ ANTHROPIC_API_KEY: str = os.environ["ANTHROPIC_API_KEY"]
 WHATSAPP_PHONE_NUMBER_ID: str = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
 WHATSAPP_ACCESS_TOKEN: str = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
 WHATSAPP_VERIFY_TOKEN: str = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
+WHATSAPP_APP_SECRET: str = os.environ.get("WHATSAPP_APP_SECRET", "")
 
 # Notion
 NOTION_TOKEN: str = os.environ["NOTION_TOKEN"]
