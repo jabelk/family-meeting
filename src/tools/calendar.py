@@ -25,6 +25,10 @@ COLOR_BACKLOG = "1"       # Lavender
 
 CREATED_BY_TAG = "family-meeting-assistant"
 
+# Safety thresholds for destructive operations
+MAX_CALENDAR_DELETES = 50  # refuse to delete more than this in a single call
+MAX_CALENDAR_CREATES = 50  # refuse to create more than this in a single call
+
 
 def _get_service():
     """Build and return an authenticated Google Calendar service."""
@@ -210,6 +214,16 @@ def batch_create_events(events_data: list[dict], calendar_name: str = "erin") ->
     if not cal_id:
         return 0
 
+    if len(events_data) > MAX_CALENDAR_CREATES:
+        logger.error(
+            "SAFEGUARD: Refusing to create %d calendar events (max %d).",
+            len(events_data), MAX_CALENDAR_CREATES,
+        )
+        raise ValueError(
+            f"Safety limit: refusing to create {len(events_data)} events "
+            f"(max {MAX_CALENDAR_CREATES}). Split into smaller batches."
+        )
+
     service = _get_service()
     created = 0
     for evt in events_data:
@@ -227,6 +241,7 @@ def batch_create_events(events_data: list[dict], calendar_name: str = "erin") ->
             created += 1
         except Exception as e:
             logger.warning("Failed to create event '%s': %s", evt.get("summary"), e)
+    logger.info("Created %d events on '%s'", created, calendar_name)
     return created
 
 
@@ -256,11 +271,24 @@ def delete_assistant_events(
         .execute()
     )
 
+    events = result.get("items", [])
+    if len(events) > MAX_CALENDAR_DELETES:
+        logger.error(
+            "SAFEGUARD: Refusing to delete %d calendar events (max %d). "
+            "Date range %s to %s on calendar '%s'.",
+            len(events), MAX_CALENDAR_DELETES, start_date, end_date, calendar_name,
+        )
+        raise ValueError(
+            f"Safety limit: refusing to delete {len(events)} events "
+            f"(max {MAX_CALENDAR_DELETES}). Narrow the date range or increase the limit."
+        )
+
     deleted = 0
-    for event in result.get("items", []):
+    for event in events:
         try:
             service.events().delete(calendarId=cal_id, eventId=event["id"]).execute()
             deleted += 1
         except Exception as e:
             logger.warning("Failed to delete event %s: %s", event["id"], e)
+    logger.info("Deleted %d assistant events from '%s' (%s to %s)", deleted, calendar_name, start_date, end_date)
     return deleted

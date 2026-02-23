@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 notion = Client(auth=NOTION_TOKEN)
 
+# Safety thresholds for destructive operations
+MAX_ROLLOVER_ITEMS = 25          # refuse to roll over more than this
+MAX_TEMPLATE_BLOCK_DELETES = 50  # refuse to delete more template blocks than this
+MAX_PENDING_ORDER_CLEAR = 100    # refuse to clear more pending orders than this
+
 
 # ---------------------------------------------------------------------------
 # Family Profile (T010 + T011)
@@ -140,8 +145,20 @@ def rollover_incomplete_items() -> str:
             ]
         },
     )
+    items = results["results"]
+    if len(items) > MAX_ROLLOVER_ITEMS:
+        logger.error(
+            "SAFEGUARD: Refusing to roll over %d items (max %d). Something may be wrong.",
+            len(items), MAX_ROLLOVER_ITEMS,
+        )
+        return (
+            f"Safety limit: {len(items)} items would be rolled over "
+            f"(max {MAX_ROLLOVER_ITEMS}). This seems unusually high — "
+            "please check the Action Items database manually."
+        )
+
     count = 0
-    for page in results["results"]:
+    for page in items:
         notion.pages.update(page_id=page["id"], properties={"Rolled Over": {"checkbox": True}})
         count += 1
 
@@ -471,7 +488,17 @@ def save_routine_templates(templates_text: str) -> str:
                 break  # Next section — stop
             blocks_to_delete.append(block["id"])
 
-    # Delete old content blocks
+    # Delete old content blocks (with safeguard)
+    if len(blocks_to_delete) > MAX_TEMPLATE_BLOCK_DELETES:
+        logger.error(
+            "SAFEGUARD: Refusing to delete %d template blocks (max %d).",
+            len(blocks_to_delete), MAX_TEMPLATE_BLOCK_DELETES,
+        )
+        return (
+            f"Safety limit: {len(blocks_to_delete)} blocks would be deleted "
+            f"(max {MAX_TEMPLATE_BLOCK_DELETES}). Check Family Profile page structure."
+        )
+
     for block_id in blocks_to_delete:
         try:
             notion.blocks.delete(block_id=block_id)
@@ -753,6 +780,16 @@ def set_pending_order(item_ids: list[str], push_date: str) -> int:
 
 def clear_pending_order(item_ids: list[str]) -> int:
     """Clear pending order status and update Last Ordered date."""
+    if len(item_ids) > MAX_PENDING_ORDER_CLEAR:
+        logger.error(
+            "SAFEGUARD: Refusing to clear %d pending orders (max %d).",
+            len(item_ids), MAX_PENDING_ORDER_CLEAR,
+        )
+        raise ValueError(
+            f"Safety limit: {len(item_ids)} pending orders would be cleared "
+            f"(max {MAX_PENDING_ORDER_CLEAR})."
+        )
+
     count = 0
     for page_id in item_ids:
         try:
