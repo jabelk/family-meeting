@@ -90,5 +90,9 @@ R2_BUCKET_NAME: str = os.environ.get("R2_BUCKET_NAME", "family-recipes")
 NOTION_RECIPES_DB: str = os.environ.get("NOTION_RECIPES_DB", "")
 NOTION_COOKBOOKS_DB: str = os.environ.get("NOTION_COOKBOOKS_DB", "")
 
+# Notion — Nudge Queue and Chores databases (Feature 003)
+NOTION_NUDGE_QUEUE_DB: str = os.environ.get("NOTION_NUDGE_QUEUE_DB", "")
+NOTION_CHORES_DB: str = os.environ.get("NOTION_CHORES_DB", "")
+
 # n8n webhook auth (shared secret for /api/v1/* endpoint protection)
 N8N_WEBHOOK_SECRET: str = os.environ.get("N8N_WEBHOOK_SECRET", "")

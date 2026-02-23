@@ -393,6 +393,63 @@ R2_SECRET_ACCESS_KEY=<from step 8>
 R2_BUCKET_NAME=family-recipes
 ```
 
+## Step 10: Create Nudge Queue Database (Feature 003)
+
+This database stores all scheduled proactive messages — departure nudges, laundry reminders, and chore suggestions.
+
+### Database 8: Nudge Queue
+
+1. Click **"+ New page"** → **"Database"** (full page, table view)
+2. Title it **"Nudge Queue"**
+3. Properties:
+
+| Property | Type | Configuration |
+|---|---|---|
+| Summary | Title | (default) |
+| Nudge Type | Select | Options: `departure`, `laundry_washer`, `laundry_dryer`, `laundry_followup`, `chore`, `quiet_day` |
+| Status | Status | Groups: `Pending`, `Sent`, `Done`, `Snoozed`, `Dismissed`, `Cancelled` |
+| Scheduled Time | Date | Include time: Yes |
+| Event ID | Rich text | (Google Calendar event ID or laundry session ID) |
+| Message | Rich text | (pre-formatted WhatsApp message text) |
+| Context | Rich text | (JSON blob with extra data) |
+
+**Important**: The Status property must be of type **Status** (not Select). This gives you the status groups with colors.
+
+### Connect Integration & Get ID
+
+1. Open the Nudge Queue database
+2. Click **"..." menu** → **"+ Add connections"** → select **"Family Meeting Bot"**
+3. Copy the database ID (Share → Copy link → extract 32-char hex) into `.env` as `NOTION_NUDGE_QUEUE_DB`
+
+## Step 11: Create Chores Database (Feature 003)
+
+This database tracks recurring household chores with preferences and completion history.
+
+### Database 9: Chores
+
+1. Click **"+ New page"** → **"Database"** (full page, table view)
+2. Title it **"Chores"**
+3. Properties:
+
+| Property | Type | Configuration |
+|---|---|---|
+| Name | Title | (default) |
+| Duration | Number | Number format: Integer (estimated minutes) |
+| Frequency | Select | Options: `daily`, `every_other_day`, `weekly`, `biweekly`, `monthly` |
+| Preferred Days | Multi-select | Options: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday` |
+| Preference | Select | Options: `like`, `neutral`, `dislike` |
+| Last Completed | Date | (no special config) |
+| Times Completed | Number | Number format: Integer |
+| Category | Select | Options: `cleaning`, `kitchen`, `organizing`, `outdoor`, `laundry`, `meal_prep` |
+
+The bot will automatically seed this database with 10 default chores on first run.
+
+### Connect Integration & Get ID
+
+1. Open the Chores database
+2. Click **"..." menu** → **"+ Add connections"** → select **"Family Meeting Bot"**
+3. Copy the database ID into `.env` as `NOTION_CHORES_DB`
+
 ## Verification Checklist
 
 After setup, confirm:
