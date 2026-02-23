@@ -52,8 +52,8 @@ specs/003-smart-nudges-chores/
 
 ```text
 src/
-├── app.py               # ADD: 2 new endpoints (/api/v1/nudges/scan, /api/v1/nudges/process-laundry)
-├── assistant.py          # ADD: 3 new tools (start_laundry, complete_chore, set_quiet_day)
+├── app.py               # ADD: 1 new endpoint (/api/v1/nudges/scan)
+├── assistant.py          # ADD: 7 new tools (start_laundry, advance_laundry, cancel_laundry, complete_chore, skip_chore, set_quiet_day, set_chore_preference, get_chore_history)
 ├── config.py             # ADD: NOTION_NUDGE_QUEUE_DB, NOTION_CHORES_DB
 ├── tools/
 │   ├── nudges.py         # NEW: nudge scanning, scheduling, virtual event detection, batching
