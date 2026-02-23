@@ -35,10 +35,29 @@ services:
     networks:
       - family-net
 
-  # n8n: already running on NUC as separate container (n8n-n8n-1 on port 5678)
-  # Use the existing instance — configure workflows to hit http://192.168.4.152:8000
+  # n8n: existing instance on NUC (port 5678) for other projects
+  # n8n-mombot: dedicated instance for family meeting workflows
+  n8n-mombot:
+    image: n8nio/n8n:latest
+    ports:
+      - "5679:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_MOMBOT_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_MOMBOT_PASSWORD}
+      - N8N_ENCRYPTION_KEY=${N8N_MOMBOT_ENCRYPTION_KEY}
+      - GENERIC_TIMEZONE=America/Los_Angeles
+      - TZ=America/Los_Angeles
+    volumes:
+      - n8n_mombot_data:/home/node/.n8n
+    restart: unless-stopped
+    networks:
+      - family-net
 
 
 networks:
   family-net:
     driver: bridge
+
+volumes:
+  n8n_mombot_data:

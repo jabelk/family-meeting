@@ -4,7 +4,7 @@ import json
 import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook
+from src.tools import notion, calendar, ynab, outlook, recipes, proactive
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +117,21 @@ for delivery?" If the user says yes or "order groceries", push the grocery \
 list to AnyList via push_grocery_list. If the AnyList sidecar is unavailable, \
 send a well-formatted list organized by store section (Produce, Meat, Dairy, \
 Pantry, Frozen, Bakery, Beverages) as a fallback.
+
+**Recipe catalogue:**
+18. When you receive a photo, assume it's a cookbook recipe unless told \
+otherwise. Call extract_and_save_recipe with the image. Include the caption \
+as cookbook_name if it mentions a book (e.g., "save this from the keto book" \
+→ cookbook_name="keto book"). Report what was extracted and flag any unclear \
+portions.
+19. For recipe searches ("what was that steak recipe?"), use search_recipes \
+with a natural language query. Show the top results with name, cookbook, \
+prep/cook time.
+20. When asked to cook a saved recipe or add recipe ingredients to the \
+grocery list, use recipe_to_grocery_list. Present needed vs already-have \
+items, then offer to push needed items to AnyList.
+21. To browse saved cookbooks or list what's been catalogued, use \
+list_cookbooks.
 
 The current sender's name will be provided with each message.
 """
@@ -394,6 +409,102 @@ TOOLS = [
             "required": ["items"],
         },
     },
+    # --- Recipe tools (US1) ---
+    {
+        "name": "extract_and_save_recipe",
+        "description": "Extract a recipe from a cookbook photo using AI vision and save it to the recipe catalogue. The image is passed separately in the conversation — provide the base64 data and mime type here along with the cookbook name.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "image_base64": {"type": "string", "description": "Base64-encoded image data of the cookbook page."},
+                "mime_type": {"type": "string", "description": "Image MIME type (e.g., 'image/jpeg')."},
+                "cookbook_name": {"type": "string", "description": "Name of the cookbook (e.g., 'The Keto Book'). Defaults to 'Uncategorized'."},
+            },
+            "required": ["image_base64", "mime_type"],
+        },
+    },
+    {
+        "name": "search_recipes",
+        "description": "Search the recipe catalogue by name, cookbook, or tags. Returns matching recipes with name, cookbook, tags, prep/cook time, and usage count.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query (recipe name, ingredient, or description)."},
+                "cookbook_name": {"type": "string", "description": "Filter by cookbook name. Empty for all."},
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter by tags: Keto, Kid-Friendly, Quick, Vegetarian, Comfort Food, Soup, Salad, Pasta, Meat, Seafood.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_recipe_details",
+        "description": "Get full recipe details including ingredients list, step-by-step instructions, photo URL, and all metadata.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string", "description": "The Notion page ID of the recipe."},
+            },
+            "required": ["recipe_id"],
+        },
+    },
+    {
+        "name": "recipe_to_grocery_list",
+        "description": "Generate a grocery list from a saved recipe. Cross-references ingredients against grocery purchase history to show what's needed vs what you likely already have. Supports servings scaling.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "recipe_id": {"type": "string", "description": "The Notion page ID of the recipe."},
+                "servings_multiplier": {
+                    "type": "number",
+                    "description": "Multiply ingredient quantities (e.g., 2.0 for double). Default 1.0.",
+                    "default": 1.0,
+                },
+            },
+            "required": ["recipe_id"],
+        },
+    },
+    {
+        "name": "list_cookbooks",
+        "description": "List all saved cookbooks with their recipe counts. Use to show what's been catalogued.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # --- Proactive tools (US2, US3) ---
+    {
+        "name": "check_reorder_items",
+        "description": "Check grocery history for staple/regular items due for reorder. Returns items grouped by store with days overdue. Use when asked about grocery needs or to proactively suggest reorders.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "confirm_groceries_ordered",
+        "description": "Mark all pending grocery orders as confirmed (updates Last Ordered date). Call when user says 'groceries ordered', 'placed the order', etc.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "generate_meal_plan",
+        "description": "Generate a 6-night dinner plan (Mon-Sat) considering saved recipes, family preferences, schedule density, and recent meal history. Returns structured plan with ingredients.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "handle_meal_swap",
+        "description": "Swap a meal in the current plan and recalculate the grocery list. Use when user says 'swap Wednesday for tacos' or similar.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "plan": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "Current meal plan array (from generate_meal_plan result).",
+                },
+                "day": {"type": "string", "description": "Day to swap (e.g., 'Wednesday')."},
+                "new_meal": {"type": "string", "description": "New meal name (e.g., 'Tacos')."},
+            },
+            "required": ["plan", "day", "new_meal"],
+        },
+    },
 ]
 
 # Color mapping for calendar blocks
@@ -471,17 +582,55 @@ TOOL_FUNCTIONS = {
     "get_grocery_history": lambda **kw: notion.get_grocery_history(kw.get("category", "")),
     "get_staple_items": lambda **kw: notion.get_staple_items(),
     "push_grocery_list": _handle_push_grocery_list,
+    # Recipes
+    "extract_and_save_recipe": lambda **kw: recipes.extract_and_save_recipe(
+        kw["image_base64"], kw["mime_type"], kw.get("cookbook_name", "")
+    ),
+    "search_recipes": lambda **kw: recipes.search_recipes(
+        kw.get("query", ""), kw.get("cookbook_name", ""), kw.get("tags")
+    ),
+    "get_recipe_details": lambda **kw: recipes.get_recipe_details(kw["recipe_id"]),
+    "recipe_to_grocery_list": lambda **kw: recipes.recipe_to_grocery_list(
+        kw["recipe_id"], kw.get("servings_multiplier", 1.0)
+    ),
+    "list_cookbooks": lambda **kw: recipes.list_cookbooks(),
+    # Proactive
+    "check_reorder_items": lambda **kw: proactive.check_reorder_items(),
+    "confirm_groceries_ordered": lambda **kw: proactive.handle_order_confirmation(),
+    "generate_meal_plan": lambda **kw: proactive.generate_meal_plan(),
+    "handle_meal_swap": lambda **kw: proactive.handle_meal_swap(
+        kw["plan"], kw["day"], kw["new_meal"]
+    ),
 }
 
 
-def handle_message(sender_phone: str, message_text: str) -> str:
+def handle_message(sender_phone: str, message_text: str, image_data: dict | None = None) -> str:
     """Process a message from a family member and return the assistant's response.
 
     Runs the Claude tool-use loop: send message → Claude decides tools → execute
     tools → send results back → Claude formats final response.
+
+    Args:
+        sender_phone: Sender's phone number or "system" for automated calls.
+        message_text: Text message or image caption.
+        image_data: Optional dict with "base64" and "mime_type" for image messages.
     """
     sender_name = PHONE_TO_NAME.get(sender_phone, "Unknown")
-    user_content = f"[From {sender_name}]: {message_text}"
+
+    if image_data:
+        user_content = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": image_data["mime_type"],
+                    "data": image_data["base64"],
+                },
+            },
+            {"type": "text", "text": f"[From {sender_name}]: {message_text}"},
+        ]
+    else:
+        user_content = f"[From {sender_name}]: {message_text}"
 
     messages = [{"role": "user", "content": user_content}]
 

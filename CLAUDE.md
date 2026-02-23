@@ -52,6 +52,8 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Docker Compose on NUC (`warp-nuc`) + Cloudflare Tunnel + n8n for scheduling
 - WhatsApp Cloud API (Meta) for messaging interface
 - Public URL: `https://mombot.sierrastoryco.com`
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 + Claude vision for OCR), notion-client >=2.2.0,<2.3.0, boto3 (Cloudflare R2 S3-compatible API), httpx, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn (002-proactive-recipes-automation)
+- Notion (2 new databases: Recipes, Cookbooks) + Cloudflare R2 (recipe photo storage) + existing 5 Notion databases (002-proactive-recipes-automation)
 
 ## Deployment (NUC)
 
@@ -75,7 +77,6 @@ The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.15
 **Updating .env**: Edit locally, then `./scripts/nuc.sh env` (copies .env and restarts fastapi).
 
 ## Recent Changes
+- 002-proactive-recipes-automation: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 + Claude vision for OCR), notion-client >=2.2.0,<2.3.0, boto3 (Cloudflare R2 S3-compatible API), httpx, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn
 - Mom Bot is live — WhatsApp → FastAPI → Claude Haiku → WhatsApp reply working end-to-end
 - Erin's schedule feedback incorporated: day-specific routine templates (Mon-Sun), US7-US9 drafted
-- Notion Family Profile updated with full weekly schedule, chore notes, 7 day-specific templates
-- Google Calendar read verified, Notion (all 6 resources) verified, YNAB verified

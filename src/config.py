@@ -78,3 +78,16 @@ if ERIN_PHONE:
 
 # AnyList (optional — grocery integration)
 ANYLIST_SIDECAR_URL: str = os.environ.get("ANYLIST_SIDECAR_URL", "http://anylist-sidecar:3000")
+
+# Cloudflare R2 (recipe photo storage — optional, needed for Feature 002)
+R2_ACCOUNT_ID: str = os.environ.get("R2_ACCOUNT_ID", "")
+R2_ACCESS_KEY_ID: str = os.environ.get("R2_ACCESS_KEY_ID", "")
+R2_SECRET_ACCESS_KEY: str = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+R2_BUCKET_NAME: str = os.environ.get("R2_BUCKET_NAME", "family-recipes")
+
+# Notion — Recipe databases (optional, needed for Feature 002)
+NOTION_RECIPES_DB: str = os.environ.get("NOTION_RECIPES_DB", "")
+NOTION_COOKBOOKS_DB: str = os.environ.get("NOTION_COOKBOOKS_DB", "")
+
+# n8n webhook auth (shared secret for /api/v1/* endpoint protection)
+N8N_WEBHOOK_SECRET: str = os.environ.get("N8N_WEBHOOK_SECRET", "")

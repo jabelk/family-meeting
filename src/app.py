@@ -1,12 +1,13 @@
 """FastAPI app — WhatsApp webhook + n8n automation endpoints."""
 
+import base64
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, Request, Response, BackgroundTasks
+from fastapi import FastAPI, Request, Response, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel
-from src.config import WHATSAPP_VERIFY_TOKEN, PHONE_TO_NAME, ERIN_PHONE
-from src.whatsapp import extract_message, send_message
+from src.config import WHATSAPP_VERIFY_TOKEN, PHONE_TO_NAME, ERIN_PHONE, N8N_WEBHOOK_SECRET
+from src.whatsapp import extract_message, send_message, download_media
 from src.assistant import handle_message, generate_daily_plan
 from src.tools.calendar import delete_assistant_events, batch_create_events, get_events_for_date
 from src.tools.notion import get_routine_templates
@@ -18,6 +19,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Family Meeting Assistant")
+
+
+# ---------------------------------------------------------------------------
+# Auth dependency for n8n endpoints (T015)
+# ---------------------------------------------------------------------------
+
+async def verify_n8n_auth(x_n8n_auth: str = Header(None)):
+    """Verify X-N8N-Auth header for /api/v1/* endpoints."""
+    if not N8N_WEBHOOK_SECRET:
+        return  # No secret configured, skip auth
+    if x_n8n_auth != N8N_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-N8N-Auth header")
 
 
 # ---------------------------------------------------------------------------
@@ -63,22 +76,26 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
     if not parsed:
         return {"status": "ok"}
 
-    phone, sender_name, text = parsed
+    phone = parsed["phone"]
+    sender_name = parsed["name"]
 
     # Reject unrecognized phone numbers
     if phone not in PHONE_TO_NAME:
         logger.warning("Message from unrecognized number: %s (%s)", phone, sender_name)
         return {"status": "ok"}
 
-    logger.info("Message from %s: %s", PHONE_TO_NAME[phone], text[:100])
+    if parsed["type"] == "image":
+        logger.info("Image from %s (caption: %s)", PHONE_TO_NAME[phone], parsed["text"][:100])
+        background_tasks.add_task(_process_image_and_reply, phone, parsed)
+    else:
+        logger.info("Message from %s: %s", PHONE_TO_NAME[phone], parsed["text"][:100])
+        background_tasks.add_task(_process_and_reply, phone, parsed["text"])
 
-    # Process asynchronously so we return 200 immediately
-    background_tasks.add_task(_process_and_reply, phone, text)
     return {"status": "ok"}
 
 
 async def _process_and_reply(phone: str, text: str):
-    """Process the message through Claude and send the reply via WhatsApp."""
+    """Process a text message through Claude and send the reply via WhatsApp."""
     start = time.time()
     try:
         reply = handle_message(phone, text)
@@ -88,6 +105,27 @@ async def _process_and_reply(phone: str, text: str):
     except Exception:
         logger.exception("Error processing message from %s", phone)
         await send_message(phone, "Sorry, something went wrong. Please try again.")
+
+
+async def _process_image_and_reply(phone: str, parsed: dict):
+    """Process an image message: download media, encode, and pass to Claude with the image."""
+    start = time.time()
+    try:
+        image_bytes, mime_type = await download_media(parsed["media_id"])
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        caption = parsed.get("text", "")
+
+        reply = handle_message(
+            phone,
+            caption or "I sent you a photo.",
+            image_data={"base64": image_b64, "mime_type": mime_type},
+        )
+        elapsed = time.time() - start
+        logger.info("Image response generated in %.1fs (%d chars)", elapsed, len(reply))
+        await send_message(phone, reply)
+    except Exception:
+        logger.exception("Error processing image from %s", phone)
+        await send_message(phone, "Sorry, I couldn't process that image. Please try again.")
 
 
 @app.get("/health")
@@ -100,7 +138,7 @@ async def health():
 # n8n automation endpoints (T021-T023)
 # ---------------------------------------------------------------------------
 
-@app.post("/api/v1/briefing/daily")
+@app.post("/api/v1/briefing/daily", dependencies=[Depends(verify_n8n_auth)])
 async def daily_briefing(req: DailyBriefingRequest, background_tasks: BackgroundTasks):
     """Generate and send daily briefing via WhatsApp.
 
@@ -122,7 +160,7 @@ async def daily_briefing(req: DailyBriefingRequest, background_tasks: Background
     return {"status": "sent", "target": target}
 
 
-@app.post("/api/v1/calendar/populate-week")
+@app.post("/api/v1/calendar/populate-week", dependencies=[Depends(verify_n8n_auth)])
 async def populate_week(req: PopulateWeekRequest):
     """Delete assistant-created events for the week and repopulate from routine templates.
 
@@ -158,7 +196,7 @@ async def populate_week(req: PopulateWeekRequest):
     return {"status": "populated", "deleted": deleted, "message": reply[:500]}
 
 
-@app.post("/api/v1/prompt/grandma-schedule")
+@app.post("/api/v1/prompt/grandma-schedule", dependencies=[Depends(verify_n8n_auth)])
 async def grandma_schedule_prompt(background_tasks: BackgroundTasks):
     """Send a WhatsApp message asking about grandma's schedule for the week.
 
@@ -180,3 +218,243 @@ async def grandma_schedule_prompt(background_tasks: BackgroundTasks):
 
     background_tasks.add_task(_send)
     return {"status": "prompted"}
+
+
+# ---------------------------------------------------------------------------
+# US2: Grocery Reorder (T029-T030)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/grocery/reorder-check", dependencies=[Depends(verify_n8n_auth)])
+async def reorder_check(background_tasks: BackgroundTasks):
+    """Check for grocery items due for reorder and send suggestions via WhatsApp.
+
+    Called by n8n weekly. Groups suggestions by store.
+    """
+    from src.tools.proactive import check_reorder_items
+
+    logger.info("Grocery reorder check triggered")
+    result = check_reorder_items()
+
+    if result["total"] == 0:
+        return {"status": "no_items_due"}
+
+    # Format WhatsApp message
+    lines = ["*🛒 Grocery Reorder Suggestions*\n"]
+    for store, items in result["items_by_store"].items():
+        lines.append(f"*{store}:*")
+        for item in items:
+            lines.append(f"  • {item['name']} ({item['days_overdue']}d overdue)")
+        lines.append("")
+    lines.append("Reply with which items to add to AnyList, or 'add all'!")
+
+    message = "\n".join(lines)
+
+    async def _send():
+        try:
+            await send_message(ERIN_PHONE, message)
+            logger.info("Reorder suggestions sent (%d items)", result["total"])
+        except Exception:
+            logger.exception("Failed to send reorder suggestions")
+
+    background_tasks.add_task(_send)
+    return {"status": "sent", "total": result["total"]}
+
+
+@app.post("/api/v1/reminders/grocery-confirmation", dependencies=[Depends(verify_n8n_auth)])
+async def grocery_confirmation_reminder(background_tasks: BackgroundTasks):
+    """Check for unconfirmed grocery orders and send reminder if needed.
+
+    Called by n8n daily. Sends gentle reminder if items pending 2+ days.
+    """
+    from src.tools.proactive import check_grocery_confirmation
+
+    logger.info("Grocery confirmation check triggered")
+    result = check_grocery_confirmation()
+
+    if result["status"] != "needs_reminder":
+        return {"status": result["status"]}
+
+    async def _send():
+        try:
+            await send_message(ERIN_PHONE, result["message"])
+            logger.info("Grocery confirmation reminder sent")
+        except Exception:
+            logger.exception("Failed to send grocery confirmation reminder")
+
+    background_tasks.add_task(_send)
+    return {"status": "reminder_sent", "overdue_count": len(result["overdue_items"])}
+
+
+# ---------------------------------------------------------------------------
+# US3: Meal Planning (T036)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/meals/plan-week", dependencies=[Depends(verify_n8n_auth)])
+async def plan_week_meals(background_tasks: BackgroundTasks):
+    """Generate 6-night dinner plan + merged grocery list and send via WhatsApp.
+
+    Called by n8n Saturday morning. Combines meal plan with reorder suggestions.
+    """
+    from src.tools.proactive import generate_meal_plan, merge_grocery_list
+
+    logger.info("Weekly meal plan triggered")
+
+    async def _run():
+        try:
+            result = generate_meal_plan()
+            if not result.get("success"):
+                logger.error("Meal plan generation failed: %s", result.get("error"))
+                return
+
+            plan = result["plan"]
+            grocery = merge_grocery_list(plan)
+
+            # Format combined message
+            lines = ["*🍽 Weekly Dinner Plan*\n"]
+            for day in plan:
+                complexity = {"easy": "⚡", "medium": "👩‍🍳", "involved": "🔥"}.get(
+                    day.get("complexity", "medium"), "👩‍🍳"
+                )
+                source = " (saved recipe)" if day.get("source", "general") != "general" else ""
+                lines.append(f"*{day['day']}:* {day['meal_name']} {complexity}{source}")
+            lines.append("")
+
+            lines.append("*🛒 Grocery List*\n")
+            for store, items in grocery.get("items_by_store", {}).items():
+                lines.append(f"*{store}:*")
+                for item in items:
+                    qty = f" ({item['quantity']})" if item.get("quantity") else ""
+                    lines.append(f"  • {item['name']}{qty}")
+                lines.append("")
+
+            lines.append("Reply to swap a meal or 'approve and send to AnyList'!")
+            message = "\n".join(lines)
+
+            await send_message(ERIN_PHONE, message)
+            logger.info("Weekly meal plan sent (%d meals, %d grocery items)", len(plan), grocery["total"])
+        except Exception:
+            logger.exception("Weekly meal plan failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "generating"}
+
+
+# ---------------------------------------------------------------------------
+# US5: Conflict Detection (T044-T045)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/calendar/conflict-check", dependencies=[Depends(verify_n8n_auth)])
+async def conflict_check(background_tasks: BackgroundTasks, days_ahead: int = 7):
+    """Detect calendar conflicts and send report via WhatsApp.
+
+    Called by n8n Sunday evening for weekly scan.
+    """
+    from src.tools.proactive import detect_conflicts
+
+    logger.info("Conflict check triggered (days_ahead=%d)", days_ahead)
+
+    async def _run():
+        try:
+            conflicts = detect_conflicts(days_ahead)
+            if not conflicts:
+                logger.info("No conflicts detected")
+                return
+
+            lines = ["*⚠️ Calendar Conflicts Detected*\n"]
+            for c in conflicts:
+                icon = "🔴" if c.get("type") == "hard" else "🟡"
+                lines.append(f"{icon} *{c.get('day', '')}*: {c.get('event', '')}")
+                lines.append(f"  ↔ Conflicts with: {c.get('conflict_with', '')}")
+                lines.append(f"  💡 {c.get('suggestion', '')}")
+                lines.append("")
+
+            message = "\n".join(lines)
+            await send_message(ERIN_PHONE, message)
+            logger.info("Conflict report sent (%d conflicts)", len(conflicts))
+        except Exception:
+            logger.exception("Conflict check failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "checking", "days_ahead": days_ahead}
+
+
+# ---------------------------------------------------------------------------
+# US6: Action Item Reminders (T048)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/reminders/action-items", dependencies=[Depends(verify_n8n_auth)])
+async def action_item_reminder(background_tasks: BackgroundTasks):
+    """Send mid-week action item progress report via WhatsApp.
+
+    Called by n8n Wednesday noon.
+    """
+    from src.tools.proactive import check_action_item_progress
+
+    logger.info("Action item reminder triggered")
+
+    async def _run():
+        try:
+            result = check_action_item_progress()
+
+            if result.get("status") == "all_complete":
+                await send_message(ERIN_PHONE, "✅ *All caught up!* Every action item for this week is done. Nice work!")
+                return
+
+            if result.get("status") == "error":
+                logger.error("Action item check failed: %s", result.get("message"))
+                return
+
+            lines = [f"*📋 Mid-Week Check-In*\n"]
+            lines.append(f"{result['done']} of {result['total']} items done this week\n")
+
+            for assignee, items in result.get("remaining_by_assignee", {}).items():
+                lines.append(f"*{assignee}:*")
+                for item in items:
+                    rolled = " ⚠️ _rolled over — still relevant?_" if item.get("rolled_over") else ""
+                    status_icon = "🔄" if item["status"] == "In Progress" else "⬜"
+                    lines.append(f"  {status_icon} {item['title']}{rolled}")
+                lines.append("")
+
+            message = "\n".join(lines)
+            await send_message(ERIN_PHONE, message)
+            logger.info("Action item reminder sent")
+        except Exception:
+            logger.exception("Action item reminder failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "checking"}
+
+
+# ---------------------------------------------------------------------------
+# US7: Budget Summary (T051)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/budget/weekly-summary", dependencies=[Depends(verify_n8n_auth)])
+async def weekly_budget_summary(background_tasks: BackgroundTasks):
+    """Send weekly YNAB budget summary via WhatsApp.
+
+    Called by n8n Sunday afternoon. Uses template fallback for 24h window.
+    """
+    from src.tools.proactive import format_budget_summary
+    from src.whatsapp import send_message_with_template_fallback
+
+    logger.info("Budget summary triggered")
+
+    async def _run():
+        try:
+            result = format_budget_summary()
+            if result.get("status") != "ok":
+                logger.error("Budget summary failed: %s", result.get("message"))
+                return
+
+            await send_message_with_template_fallback(
+                ERIN_PHONE,
+                result["message"],
+                template_name="budget_summary",
+            )
+            logger.info("Budget summary sent")
+        except Exception:
+            logger.exception("Budget summary failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "generating"}

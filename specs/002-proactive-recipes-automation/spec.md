@@ -66,11 +66,11 @@ Saturday morning, Mom Bot sends a single combined message: a weekly dinner plan 
 
 **Why this priority**: Builds on the recipe catalogue (US1) and grocery data. Meal planning is one of Erin's weekly pain points. Combining AI-suggested meals with automatic grocery ordering removes significant mental overhead.
 
-**Independent Test**: Saturday morning, Mom Bot sends a 7-day meal plan with estimated grocery list. Erin adjusts 2 meals and approves. The final grocery list lands in AnyList.
+**Independent Test**: Saturday morning, Mom Bot sends a 6-night dinner plan with estimated grocery list. Erin adjusts 2 meals and approves. The final grocery list lands in AnyList.
 
 **Acceptance Scenarios**:
 
-1. **Given** it is Saturday and the family has 3 saved recipes and a grocery history, **When** the meal plan generator runs, **Then** it suggests 7 days of meals that are kid-friendly, avoids duplicating the previous 2 weeks' plans, and considers schedule density (e.g., simpler meals on Tuesday when Erin has gymnastics pickup).
+1. **Given** it is Saturday and the family has 3 saved recipes and a grocery history, **When** the meal plan generator runs, **Then** it suggests 6 nights of dinners that are kid-friendly, avoids duplicating the previous 2 weeks' plans, and considers schedule density (e.g., simpler meals on Tuesday when Erin has gymnastics pickup).
 2. **Given** the meal plan includes "Chicken Parmesan" from the recipe catalogue, **When** the grocery list is generated, **Then** the ingredients come from the saved recipe with correct quantities, and items recently ordered (like organic spinach bought 3 days ago) are excluded.
 3. **Given** Erin says "swap Wednesday for tacos", **When** Mom Bot adjusts the plan, **Then** the grocery list updates accordingly — taco ingredients added, removed pasta ingredients.
 4. **Given** Erin approves the final plan, **When** she says "send to AnyList", **Then** items are split by preferred store (using grocery history store data) and pushed to AnyList.

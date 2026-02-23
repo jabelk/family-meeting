@@ -11,6 +11,8 @@ from src.config import (
     NOTION_FAMILY_PROFILE_PAGE,
     NOTION_BACKLOG_DB,
     NOTION_GROCERY_HISTORY_DB,
+    NOTION_RECIPES_DB,
+    NOTION_COOKBOOKS_DB,
 )
 
 logger = logging.getLogger(__name__)
@@ -544,6 +546,248 @@ def get_staple_items() -> str:
     if not items:
         return "No staple items identified yet."
     return "\n".join(items)
+
+
+# ---------------------------------------------------------------------------
+# Recipes (T012 — Feature 002)
+# ---------------------------------------------------------------------------
+
+def create_recipe(
+    name: str,
+    cookbook_id: str,
+    ingredients_json: str,
+    instructions: str,
+    prep_time: int | None = None,
+    cook_time: int | None = None,
+    servings: int | None = None,
+    photo_url: str = "",
+    tags: list[str] | None = None,
+    cuisine: str = "Other",
+) -> str:
+    """Create a recipe in the Recipes database. Returns the Notion page ID."""
+    if not NOTION_RECIPES_DB:
+        raise RuntimeError("NOTION_RECIPES_DB not configured")
+
+    properties: dict = {
+        "Name": {"title": [{"text": {"content": name}}]},
+        "Ingredients": {"rich_text": [{"text": {"content": ingredients_json[:2000]}}]},
+        "Instructions": {"rich_text": [{"text": {"content": instructions[:2000]}}]},
+        "Date Added": {"date": {"start": date.today().isoformat()}},
+        "Times Used": {"number": 0},
+    }
+    if cookbook_id:
+        properties["Cookbook"] = {"relation": [{"id": cookbook_id}]}
+    if prep_time is not None:
+        properties["Prep Time"] = {"number": prep_time}
+    if cook_time is not None:
+        properties["Cook Time"] = {"number": cook_time}
+    if servings is not None:
+        properties["Servings"] = {"number": servings}
+    if photo_url:
+        properties["Photo URL"] = {"url": photo_url}
+    if tags:
+        properties["Tags"] = {"multi_select": [{"name": t} for t in tags]}
+    if cuisine:
+        properties["Cuisine"] = {"select": {"name": cuisine}}
+
+    page = notion.pages.create(parent={"database_id": NOTION_RECIPES_DB}, properties=properties)
+    logger.info("Created recipe '%s' in Notion: %s", name, page["id"])
+    return page["id"]
+
+
+def get_recipe(page_id: str) -> dict:
+    """Get a recipe by its Notion page ID. Returns raw properties."""
+    return notion.pages.retrieve(page_id=page_id)
+
+
+def search_recipes_by_title(title_contains: str) -> list[dict]:
+    """Search recipes by title. Returns list of {id, name, cookbook}."""
+    if not NOTION_RECIPES_DB:
+        return []
+
+    results = notion.databases.query(
+        database_id=NOTION_RECIPES_DB,
+        filter={"property": "Name", "title": {"contains": title_contains}},
+    )
+    recipes = []
+    for page in results["results"]:
+        props = page["properties"]
+        cookbook_rel = props.get("Cookbook", {}).get("relation", [])
+        # Resolve cookbook name
+        cookbook_name = ""
+        if cookbook_rel:
+            try:
+                cb_page = notion.pages.retrieve(page_id=cookbook_rel[0]["id"])
+                cookbook_name = _get_title(cb_page["properties"].get("Name", {}))
+            except Exception:
+                pass
+        recipes.append({
+            "id": page["id"],
+            "name": _get_title(props.get("Name", {})),
+            "cookbook": cookbook_name,
+        })
+    return recipes
+
+
+def get_all_recipes() -> list[dict]:
+    """Get all recipes. Returns list of {id, name, cookbook_id, tags, times_used}."""
+    if not NOTION_RECIPES_DB:
+        return []
+
+    results = notion.databases.query(database_id=NOTION_RECIPES_DB)
+    recipes = []
+    for page in results["results"]:
+        props = page["properties"]
+        cookbook_rel = props.get("Cookbook", {}).get("relation", [])
+        recipes.append({
+            "id": page["id"],
+            "name": _get_title(props.get("Name", {})),
+            "cookbook_id": cookbook_rel[0]["id"] if cookbook_rel else "",
+            "tags": [opt["name"] for opt in props.get("Tags", {}).get("multi_select", [])],
+            "times_used": props.get("Times Used", {}).get("number", 0),
+        })
+    return recipes
+
+
+def update_recipe(page_id: str, properties: dict) -> None:
+    """Update a recipe's properties."""
+    notion.pages.update(page_id=page_id, properties=properties)
+
+
+# ---------------------------------------------------------------------------
+# Cookbooks (T013 — Feature 002)
+# ---------------------------------------------------------------------------
+
+def create_cookbook(name: str, description: str = "") -> str:
+    """Create a cookbook. Returns the Notion page ID."""
+    if not NOTION_COOKBOOKS_DB:
+        raise RuntimeError("NOTION_COOKBOOKS_DB not configured")
+
+    properties: dict = {
+        "Name": {"title": [{"text": {"content": name}}]},
+    }
+    if description:
+        properties["Description"] = {"rich_text": [{"text": {"content": description}}]}
+
+    page = notion.pages.create(parent={"database_id": NOTION_COOKBOOKS_DB}, properties=properties)
+    logger.info("Created cookbook '%s': %s", name, page["id"])
+    return page["id"]
+
+
+def get_cookbook_by_name(name: str) -> dict | None:
+    """Find a cookbook by name (case-insensitive). Returns {id, name} or None."""
+    if not NOTION_COOKBOOKS_DB:
+        return None
+
+    # Notion title filter is case-insensitive by default
+    results = notion.databases.query(
+        database_id=NOTION_COOKBOOKS_DB,
+        filter={"property": "Name", "title": {"equals": name}},
+    )
+    if results["results"]:
+        page = results["results"][0]
+        return {"id": page["id"], "name": _get_title(page["properties"].get("Name", {}))}
+
+    # Try contains for partial match (e.g., "keto book" matches "The Keto Cookbook")
+    results = notion.databases.query(
+        database_id=NOTION_COOKBOOKS_DB,
+        filter={"property": "Name", "title": {"contains": name}},
+    )
+    if results["results"]:
+        page = results["results"][0]
+        return {"id": page["id"], "name": _get_title(page["properties"].get("Name", {}))}
+
+    return None
+
+
+def list_cookbooks() -> dict:
+    """List all cookbooks with recipe counts."""
+    if not NOTION_COOKBOOKS_DB:
+        return {"cookbooks": []}
+
+    results = notion.databases.query(database_id=NOTION_COOKBOOKS_DB)
+    cookbooks = []
+    for page in results["results"]:
+        props = page["properties"]
+        name = _get_title(props.get("Name", {}))
+        # Count recipes for this cookbook
+        recipe_count = 0
+        if NOTION_RECIPES_DB:
+            try:
+                recipes = notion.databases.query(
+                    database_id=NOTION_RECIPES_DB,
+                    filter={"property": "Cookbook", "relation": {"contains": page["id"]}},
+                )
+                recipe_count = len(recipes["results"])
+            except Exception:
+                pass
+        cookbooks.append({
+            "name": name,
+            "recipe_count": recipe_count,
+            "notion_page_id": page["id"],
+        })
+    return {"cookbooks": cookbooks}
+
+
+# ---------------------------------------------------------------------------
+# Grocery History — Pending Order tracking (T014 — Feature 002)
+# ---------------------------------------------------------------------------
+
+def set_pending_order(item_ids: list[str], push_date: str) -> int:
+    """Mark grocery items as pending order after AnyList push."""
+    count = 0
+    for page_id in item_ids:
+        try:
+            notion.pages.update(
+                page_id=page_id,
+                properties={
+                    "Pending Order": {"checkbox": True},
+                    "Last Push Date": {"date": {"start": push_date}},
+                },
+            )
+            count += 1
+        except Exception as e:
+            logger.warning("Failed to set pending order for %s: %s", page_id, e)
+    return count
+
+
+def clear_pending_order(item_ids: list[str]) -> int:
+    """Clear pending order status and update Last Ordered date."""
+    count = 0
+    for page_id in item_ids:
+        try:
+            notion.pages.update(
+                page_id=page_id,
+                properties={
+                    "Pending Order": {"checkbox": False},
+                    "Last Ordered": {"date": {"start": date.today().isoformat()}},
+                },
+            )
+            count += 1
+        except Exception as e:
+            logger.warning("Failed to clear pending order for %s: %s", page_id, e)
+    return count
+
+
+def get_pending_orders() -> list[dict]:
+    """Get all grocery items with pending orders."""
+    if not NOTION_GROCERY_HISTORY_DB:
+        return []
+
+    results = notion.databases.query(
+        database_id=NOTION_GROCERY_HISTORY_DB,
+        filter={"property": "Pending Order", "checkbox": {"equals": True}},
+    )
+    items = []
+    for page in results["results"]:
+        props = page["properties"]
+        push_date_prop = props.get("Last Push Date", {}).get("date")
+        items.append({
+            "id": page["id"],
+            "name": _get_title(props.get("Item Name", {})),
+            "push_date": push_date_prop.get("start") if push_date_prop else None,
+        })
+    return items
 
 
 # ---------------------------------------------------------------------------
