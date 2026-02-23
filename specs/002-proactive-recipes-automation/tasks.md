@@ -7,7 +7,7 @@
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
-**Status (2026-02-23)**: 45/57 tasks complete. All implementation code is on `main` and deployed to NUC. Remaining: docs (T007, T040), n8n workflow creation (T041), .env.example (T053), quickstart validation (T056), and E2E manual validations (T032, T038, T042, T046, T049, T052, T057).
+**Status (2026-02-23)**: 48/57 tasks complete. All implementation code is on `main` and deployed to NUC. Remaining: n8n workflow creation (T041 — manual UI), quickstart validation (T056), and E2E manual validations (T032, T038, T042, T046, T049, T052, T057).
 
 ## Design Decisions & Troubleshooting Log
 
@@ -45,7 +45,7 @@
 - [x] T004 [P] Create Notion Recipes database with properties per data-model.md (Name, Cookbook relation, Ingredients, Instructions, Prep Time, Cook Time, Servings, Photo URL, Tags, Cuisine, Date Added, Times Used, Last Used) and connect Family Meeting Bot integration. Add DB ID to .env as NOTION_RECIPES_DB
 - [x] T005 [P] Create Notion Cookbooks database with properties per data-model.md (Name, Description) and connect Family Meeting Bot integration. Add DB ID to .env as NOTION_COOKBOOKS_DB
 - [x] T006 [P] Create Cloudflare R2 bucket `family-recipes` with API token (Object Read & Write, scoped to bucket). Add R2 credentials to .env
-- [ ] T007 Update docs/notion-setup.md with Recipes and Cookbooks database setup instructions, Grocery History property additions (Pending Order checkbox, Last Push Date), and R2 setup steps
+- [x] T007 Update docs/notion-setup.md with Recipes and Cookbooks database setup instructions, Grocery History property additions (Pending Order checkbox, Last Push Date), and R2 setup steps
 
 ---
 
@@ -139,7 +139,7 @@
 ### Implementation for User Story 4
 
 - [x] T039 [US4] Add n8n-mombot service to docker-compose.yml — port 5679:5678, basic auth, timezone, encryption key, named volume, family-net network. Container running on NUC
-- [ ] T040 [US4] Create docs/n8n-setup.md documenting step-by-step n8n workflow creation for all 8 workflows (WF-001 through WF-008 per contracts/n8n-workflows.md)
+- [x] T040 [US4] Create docs/n8n-setup.md documenting step-by-step n8n workflow creation for all 8 workflows (WF-001 through WF-008 per contracts/n8n-workflows.md)
 - [ ] T041 [US4] Deploy n8n-mombot workflows — access UI at :5679, create all 8 workflows (manual UI task)
 - [ ] T042 [US4] E2E validation: Verify all 8 workflows fire at expected times and produce correct output
 
@@ -200,7 +200,7 @@
 
 **Purpose**: Documentation, deployment, and full system validation
 
-- [ ] T053 [P] Verify .env.example completeness — confirm all new environment variables from this feature are present with inline comments
+- [x] T053 [P] Verify .env.example completeness — all Feature 002 variables present (R2, Notion recipe/cookbook DBs, n8n-mombot, N8N_WEBHOOK_SECRET)
 - [x] T054 [P] Update src/mcp_server.py to include all new proactive tools (reorder, meal plan, conflict check, etc.) for Claude Desktop access — 11 new tools registered
 - [x] T055 Deploy full stack to NUC via docker-compose (including n8n-mombot). All 4 containers healthy: fastapi, anylist-sidecar, cloudflared, n8n-mombot
 - [ ] T056 Run quickstart.md validation: verify all setup steps can be followed from scratch

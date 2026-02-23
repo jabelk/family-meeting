@@ -298,6 +298,101 @@ She won't see the full workspace sidebar, but she can star/favorite the shared p
 2. Sign in with Google
 3. The shared databases will appear in your sidebar (Jason) or under "Shared with me" (Erin)
 
+## Step 8: Create Recipe & Cookbook Databases (Feature 002)
+
+These databases power the recipe catalogue — photographing cookbook pages, searching recipes, and generating grocery lists from recipes.
+
+### Database 6: Cookbooks
+
+1. Click **"+ New page"** → **"Database"** (full page, table view)
+2. Title it **"Cookbooks"**
+3. Properties:
+
+| Property | Type | Configuration |
+|---|---|---|
+| Name | Title | (default) |
+| Description | Rich text | (no special config) |
+
+### Database 7: Recipes
+
+1. Click **"+ New page"** → **"Database"** (full page, table view)
+2. Title it **"Recipes"**
+3. Properties:
+
+| Property | Type | Configuration |
+|---|---|---|
+| Name | Title | (default) |
+| Cookbook | Relation | Connect to → Cookbooks database |
+| Ingredients | Rich text | (stores JSON: `[{"name": "...", "quantity": "...", "unit": "..."}]`) |
+| Instructions | Rich text | (newline-separated steps) |
+| Prep Time | Number | Number format: Integer (minutes) |
+| Cook Time | Number | Number format: Integer (minutes) |
+| Servings | Number | Number format: Integer |
+| Photo URL | URL | (Cloudflare R2 public URL) |
+| Tags | Multi-select | Options: `Keto`, `Kid-Friendly`, `Quick`, `Vegetarian`, `Comfort Food`, `Soup`, `Salad`, `Pasta`, `Meat`, `Seafood` |
+| Cuisine | Select | Options: `American`, `Mexican`, `Italian`, `Asian`, `Mediterranean`, `Other` |
+| Date Added | Created time | (auto-populated) |
+| Times Used | Number | Number format: Integer |
+| Last Used | Date | (no special config) |
+
+4. **Go back to Cookbooks** and add a **Rollup** property:
+   - Name: `Recipe Count`
+   - Relation: Recipes (the relation Notion auto-created when you set up the Cookbook relation on Recipes)
+   - Property: Name
+   - Calculate: Count all
+
+**Tip**: The Relation property creates a two-way link. When you set up the relation from Recipes → Cookbooks, a corresponding relation column appears on Cookbooks automatically. Use that for the rollup.
+
+### Update Grocery History (Proactive Features)
+
+Add these 2 properties to the existing **Grocery History** database:
+
+| Property | Type | Configuration |
+|---|---|---|
+| Pending Order | Checkbox | (no special config — tracks items pushed to AnyList but not yet confirmed ordered) |
+| Last Push Date | Date | (no special config — when items were last pushed to AnyList) |
+
+### Connect Integration
+
+For both new databases (Recipes, Cookbooks):
+1. Open the database
+2. Click **"..." menu** → **"+ Add connections"**
+3. Search for **"Family Meeting Bot"** and select it
+
+### Get Database IDs
+
+Copy the database IDs (same process as Step 5) into `.env`:
+
+```
+NOTION_RECIPES_DB=<Recipes database ID>
+NOTION_COOKBOOKS_DB=<Cookbooks database ID>
+```
+
+## Step 9: Set Up Cloudflare R2 (Recipe Photo Storage)
+
+Recipe photos are stored in Cloudflare R2 (S3-compatible object storage, free tier) instead of Notion (5MB file limit).
+
+1. Go to the [Cloudflare dashboard](https://dash.cloudflare.com)
+2. In the left sidebar, click **R2 Object Storage** → **Create bucket**
+3. Name it `family-recipes`, leave defaults, click **Create**
+4. Note your **Account ID** from the Cloudflare dashboard URL or overview page
+5. Go to **R2 Object Storage** → **Manage R2 API Tokens** (in the sidebar, not inside the bucket)
+6. Click **Create API Token**:
+   - **Token name**: `mom-bot-recipes`
+   - **Permissions**: Object Read & Write
+   - **Bucket scope**: Apply to specific bucket → `family-recipes`
+   - Skip IP filtering
+7. Click **Create API Token**
+8. Copy the **Access Key ID** and **Secret Access Key** (shown only once)
+
+Add to `.env`:
+```
+R2_ACCOUNT_ID=<your Cloudflare account ID>
+R2_ACCESS_KEY_ID=<from step 8>
+R2_SECRET_ACCESS_KEY=<from step 8>
+R2_BUCKET_NAME=family-recipes
+```
+
 ## Verification Checklist
 
 After setup, confirm:
@@ -309,7 +404,12 @@ After setup, confirm:
 - [ ] `NOTION_BACKLOG_DB` is set
 - [ ] `NOTION_GROCERY_HISTORY_DB` is set
 - [ ] `NOTION_FAMILY_PROFILE_PAGE` is set
-- [ ] All 6 pages have the "Family Meeting Bot" integration connected
+- [ ] `NOTION_RECIPES_DB` is set
+- [ ] `NOTION_COOKBOOKS_DB` is set
+- [ ] `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` are set
+- [ ] All 8 pages/databases have the "Family Meeting Bot" integration connected
+- [ ] Cookbooks has a Recipe Count rollup property
+- [ ] Grocery History has Pending Order (checkbox) and Last Push Date (date)
 - [ ] Family Profile includes Routine Templates section
 - [ ] Erin has been invited as a guest with full access
 - [ ] Both phones have the Notion app installed
@@ -321,5 +421,10 @@ Notion Free Plan includes:
 - Up to 10 guests (Erin is 1)
 - 5 MB file upload limit per file
 - 7-day page history
+
+Cloudflare R2 Free Tier includes:
+- 10 GB storage (more than enough for recipe photos)
+- 10 million reads/month, 1 million writes/month
+- No egress fees
 
 This is more than sufficient for the family meeting assistant.

@@ -255,6 +255,7 @@ Sunday afternoon before the family meeting, Mom Bot pulls the YNAB budget data a
 
 ## Future Enhancements
 
+- **Comprehensive setup guide**: End-to-end guide for someone else to set up their own Mom Bot from scratch — covering Cloudflare account, Meta/WhatsApp Business API, Google Cloud OAuth, Notion workspace, YNAB, AnyList, NUC/Docker deployment, and domain routing.
 - **URL-based recipe import**: Send a recipe URL in WhatsApp and have the system scrape and extract the recipe (same catalogue, different input method).
 - **Automatic receipt import**: Detect new Whole Foods/Costco/Raley's order emails and auto-import receipts without manual PDF download.
 - **Kid lunch meal prep planning**: Erin provides her meal prep rotation; system tracks which preps were done recently and suggests the next one.
