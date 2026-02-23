@@ -2,7 +2,8 @@
 
 import os
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -162,6 +163,59 @@ def get_events_for_date(
             logger.warning("Failed to read %s calendar for date: %s", name, e)
 
     events.sort(key=lambda e: e["start"].get("dateTime", e["start"].get("date", "")))
+    return events
+
+
+# ---------------------------------------------------------------------------
+# Read: raw events for nudge processing (Feature 003)
+# ---------------------------------------------------------------------------
+
+def get_events_for_date_raw(
+    target_date: date,
+    calendar_names: list[str] | None = None,
+) -> list[dict]:
+    """Fetch full event dicts for a specific date, including conferenceData.
+
+    Returns raw Google Calendar event dicts with all fields (conferenceData,
+    description, creator, extendedProperties, etc.) needed for nudge processing.
+    Defaults to Erin's and family calendars.
+    """
+    if calendar_names is None:
+        calendar_names = ["erin", "family"]
+
+    service = _get_service()
+    pacific = ZoneInfo("America/Los_Angeles")
+    start_of_day = datetime(
+        target_date.year, target_date.month, target_date.day, tzinfo=pacific
+    )
+    end_of_day = start_of_day + timedelta(days=1)
+
+    events = []
+    for name in calendar_names:
+        cal_id = CALENDAR_IDS.get(name)
+        if not cal_id:
+            continue
+        try:
+            result = (
+                service.events()
+                .list(
+                    calendarId=cal_id,
+                    timeMin=start_of_day.isoformat(),
+                    timeMax=end_of_day.isoformat(),
+                    singleEvents=True,
+                    orderBy="startTime",
+                )
+                .execute()
+            )
+            for event in result.get("items", []):
+                event["_calendar_source"] = name
+                events.append(event)
+        except Exception as e:
+            logger.warning("Failed to read %s calendar for date: %s", name, e)
+
+    events.sort(
+        key=lambda e: e["start"].get("dateTime", e["start"].get("date", ""))
+    )
     return events
 
 

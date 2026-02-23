@@ -13,6 +13,8 @@ from src.config import (
     NOTION_GROCERY_HISTORY_DB,
     NOTION_RECIPES_DB,
     NOTION_COOKBOOKS_DB,
+    NOTION_NUDGE_QUEUE_DB,
+    NOTION_CHORES_DB,
 )
 
 logger = logging.getLogger(__name__)
@@ -832,6 +834,314 @@ def get_pending_orders() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Nudge Queue (Feature 003 — Smart Nudges)
+# ---------------------------------------------------------------------------
+
+def create_nudge(
+    summary: str,
+    nudge_type: str,
+    scheduled_time: str,
+    event_id: str = "",
+    message: str = "",
+    context: str = "",
+    status: str = "Pending",
+) -> str:
+    """Create a nudge in the Nudge Queue database. Returns the page ID."""
+    if not NOTION_NUDGE_QUEUE_DB:
+        return "Nudge Queue database not configured."
+
+    properties: dict = {
+        "Summary": {"title": [{"text": {"content": summary}}]},
+        "Nudge Type": {"select": {"name": nudge_type}},
+        "Status": {"status": {"name": status}},
+        "Scheduled Time": {"date": {"start": scheduled_time}},
+    }
+    if event_id:
+        properties["Event ID"] = {"rich_text": [{"text": {"content": event_id}}]}
+    if message:
+        properties["Message"] = {"rich_text": [{"text": {"content": message[:2000]}}]}
+    if context:
+        properties["Context"] = {"rich_text": [{"text": {"content": context[:2000]}}]}
+
+    page = notion.pages.create(
+        parent={"database_id": NOTION_NUDGE_QUEUE_DB}, properties=properties
+    )
+    return page["id"]
+
+
+def query_pending_nudges(due_before: str) -> list[dict]:
+    """Query nudges that are pending and scheduled on or before the given time.
+
+    Args:
+        due_before: ISO datetime string (e.g., "2026-02-23T14:30:00-08:00")
+
+    Returns list of nudge dicts with id, summary, nudge_type, scheduled_time,
+    event_id, message, context.
+    """
+    if not NOTION_NUDGE_QUEUE_DB:
+        return []
+
+    results = notion.databases.query(
+        database_id=NOTION_NUDGE_QUEUE_DB,
+        filter={
+            "and": [
+                {"property": "Status", "status": {"equals": "Pending"}},
+                {"property": "Scheduled Time", "date": {"on_or_before": due_before}},
+            ]
+        },
+        sorts=[{"property": "Scheduled Time", "direction": "ascending"}],
+    )
+
+    nudges = []
+    for page in results["results"]:
+        props = page["properties"]
+        scheduled = props.get("Scheduled Time", {}).get("date")
+        nudges.append({
+            "id": page["id"],
+            "summary": _get_title(props.get("Summary", {})),
+            "nudge_type": _get_select(props.get("Nudge Type", {})),
+            "scheduled_time": scheduled.get("start") if scheduled else "",
+            "event_id": _get_rich_text(props.get("Event ID", {})),
+            "message": _get_rich_text(props.get("Message", {})),
+            "context": _get_rich_text(props.get("Context", {})),
+        })
+    return nudges
+
+
+def query_nudges_by_type(
+    nudge_type: str, statuses: list[str] | None = None
+) -> list[dict]:
+    """Query nudges by type and optionally by statuses.
+
+    Args:
+        nudge_type: The nudge type to filter (e.g., "departure", "laundry_washer")
+        statuses: List of status values to include (e.g., ["Pending", "Sent"])
+
+    Returns list of nudge dicts.
+    """
+    if not NOTION_NUDGE_QUEUE_DB:
+        return []
+
+    filters: list[dict] = [
+        {"property": "Nudge Type", "select": {"equals": nudge_type}}
+    ]
+    if statuses:
+        status_filters = [
+            {"property": "Status", "status": {"equals": s}} for s in statuses
+        ]
+        if len(status_filters) == 1:
+            filters.append(status_filters[0])
+        else:
+            filters.append({"or": status_filters})
+
+    query_filter = {"and": filters} if len(filters) > 1 else filters[0]
+    results = notion.databases.query(
+        database_id=NOTION_NUDGE_QUEUE_DB, filter=query_filter
+    )
+
+    nudges = []
+    for page in results["results"]:
+        props = page["properties"]
+        scheduled = props.get("Scheduled Time", {}).get("date")
+        nudges.append({
+            "id": page["id"],
+            "summary": _get_title(props.get("Summary", {})),
+            "nudge_type": _get_select(props.get("Nudge Type", {})),
+            "status": _get_status(props.get("Status", {})),
+            "scheduled_time": scheduled.get("start") if scheduled else "",
+            "event_id": _get_rich_text(props.get("Event ID", {})),
+            "message": _get_rich_text(props.get("Message", {})),
+            "context": _get_rich_text(props.get("Context", {})),
+        })
+    return nudges
+
+
+def query_nudges_by_event_id(event_id: str) -> list[dict]:
+    """Query nudges matching a specific Event ID (for dedup during scanning)."""
+    if not NOTION_NUDGE_QUEUE_DB or not event_id:
+        return []
+
+    results = notion.databases.query(
+        database_id=NOTION_NUDGE_QUEUE_DB,
+        filter={"property": "Event ID", "rich_text": {"equals": event_id}},
+    )
+
+    nudges = []
+    for page in results["results"]:
+        props = page["properties"]
+        nudges.append({
+            "id": page["id"],
+            "nudge_type": _get_select(props.get("Nudge Type", {})),
+            "status": _get_status(props.get("Status", {})),
+        })
+    return nudges
+
+
+def update_nudge_status(page_id: str, new_status: str) -> str:
+    """Update a nudge's status (Pending, Sent, Done, Snoozed, Dismissed, Cancelled)."""
+    notion.pages.update(
+        page_id=page_id,
+        properties={"Status": {"status": {"name": new_status}}},
+    )
+    return f"Nudge status updated to {new_status}."
+
+
+def count_sent_today() -> int:
+    """Count nudges with Sent or Done status scheduled today (for daily cap)."""
+    if not NOTION_NUDGE_QUEUE_DB:
+        return 0
+
+    today = date.today().isoformat()
+    results = notion.databases.query(
+        database_id=NOTION_NUDGE_QUEUE_DB,
+        filter={
+            "and": [
+                {
+                    "or": [
+                        {"property": "Status", "status": {"equals": "Sent"}},
+                        {"property": "Status", "status": {"equals": "Done"}},
+                    ]
+                },
+                {"property": "Scheduled Time", "date": {"equals": today}},
+            ]
+        },
+    )
+    return len(results["results"])
+
+
+def check_quiet_day() -> bool:
+    """Check if quiet day is active (suppresses all proactive nudges)."""
+    if not NOTION_NUDGE_QUEUE_DB:
+        return False
+
+    today = date.today().isoformat()
+    results = notion.databases.query(
+        database_id=NOTION_NUDGE_QUEUE_DB,
+        filter={
+            "and": [
+                {"property": "Nudge Type", "select": {"equals": "quiet_day"}},
+                {"property": "Status", "status": {"equals": "Pending"}},
+                {"property": "Scheduled Time", "date": {"equals": today}},
+            ]
+        },
+    )
+    return len(results["results"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# Chores (Feature 003 — Smart Nudges)
+# ---------------------------------------------------------------------------
+
+def query_all_chores() -> list[dict]:
+    """Get all chores from the Chores database."""
+    if not NOTION_CHORES_DB:
+        return []
+
+    results = notion.databases.query(database_id=NOTION_CHORES_DB)
+    chores = []
+    for page in results["results"]:
+        props = page["properties"]
+        last_completed = props.get("Last Completed", {}).get("date")
+        chores.append({
+            "id": page["id"],
+            "name": _get_title(props.get("Name", {})),
+            "duration": props.get("Duration", {}).get("number", 0),
+            "frequency": _get_select(props.get("Frequency", {})),
+            "preferred_days": [
+                opt["name"]
+                for opt in props.get("Preferred Days", {}).get("multi_select", [])
+            ],
+            "preference": _get_select(props.get("Preference", {})),
+            "last_completed": last_completed.get("start") if last_completed else None,
+            "times_completed": props.get("Times Completed", {}).get("number", 0),
+            "category": _get_select(props.get("Category", {})),
+        })
+    return chores
+
+
+def update_chore_completion(page_id: str, completion_date: str) -> str:
+    """Mark a chore as completed on a given date. Increments Times Completed."""
+    page = notion.pages.retrieve(page_id=page_id)
+    current_count = page["properties"].get("Times Completed", {}).get("number", 0) or 0
+
+    notion.pages.update(
+        page_id=page_id,
+        properties={
+            "Last Completed": {"date": {"start": completion_date}},
+            "Times Completed": {"number": current_count + 1},
+        },
+    )
+    name = _get_title(page["properties"].get("Name", {}))
+    return f"Marked '{name}' as completed."
+
+
+def update_chore_preference(
+    page_id: str,
+    preference: str | None = None,
+    preferred_days: list[str] | None = None,
+    frequency: str | None = None,
+) -> str:
+    """Update a chore's preference settings (only non-None params are changed)."""
+    updates: dict = {}
+    if preference is not None:
+        updates["Preference"] = {"select": {"name": preference}}
+    if preferred_days is not None:
+        updates["Preferred Days"] = {
+            "multi_select": [{"name": d} for d in preferred_days]
+        }
+    if frequency is not None:
+        updates["Frequency"] = {"select": {"name": frequency}}
+
+    if not updates:
+        return "No updates provided."
+
+    notion.pages.update(page_id=page_id, properties=updates)
+    page = notion.pages.retrieve(page_id=page_id)
+    name = _get_title(page["properties"].get("Name", {}))
+    return f"Updated preferences for '{name}'."
+
+
+def seed_default_chores() -> str:
+    """Seed the Chores database with default chores if it's empty."""
+    if not NOTION_CHORES_DB:
+        return "Chores database not configured."
+
+    existing = notion.databases.query(database_id=NOTION_CHORES_DB, page_size=1)
+    if existing["results"]:
+        return "Chores database already has entries — skipping seed."
+
+    defaults = [
+        ("Vacuum downstairs", 30, "weekly", "cleaning"),
+        ("Vacuum upstairs", 25, "weekly", "cleaning"),
+        ("Wipe kitchen counters", 10, "daily", "kitchen"),
+        ("Clean bathrooms", 40, "weekly", "cleaning"),
+        ("Start dishwasher", 5, "daily", "kitchen"),
+        ("Meal prep for tonight", 30, "daily", "meal_prep"),
+        ("Tidy living room", 15, "daily", "cleaning"),
+        ("Organize closet/pantry", 45, "monthly", "organizing"),
+        ("Wipe down appliances", 15, "weekly", "kitchen"),
+        ("Fold and put away laundry", 20, "every_other_day", "laundry"),
+    ]
+
+    count = 0
+    for name, duration, frequency, category in defaults:
+        notion.pages.create(
+            parent={"database_id": NOTION_CHORES_DB},
+            properties={
+                "Name": {"title": [{"text": {"content": name}}]},
+                "Duration": {"number": duration},
+                "Frequency": {"select": {"name": frequency}},
+                "Preference": {"select": {"name": "neutral"}},
+                "Times Completed": {"number": 0},
+                "Category": {"select": {"name": category}},
+            },
+        )
+        count += 1
+
+    return f"Seeded {count} default chores."
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -873,3 +1183,8 @@ def _get_select(prop: dict) -> str:
 def _get_status(prop: dict) -> str:
     st = prop.get("status")
     return st["name"] if st else ""
+
+
+def _get_rich_text(prop: dict) -> str:
+    rich_text = prop.get("rich_text", [])
+    return "".join(rt.get("plain_text", "") for rt in rich_text)

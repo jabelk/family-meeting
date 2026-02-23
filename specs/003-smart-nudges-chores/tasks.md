@@ -17,8 +17,8 @@
 
 **Purpose**: Add configuration and Notion database helpers shared by all nudge features
 
-- [ ] T001 Add NOTION_NUDGE_QUEUE_DB and NOTION_CHORES_DB environment variables to src/config.py and .env.example
-- [ ] T002 Document Nudge Queue and Chores Notion database creation steps in docs/notion-setup.md (Steps 10–11 per data-model.md schema)
+- [x] T001 Add NOTION_NUDGE_QUEUE_DB and NOTION_CHORES_DB environment variables to src/config.py and .env.example
+- [x] T002 Document Nudge Queue and Chores Notion database creation steps in docs/notion-setup.md (Steps 10–11 per data-model.md schema)
 
 ---
 
@@ -28,9 +28,9 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 Implement Nudge Queue CRUD in src/tools/notion.py — create_nudge(summary, nudge_type, status, scheduled_time, event_id, message, context), query_pending_nudges(due_before), query_nudges_by_type(nudge_type, statuses), update_nudge_status(page_id, new_status), count_sent_today(), check_quiet_day()
-- [ ] T004 [P] Implement Chores CRUD in src/tools/notion.py — query_all_chores(), update_chore_completion(page_id, date), update_chore_preference(page_id, preference, preferred_days, frequency), seed_default_chores() per data-model.md seed data table
-- [ ] T005 [P] Add get_events_for_date_raw(calendar_id, date) to src/tools/calendar.py returning full Google Calendar event dicts (including conferenceData, description, start/end, creator) instead of formatted strings
+- [x] T003 Implement Nudge Queue CRUD in src/tools/notion.py — create_nudge(summary, nudge_type, status, scheduled_time, event_id, message, context), query_pending_nudges(due_before), query_nudges_by_type(nudge_type, statuses), update_nudge_status(page_id, new_status), count_sent_today(), check_quiet_day()
+- [x] T004 [P] Implement Chores CRUD in src/tools/notion.py — query_all_chores(), update_chore_completion(page_id, date), update_chore_preference(page_id, preference, preferred_days, frequency), seed_default_chores() per data-model.md seed data table
+- [x] T005 [P] Add get_events_for_date_raw(calendar_id, date) to src/tools/calendar.py returning full Google Calendar event dicts (including conferenceData, description, start/end, creator) instead of formatted strings
 
 **Checkpoint**: Foundation ready — Notion CRUD and calendar raw data available for all stories
 
