@@ -111,7 +111,7 @@
 
 **Purpose**: Documentation, deployment, and end-to-end validation
 
-- [ ] T025 Update system prompt in src/assistant.py with comprehensive nudge interaction guidelines — warm encouraging tone (NFR-003), examples of snooze/dismiss/done/skip responses, quiet day activation, laundry natural language triggers
+- [x] T025 Update system prompt in src/assistant.py with comprehensive nudge interaction guidelines — warm encouraging tone (NFR-003), examples of snooze/dismiss/done/skip responses, quiet day activation, laundry natural language triggers
 - [ ] T026 Deploy to NUC via ./scripts/nuc.sh deploy and push .env with new Notion database IDs via ./scripts/nuc.sh env
 - [ ] T027 Run quickstart.md validation — Test 1 (departure nudge), Test 2 (virtual exclusion), Test 3 (laundry workflow), Test 4 (chore suggestion), Test 5 (quiet day), Test 6 (daily cap)
 
