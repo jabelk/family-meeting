@@ -10,6 +10,13 @@ logger = logging.getLogger(__name__)
 
 client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
+# Module-level storage for images in the current conversation.
+# Set by handle_message, consumed by extract_and_save_recipe tool handler.
+# This avoids passing the large base64 payload through Claude's tool-call JSON.
+# For multi-page recipes, images accumulate until the tool is called.
+_current_image_data: dict | None = None  # most recent image (single-page fast path)
+_buffered_images: list[dict] = []  # accumulated images for multi-page recipes
+
 SYSTEM_PROMPT = """\
 You are Mom Bot — the family assistant for Jason and Erin's family. You live \
 in their WhatsApp group chat and help plan, run, and follow up on weekly \
@@ -120,10 +127,14 @@ Pantry, Frozen, Bakery, Beverages) as a fallback.
 
 **Recipe catalogue:**
 18. When you receive a photo, assume it's a cookbook recipe unless told \
-otherwise. Call extract_and_save_recipe with the image. Include the caption \
-as cookbook_name if it mentions a book (e.g., "save this from the keto book" \
-→ cookbook_name="keto book"). Report what was extracted and flag any unclear \
-portions.
+otherwise. Call extract_and_save_recipe with the cookbook_name from the caption \
+if it mentions a book (e.g., "save this from the keto book" → \
+cookbook_name="keto book"). Report what was extracted and flag any unclear \
+portions. If the user says "there's another page" or sends another photo \
+shortly after, tell them to send the next page — all buffered photos will \
+be combined into one recipe when you call extract_and_save_recipe. For \
+multi-page recipes, wait until the user indicates all pages are sent \
+before calling the tool.
 19. For recipe searches ("what was that steak recipe?"), use search_recipes \
 with a natural language query. Show the top results with name, cookbook, \
 prep/cook time.
@@ -412,15 +423,13 @@ TOOLS = [
     # --- Recipe tools (US1) ---
     {
         "name": "extract_and_save_recipe",
-        "description": "Extract a recipe from a cookbook photo using AI vision and save it to the recipe catalogue. The image is passed separately in the conversation — provide the base64 data and mime type here along with the cookbook name.",
+        "description": "Extract a recipe from a cookbook photo using AI vision and save it to the recipe catalogue. The photo from the current conversation is used automatically — just provide the cookbook name if mentioned.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "image_base64": {"type": "string", "description": "Base64-encoded image data of the cookbook page."},
-                "mime_type": {"type": "string", "description": "Image MIME type (e.g., 'image/jpeg')."},
                 "cookbook_name": {"type": "string", "description": "Name of the cookbook (e.g., 'The Keto Book'). Defaults to 'Uncategorized'."},
             },
-            "required": ["image_base64", "mime_type"],
+            "required": [],
         },
     },
     {
@@ -551,6 +560,28 @@ def _handle_push_grocery_list(**kw) -> str:
         return f"AnyList is unavailable ({e}). Please send the grocery list as a formatted WhatsApp message organized by store section instead."
 
 
+def _handle_extract_recipe(**kw) -> dict | str:
+    """Handle extract_and_save_recipe using the stored image data.
+
+    Supports multi-page recipes: if multiple images have been buffered,
+    all are sent to the extraction function.
+    """
+    global _current_image_data, _buffered_images
+    if not _buffered_images and not _current_image_data:
+        return "No image found in this conversation. Please send a photo of the cookbook page first."
+
+    images = _buffered_images if _buffered_images else [_current_image_data]
+    cookbook_name = kw.get("cookbook_name", "")
+
+    result = recipes.extract_and_save_recipe(images, cookbook_name)
+
+    # Clear buffer after extraction
+    _buffered_images = []
+    _current_image_data = None
+
+    return result
+
+
 # Map tool names to functions
 TOOL_FUNCTIONS = {
     "get_calendar_events": lambda **kw: calendar.get_calendar_events(
@@ -583,9 +614,7 @@ TOOL_FUNCTIONS = {
     "get_staple_items": lambda **kw: notion.get_staple_items(),
     "push_grocery_list": _handle_push_grocery_list,
     # Recipes
-    "extract_and_save_recipe": lambda **kw: recipes.extract_and_save_recipe(
-        kw["image_base64"], kw["mime_type"], kw.get("cookbook_name", "")
-    ),
+    "extract_and_save_recipe": lambda **kw: _handle_extract_recipe(**kw),
     "search_recipes": lambda **kw: recipes.search_recipes(
         kw.get("query", ""), kw.get("cookbook_name", ""), kw.get("tags")
     ),
@@ -615,9 +644,22 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
         message_text: Text message or image caption.
         image_data: Optional dict with "base64" and "mime_type" for image messages.
     """
+    global _current_image_data, _buffered_images
     sender_name = PHONE_TO_NAME.get(sender_phone, "Unknown")
 
+    # Store image data for tool handlers (avoids passing base64 through tool call JSON)
     if image_data:
+        _current_image_data = image_data
+        _buffered_images.append(image_data)
+    # Don't clear on text-only messages — user might send photos then a text command
+
+    if image_data:
+        buffer_note = ""
+        if len(_buffered_images) > 1:
+            buffer_note = (
+                f" [SYSTEM: {len(_buffered_images)} recipe photos buffered. "
+                "All will be combined when you call extract_and_save_recipe.]"
+            )
         user_content = [
             {
                 "type": "image",
@@ -627,7 +669,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                     "data": image_data["base64"],
                 },
             },
-            {"type": "text", "text": f"[From {sender_name}]: {message_text}"},
+            {"type": "text", "text": f"[From {sender_name}]: {message_text}{buffer_note}"},
         ]
     else:
         user_content = f"[From {sender_name}]: {message_text}"

@@ -74,12 +74,12 @@ def upload_photo(image_bytes: bytes, recipe_id: str, mime_type: str) -> str:
 # Recipe Extraction via Claude Vision (T016)
 # ---------------------------------------------------------------------------
 
-def extract_and_save_recipe(image_base64: str, mime_type: str, cookbook_name: str = "") -> dict:
-    """Extract a recipe from a cookbook photo using Claude vision and save to Notion.
+def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict:
+    """Extract a recipe from cookbook photo(s) using Claude vision and save to Notion.
 
     Args:
-        image_base64: Base64-encoded image data.
-        mime_type: Image MIME type.
+        images: List of dicts with "base64" and "mime_type" keys.
+              Supports multi-page recipes (multiple images).
         cookbook_name: Source cookbook name. Defaults to 'Uncategorized'.
 
     Returns:
@@ -94,33 +94,41 @@ def extract_and_save_recipe(image_base64: str, mime_type: str, cookbook_name: st
     cookbook_name = cookbook_name.strip() or "Uncategorized"
 
     # Step 1: Extract recipe with Claude vision
+    multi_page = len(images) > 1
     extraction_prompt = (
-        "Extract the recipe from this cookbook page. Return ONLY valid JSON with these fields:\n"
+        "Extract the recipe from this cookbook page"
+        + ("s" if multi_page else "")
+        + ". Return ONLY valid JSON with these fields:\n"
         '{"name": "Recipe Name", "ingredients": [{"name": "item", "quantity": "2", "unit": "cups"}], '
         '"instructions": ["Step 1...", "Step 2..."], "prep_time": 15, "cook_time": 30, '
         '"servings": 4, "tags": ["tag1"], "cuisine": "American"}\n\n'
         "Rules:\n"
         "- If text is unclear or cut off, include it with [unclear] marker\n"
-        "- If two recipes are visible, extract both as a JSON array\n"
+    )
+    if multi_page:
+        extraction_prompt += "- These images are pages from the SAME recipe — combine them into one complete recipe\n"
+    else:
+        extraction_prompt += "- If two recipes are visible, extract both as a JSON array\n"
+    extraction_prompt += (
         "- If the image is NOT a recipe, return: {\"error\": \"not_a_recipe\"}\n"
         "- For ingredients, always include name; quantity and unit can be empty strings if not specified\n"
         "- Tags should be from: Keto, Kid-Friendly, Quick (<30min), Vegetarian, Comfort Food, Soup, Salad, Pasta, Meat, Seafood\n"
         "- Cuisine should be: American, Mexican, Italian, Asian, Mediterranean, or Other"
     )
 
+    # Build content blocks: one image block per page, then the text prompt
+    content_blocks = []
+    for img in images:
+        content_blocks.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": img["mime_type"], "data": img["base64"]},
+        })
+    content_blocks.append({"type": "text", "text": extraction_prompt})
+
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=2000,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": mime_type, "data": image_base64},
-                },
-                {"type": "text", "text": extraction_prompt},
-            ],
-        }],
+        messages=[{"role": "user", "content": content_blocks}],
     )
 
     raw_text = response.content[0].text.strip()
@@ -183,10 +191,11 @@ def extract_and_save_recipe(image_base64: str, mime_type: str, cookbook_name: st
             cuisine=recipe_data.get("cuisine", "Other"),
         )
 
-        # Step 5: Upload photo to R2 and update Notion with URL
+        # Step 5: Upload first photo to R2 and update Notion with URL
         try:
-            image_bytes = base64.b64decode(image_base64)
-            photo_url = upload_photo(image_bytes, page_id, mime_type)
+            first_img = images[0]
+            image_bytes = base64.b64decode(first_img["base64"])
+            photo_url = upload_photo(image_bytes, page_id, first_img["mime_type"])
             from src.tools.notion import update_recipe
             update_recipe(page_id, {"Photo URL": {"url": photo_url}})
         except Exception as e:
