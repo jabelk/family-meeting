@@ -246,6 +246,21 @@ After a meal plan is generated, the grocery list should flow into a delivery ord
 
 ---
 
+## Future Enhancements (Backlog)
+
+### YNAB Budget Write Operations
+The YNAB API v1 supports write operations beyond the current read-only integration:
+- **Recategorize transactions** — "Move that $45 charge to Restaurants"
+- **Update category budgets** — "Budget $200 more for Groceries this month"
+- **Create manual transactions** — "Add a $20 cash transaction for the farmers market"
+- **Proactive suggestions** — Claude could flag uncategorized transactions and suggest categories
+
+API supports: PATCH transactions (recategorize), PATCH category budgeted amounts, POST new transactions. Does NOT support creating/deleting categories or modifying goals.
+
+Estimated scope: ~100 lines (3 new ynab.py functions + 3 tool definitions). See `memory/ynab-write.md` for full research.
+
+---
+
 ## Implementation History
 
 > **Note**: A v1 implementation was completed 2026-02-22 covering core FastAPI webhook, Claude assistant (12 tools), Notion/Calendar/YNAB integrations, and deployment configs. The scope was subsequently expanded with User Stories 5 (Daily Planner) and 6 (Grocery Delivery), plus Outlook ICS, Google Calendar write, AnyList integration, and n8n automations. A new v2 `tasks.md` (T001-T045) is now the source of truth for all remaining work. The v1 task IDs are retired.
