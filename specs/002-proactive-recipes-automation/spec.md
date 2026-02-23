@@ -27,7 +27,7 @@ Jason runs n8n on the NUC for other projects. Mom Bot will use its own n8n insta
 
 ### US1 — Recipe Cookbook Catalogue (Priority: P1)
 
-Erin has several physical cookbooks (keto, general family meals, etc.) and wants to build a personal digital recipe collection. She takes a photo of a cookbook page, sends it to the WhatsApp chat, and Mom Bot extracts the recipe — name, ingredients, instructions, servings, prep time — and saves it to a searchable catalogue. Each recipe is linked to its source cookbook. Later, she can say "I want the steak dish from the keto book" and Mom Bot finds it, shows the recipe, and offers to add the ingredients to her grocery list.
+Erin has several physical cookbooks (keto, general family meals, etc.) and wants to build a personal digital recipe collection. She takes a photo of a cookbook page with her iPhone and sends it directly in the WhatsApp chat. Mom Bot receives the image via the Meta Cloud API webhook, downloads it, uses Claude vision to extract the recipe — name, ingredients, instructions, servings, prep time — and saves it to a searchable catalogue. Each recipe is linked to its source cookbook. Later, she can say "I want the steak dish from the keto book" and Mom Bot finds it, shows the recipe, and offers to add the ingredients to her grocery list.
 
 **Why this priority**: This is the biggest new capability Erin specifically asked for. It creates lasting value — every recipe she photographs builds her personal collection. It also directly feeds into meal planning and grocery ordering (US3), making the whole system more useful over time.
 
@@ -62,7 +62,7 @@ Every week (Saturday morning), Mom Bot checks the Grocery History database for s
 
 ### US3 — Smart Meal Plan with Auto Grocery List (Priority: P3)
 
-Each week (Saturday, after the reorder check), Mom Bot suggests a 7-day meal plan based on the family's dietary preferences, schedule density per day (busy days get simpler meals), recent meal plans (avoid repetition), and available ingredients. The plan includes a consolidated grocery list that accounts for what's already in stock (recently ordered staples). Erin reviews, adjusts, and approves — then the grocery list goes to AnyList split by store.
+Saturday morning, Mom Bot sends a single combined message: a weekly dinner plan (6 nights, since the family eats out ~1 night) plus a merged grocery list that includes both reorder staples that are due and meal-specific ingredients. The meal plan accounts for dietary preferences, schedule density (busy days get simpler meals), saved recipes, and recent plans (avoid repetition). The grocery list deducts items likely already in stock. Erin reviews, adjusts, and approves — then the grocery list goes to AnyList.
 
 **Why this priority**: Builds on the recipe catalogue (US1) and grocery data. Meal planning is one of Erin's weekly pain points. Combining AI-suggested meals with automatic grocery ordering removes significant mental overhead.
 
@@ -79,7 +79,7 @@ Each week (Saturday, after the reorder check), Mom Bot suggests a 7-day meal pla
 
 ### US4 — n8n Scheduled Workflows (Priority: P4)
 
-Wire up the existing FastAPI endpoint stubs to actual n8n scheduled workflows in a dedicated Mom Bot n8n instance. This includes the daily morning briefing (7am M-F), weekly calendar population (Sunday 7pm), grandma schedule prompt (Monday 9am), and new workflows for grocery reorder (Saturday 9am), meal plan suggestion (Saturday 10am), budget summary (Sunday 5pm), mid-week action item check-in (Wednesday noon), and calendar conflict detection (Sunday 7:30pm + daily).
+Wire up the existing FastAPI endpoint stubs to actual n8n scheduled workflows in a dedicated Mom Bot n8n instance. This includes the daily morning briefing (7am M-F), weekly calendar population (Sunday 7pm), grandma schedule prompt (Monday 9am), Saturday meal & grocery planner (Saturday 9am — combines reorder suggestions + meal plan into one message), budget summary (Sunday 5pm), mid-week action item check-in (Wednesday noon), and calendar conflict detection (Sunday 7:30pm + daily).
 
 **Why this priority**: This is the infrastructure that makes US2, US3, and the daily briefing proactive. Without n8n cron triggers, all features remain reactive. However, each automation endpoint can be tested manually first — n8n just adds the scheduling.
 
@@ -150,6 +150,7 @@ Sunday afternoon before the family meeting, Mom Bot pulls the YNAB budget data a
 - What happens when Erin asks for a recipe but the search is ambiguous (e.g., "the chicken one")? Mom Bot shows the top 3 matches and asks her to pick.
 - What happens when a recipe ingredient doesn't match any known grocery item? Mom Bot adds it to AnyList as-is with the recipe's quantity (e.g., "2 cups arborio rice").
 - What happens when a meal plan meal comes from a saved recipe vs a general suggestion? Saved recipes use exact ingredients; general suggestions use Claude's knowledge of typical ingredient lists.
+- What happens when Erin pushes groceries to AnyList but never confirms the order? After 2 days, Mom Bot asks "Did you end up ordering those groceries? Want me to update the list?" If no reply, Last Ordered stays unchanged and the items will appear as due again next week.
 
 ## Requirements *(mandatory)*
 
@@ -157,7 +158,7 @@ Sunday afternoon before the family meeting, Mom Bot pulls the YNAB budget data a
 
 **Recipe Management**
 - **FR-001**: System MUST extract recipe name, ingredients (with quantities and units), instructions, prep time, cook time, servings, and source cookbook from a photograph of a cookbook page.
-- **FR-002**: System MUST store recipes in a searchable catalogue with the original photo preserved as a reference image.
+- **FR-002**: System MUST store recipes in a searchable catalogue with the original photo uploaded to cloud storage (e.g., Cloudflare R2) and linked from the recipe entry for visual reference.
 - **FR-003**: System MUST support natural language recipe search — by name, ingredient, cookbook, cuisine type, or description ("the steak dish from the keto book").
 - **FR-004**: System MUST generate a grocery list from a recipe's ingredients, cross-referencing against recently ordered items to avoid duplicates.
 - **FR-005**: System MUST link each recipe to its source cookbook and support browsing by cookbook ("show me all recipes from the keto book").
@@ -168,16 +169,17 @@ Sunday afternoon before the family meeting, Mom Bot pulls the YNAB budget data a
 - **FR-008**: System MUST group reorder suggestions by store (Whole Foods, Costco, Raley's) based on historical purchase data.
 - **FR-009**: System MUST allow users to approve, modify, or dismiss reorder suggestions via WhatsApp reply.
 - **FR-010**: System MUST push confirmed grocery items to AnyList, organized by store section.
+- **FR-010a**: System MUST update "Last Ordered" dates in Grocery History when Erin confirms an order was placed (e.g., "groceries ordered"). If no confirmation arrives within 2 days of an AnyList push, system MUST send a gentle reminder asking if the order went through.
 
 **Meal Planning**
-- **FR-011**: System MUST generate 7-day meal plans that account for family dietary preferences, schedule density per day, saved recipes, and ingredient overlap.
+- **FR-011**: System MUST generate a weekly dinner plan (6 nights, accounting for ~1 eat-out night per week) that considers family dietary preferences, schedule density per day, saved recipes, and ingredient overlap.
 - **FR-012**: System MUST avoid repeating meals from the previous 2 weeks of meal plans.
 - **FR-013**: System MUST produce a consolidated grocery list from the meal plan, deducting items likely already in stock.
 - **FR-014**: System MUST allow users to swap individual meals and have the grocery list update accordingly.
 
 **Scheduled Workflows**
 - **FR-015**: System MUST run scheduled workflows via a dedicated n8n instance isolated from other projects on the same server.
-- **FR-016**: System MUST support at least 8 scheduled workflows running concurrently without interference.
+- **FR-016**: System MUST support at least 7 scheduled workflows running concurrently without interference (daily briefing, weekly calendar, grandma prompt, Saturday meal+grocery, budget summary, mid-week check-in, conflict detection).
 - **FR-017**: System MUST retry failed workflow executions once before logging the failure.
 - **FR-018**: System MUST respect the WhatsApp 24-hour messaging window by using pre-approved template messages when the window has expired.
 
@@ -202,7 +204,7 @@ Sunday afternoon before the family meeting, Mom Bot pulls the YNAB budget data a
 - WhatsApp proactive messages outside the 24-hour window require pre-approved Meta template messages.
 - Claude vision (image analysis) is used for recipe extraction — no separate OCR service needed.
 - The dedicated n8n instance must run on a different port than the existing n8n (5678).
-- Notion free plan: unlimited blocks but 5MB file upload limit per file (recipe photos may need to be compressed or stored as external links).
+- Notion free plan: unlimited blocks but 5MB file upload limit per file. Recipe photos are stored in cloud storage (Cloudflare R2 free tier) and linked from Notion, avoiding the size limit entirely.
 - AnyList has no "by store" concept — items are added to a single list. Store grouping is informational for the user, not pushed to AnyList.
 
 ### Assumptions
@@ -217,9 +219,20 @@ Sunday afternoon before the family meeting, Mom Bot pulls the YNAB budget data a
 ### Family Profile Details
 
 - **Erin's cookbooks**: Multiple physical cookbooks including at least one keto-focused book and general family meal books. Exact titles to be captured as she photographs recipes.
-- **Dietary preferences**: Kid-friendly meals for Vienna (5) and Zoey (3). Erin is interested in keto/healthy options. Jason's breakfast is fixed (1 scrambled egg, 2 bacon, high-fiber tortilla, hot sauce, Coke Zero).
+- **Dietary preferences**: Kid-friendly dinners for Vienna (5) and Zoey (3). Erin is interested in keto/healthy options. Jason's breakfast is fixed (1 scrambled egg, 2 bacon, high-fiber tortilla, hot sauce, Coke Zero). Jason buys lunch from a local restaurant. Erin meal preps kid lunches separately.
+- **Eating out**: Family eats out ~1 night per week (dinner plan covers 6 nights).
 - **Shopping patterns**: Primarily Whole Foods (delivery via AnyList), Costco (in-store, bulk), Raley's (local pickup). Whole Foods is the main weekly shop; Costco every 2-3 weeks.
 - **Schedule density**: Monday and Tuesday mornings are the lightest (grandma has Zoey). Wednesday-Friday Erin has both kids. Weekends are activity-heavy (ski, church).
+
+## Clarifications
+
+### Session 2026-02-22
+
+- Q: Where should recipe photos be stored given Notion's 5MB upload limit? → A: Upload to a free cloud storage service (e.g., Cloudflare R2 free tier) and link from Notion. Preserves full-quality originals with no size constraints.
+- Q: What meals does the 7-day meal plan cover? → A: Dinner only (6 nights — they eat out ~1 night/week). Jason buys lunch from a local restaurant. Erin meal preps kid lunches separately and will provide her own options for that. Weekend breakfasts are flexible but not planned by the system.
+- Q: Should the recipe catalogue support online recipe URLs in addition to cookbook photos? → A: Photos only for this feature. URL-based recipe import noted as a future enhancement.
+- Q: Should Saturday's grocery reorder and meal plan be separate messages or combined? → A: Combined into one Saturday morning message — meal plan + merged grocery list that includes both reorder staples and meal-specific ingredients.
+- Q: How should "Last Ordered" dates stay fresh for reorder accuracy? → A: Update when Erin confirms "groceries ordered" after AnyList push. If no confirmation within ~2 days of pushing to AnyList, send a gentle reminder to confirm the order was placed.
 
 ## Success Criteria *(mandatory)*
 
@@ -233,3 +246,10 @@ Sunday afternoon before the family meeting, Mom Bot pulls the YNAB budget data a
 - **SC-006**: Calendar conflicts are detected and reported before they cause a scheduling problem (zero missed pickups or double-bookings due to undetected conflicts).
 - **SC-007**: The recipe catalogue grows to 20+ recipes within the first month of use (indicating Erin finds value in the feature).
 - **SC-008**: Time spent on weekly meal planning + grocery ordering is reduced by at least 50% compared to the manual process (self-reported by Erin).
+
+## Future Enhancements
+
+- **URL-based recipe import**: Send a recipe URL in WhatsApp and have the system scrape and extract the recipe (same catalogue, different input method).
+- **Automatic receipt import**: Detect new Whole Foods/Costco/Raley's order emails and auto-import receipts without manual PDF download.
+- **Kid lunch meal prep planning**: Erin provides her meal prep rotation; system tracks which preps were done recently and suggests the next one.
+- **Restaurant night suggestions**: Based on budget remaining and family preferences, suggest where to eat out on the weekly restaurant night.
