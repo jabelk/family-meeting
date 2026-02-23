@@ -76,6 +76,20 @@ The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.15
 **Updating code**: Edit locally, commit, push to main, then `./scripts/nuc.sh deploy`.
 **Updating .env**: Edit locally, then `./scripts/nuc.sh env` (copies .env and restarts fastapi).
 
+## API Safety Thresholds
+
+All destructive operations have hard caps to prevent accidental mass changes. Thresholds are module-level constants — adjust if legitimate use cases exceed them.
+
+| Operation | File | Constant | Limit | Behavior |
+|-----------|------|----------|-------|----------|
+| Calendar delete | `src/tools/calendar.py` | `MAX_CALENDAR_DELETES` | 50 | Raises `ValueError` |
+| Calendar batch create | `src/tools/calendar.py` | `MAX_CALENDAR_CREATES` | 50 | Raises `ValueError` |
+| Action item rollover | `src/tools/notion.py` | `MAX_ROLLOVER_ITEMS` | 25 | Returns error message |
+| Template block delete | `src/tools/notion.py` | `MAX_TEMPLATE_BLOCK_DELETES` | 50 | Returns error message |
+| Pending order clear | `src/tools/notion.py` | `MAX_PENDING_ORDER_CLEAR` | 100 | Raises `ValueError` |
+| AnyList push | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_PUSH` | 200 | Raises `ValueError` |
+| AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
+
 ## Recent Changes
 - 002-proactive-recipes-automation: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 + Claude vision for OCR), notion-client >=2.2.0,<2.3.0, boto3 (Cloudflare R2 S3-compatible API), httpx, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn
 - Mom Bot is live — WhatsApp → FastAPI → Claude Haiku → WhatsApp reply working end-to-end
