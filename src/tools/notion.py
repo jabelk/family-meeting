@@ -774,10 +774,14 @@ def get_pending_orders() -> list[dict]:
     if not NOTION_GROCERY_HISTORY_DB:
         return []
 
-    results = notion.databases.query(
-        database_id=NOTION_GROCERY_HISTORY_DB,
-        filter={"property": "Pending Order", "checkbox": {"equals": True}},
-    )
+    try:
+        results = notion.databases.query(
+            database_id=NOTION_GROCERY_HISTORY_DB,
+            filter={"property": "Pending Order", "checkbox": {"equals": True}},
+        )
+    except Exception as e:
+        logger.warning("Pending Order query failed (property may not exist yet): %s", e)
+        return []
     items = []
     for page in results["results"]:
         props = page["properties"]

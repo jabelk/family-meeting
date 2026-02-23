@@ -397,21 +397,19 @@ def check_action_item_progress() -> dict:
 
     Returns summary with counts and items grouped by assignee.
     """
-    items_raw = notion.get_action_items("", "")
-    if isinstance(items_raw, str):
-        # Parse the string response from notion
-        return {"status": "error", "raw": items_raw}
-
-    # get_action_items returns a formatted string, so we need to query directly
     from src.tools.notion import notion as notion_client, _get_title, NOTION_ACTION_ITEMS_DB
 
     if not NOTION_ACTION_ITEMS_DB:
         return {"status": "error", "message": "Action Items DB not configured"}
 
-    results = notion_client.databases.query(
-        database_id=NOTION_ACTION_ITEMS_DB,
-        filter={"property": "Due Context", "select": {"equals": "This Week"}},
-    )
+    try:
+        results = notion_client.databases.query(
+            database_id=NOTION_ACTION_ITEMS_DB,
+            filter={"property": "Due Context", "select": {"equals": "This Week"}},
+        )
+    except Exception as e:
+        logger.error("Failed to query action items: %s", e)
+        return {"status": "error", "message": str(e)}
 
     total = len(results["results"])
     done = 0
