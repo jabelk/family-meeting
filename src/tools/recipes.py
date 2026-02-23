@@ -132,11 +132,13 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
     )
 
     raw_text = response.content[0].text.strip()
-    # Strip markdown code fences if present
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
     if raw_text.startswith("```"):
-        raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]
-        if raw_text.endswith("```"):
-            raw_text = raw_text[:-3].strip()
+        lines = raw_text.split("\n")
+        lines = lines[1:]  # Remove first line (```json or ```)
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        raw_text = "\n".join(lines).strip()
 
     try:
         extracted = json.loads(raw_text)

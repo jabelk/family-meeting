@@ -374,15 +374,20 @@ def detect_conflicts(days_ahead: int = 1) -> list[dict]:
     )
 
     raw = response.content[0].text.strip()
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
     if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
-        if raw.endswith("```"):
-            raw = raw[:-3].strip()
+        lines = raw.split("\n")
+        # Remove first line (```json or ```)
+        lines = lines[1:]
+        # Remove last line if it's just ```
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        raw = "\n".join(lines).strip()
 
     try:
         conflicts = json.loads(raw)
     except json.JSONDecodeError:
-        logger.warning("Failed to parse conflict detection results")
+        logger.warning("Failed to parse conflict detection results: %s", raw[:200])
         conflicts = []
 
     return conflicts
