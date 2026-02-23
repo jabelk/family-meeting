@@ -8,9 +8,6 @@ load_dotenv()
 
 REQUIRED_VARS = [
     "ANTHROPIC_API_KEY",
-    "WHATSAPP_PHONE_NUMBER_ID",
-    "WHATSAPP_ACCESS_TOKEN",
-    "WHATSAPP_VERIFY_TOKEN",
     "NOTION_TOKEN",
     "NOTION_ACTION_ITEMS_DB",
     "NOTION_MEAL_PLANS_DB",
@@ -21,8 +18,6 @@ REQUIRED_VARS = [
     "GOOGLE_CALENDAR_FAMILY_ID",
     "YNAB_ACCESS_TOKEN",
     "YNAB_BUDGET_ID",
-    "JASON_PHONE",
-    "ERIN_PHONE",
 ]
 
 
@@ -39,10 +34,10 @@ _load_env()
 # Anthropic
 ANTHROPIC_API_KEY: str = os.environ["ANTHROPIC_API_KEY"]
 
-# WhatsApp
-WHATSAPP_PHONE_NUMBER_ID: str = os.environ["WHATSAPP_PHONE_NUMBER_ID"]
-WHATSAPP_ACCESS_TOKEN: str = os.environ["WHATSAPP_ACCESS_TOKEN"]
-WHATSAPP_VERIFY_TOKEN: str = os.environ["WHATSAPP_VERIFY_TOKEN"]
+# WhatsApp (optional — only needed for webhook server)
+WHATSAPP_PHONE_NUMBER_ID: str = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_ACCESS_TOKEN: str = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
+WHATSAPP_VERIFY_TOKEN: str = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
 
 # Notion
 NOTION_TOKEN: str = os.environ["NOTION_TOKEN"]
@@ -71,14 +66,15 @@ OUTLOOK_CALENDAR_ICS_URL: str = os.environ.get("OUTLOOK_CALENDAR_ICS_URL", "")
 YNAB_ACCESS_TOKEN: str = os.environ["YNAB_ACCESS_TOKEN"]
 YNAB_BUDGET_ID: str = os.environ["YNAB_BUDGET_ID"]
 
-# Family phone mapping (phone number → partner name)
-JASON_PHONE: str = os.environ["JASON_PHONE"]
-ERIN_PHONE: str = os.environ["ERIN_PHONE"]
+# Family phone mapping (optional — only needed for WhatsApp webhook)
+JASON_PHONE: str = os.environ.get("JASON_PHONE", "")
+ERIN_PHONE: str = os.environ.get("ERIN_PHONE", "")
 
-PHONE_TO_NAME: dict[str, str] = {
-    JASON_PHONE: "Jason",
-    ERIN_PHONE: "Erin",
-}
+PHONE_TO_NAME: dict[str, str] = {}
+if JASON_PHONE:
+    PHONE_TO_NAME[JASON_PHONE] = "Jason"
+if ERIN_PHONE:
+    PHONE_TO_NAME[ERIN_PHONE] = "Erin"
 
 # AnyList (optional — grocery integration)
 ANYLIST_SIDECAR_URL: str = os.environ.get("ANYLIST_SIDECAR_URL", "http://anylist-sidecar:3000")
