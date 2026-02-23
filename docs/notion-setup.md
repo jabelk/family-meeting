@@ -101,8 +101,9 @@ You need to create 5 databases and 1 page. Create them all at the top level of y
 | Last Ordered | Date | (no special config) |
 | Avg Reorder Days | Number | Number format: Number (average days between orders) |
 | Avg Price | Number | Number format: Dollar (average price across orders) |
+| Type | Select | Options: `Staple` (green), `Regular` (yellow), `Occasional` (gray) |
 | Store | Multi-select | Options: `Whole Foods`, `Costco`, `Raley's` (tracks where you buy each item) |
-| Staple | Checkbox | (items the family buys regularly — 50%+ of orders) |
+| Staple | Checkbox | (true for Staple-type items) |
 
 **Tip**: You can populate this database from your order history using the import script:
 ```

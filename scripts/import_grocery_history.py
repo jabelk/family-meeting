@@ -331,8 +331,14 @@ def parse_csv(filepath: str) -> list[dict]:
     return items
 
 
-def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
-    """Count frequency for each item, track order dates and stores, and deduplicate."""
+def deduplicate(items: list[dict]) -> list[dict]:
+    """Count frequency for each item, track order dates and stores, and deduplicate.
+
+    Classifies items into three tiers based on purchase consistency:
+      - Staple:     4+ distinct orders spanning 60+ days (always keep in stock)
+      - Regular:    2-3 distinct orders (periodic purchases)
+      - Occasional: 1 order (recipe/event one-off, or just trying something)
+    """
     from datetime import datetime
 
     name_counter: Counter = Counter()
@@ -359,18 +365,16 @@ def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
         if store:
             name_to_stores.setdefault(normalized, set()).add(store)
 
-    if not total_orders:
-        total_orders = len(set(d for dates in name_to_dates.values() for d in dates)) or 1
-    staple_threshold = max(total_orders * 0.5, 2)
-
     results = []
     for name, freq in name_counter.most_common():
         dates = sorted(set(name_to_dates.get(name, [])))
         prices = name_to_prices.get(name, [])
         stores = sorted(name_to_stores.get(name, set()))
+        distinct_orders = len(dates)
 
-        # Calculate average days between orders
+        # Calculate average days between orders and date span
         avg_days = None
+        span_days = 0
         if len(dates) >= 2:
             parsed = []
             for d in dates:
@@ -379,14 +383,24 @@ def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
                 except ValueError:
                     pass
             if len(parsed) >= 2:
+                span_days = (parsed[-1] - parsed[0]).days
                 intervals = [(parsed[i+1] - parsed[i]).days for i in range(len(parsed)-1)]
                 avg_days = round(sum(intervals) / len(intervals))
+
+        # Classify: Staple / Regular / Occasional
+        if distinct_orders >= 4 and span_days >= 60:
+            item_type = "Staple"
+        elif distinct_orders >= 2:
+            item_type = "Regular"
+        else:
+            item_type = "Occasional"
 
         results.append({
             "name": name,
             "category": name_to_category[name],
             "frequency": freq,
-            "staple": freq >= staple_threshold,
+            "type": item_type,
+            "staple": item_type == "Staple",
             "stores": stores,
             "order_dates": dates,
             "first_ordered": dates[0] if dates else None,
@@ -440,6 +454,7 @@ def upload_to_notion(items: list[dict]) -> int:
             properties = {
                 "Item Name": {"title": [{"text": {"content": item["name"]}}]},
                 "Category": {"select": {"name": item["category"]}},
+                "Type": {"select": {"name": item.get("type", "Occasional")}},
                 "Frequency": {"number": item["frequency"]},
                 "Staple": {"checkbox": item["staple"]},
             }
@@ -519,8 +534,13 @@ def main():
         items = normalize_items(items)
 
     deduped = deduplicate(items)
-    staple_count = sum(1 for i in deduped if i["staple"])
-    print(f"Deduplicated to {len(deduped)} unique items ({staple_count} staples)")
+
+    # Type breakdown
+    type_counts = Counter(i["type"] for i in deduped)
+    print(f"Deduplicated to {len(deduped)} unique items:")
+    print(f"  Staples:    {type_counts.get('Staple', 0)} (4+ orders, 60+ day span)")
+    print(f"  Regular:    {type_counts.get('Regular', 0)} (2-3 orders)")
+    print(f"  Occasional: {type_counts.get('Occasional', 0)} (one-off purchases)")
 
     # Store summary
     all_stores = set()
@@ -532,14 +552,24 @@ def main():
         if multi_store:
             print(f"Items found at multiple stores: {multi_store}")
 
-    print("\nTop 15 items by frequency:")
-    for item in deduped[:15]:
-        star = " *" if item["staple"] else ""
-        reorder = f" (every ~{item['avg_reorder_days']}d)" if item.get("avg_reorder_days") else ""
-        price = f" ${item['avg_price']:.2f}" if item.get("avg_price") else ""
-        last = f" last:{item['last_ordered']}" if item.get("last_ordered") else ""
-        stores = f" @{'+'.join(item['stores'])}" if item.get("stores") else ""
-        print(f"  {item['frequency']}x {item['name']} [{item['category']}]{price}{reorder}{last}{stores}{star}")
+    # Show staples
+    staples = [i for i in deduped if i["type"] == "Staple"]
+    if staples:
+        print(f"\nStaples ({len(staples)} items — always keep in stock):")
+        for item in staples:
+            reorder = f" (every ~{item['avg_reorder_days']}d)" if item.get("avg_reorder_days") else ""
+            price = f" ${item['avg_price']:.2f}" if item.get("avg_price") else ""
+            stores = f" @{'+'.join(item['stores'])}" if item.get("stores") else ""
+            print(f"  {item['frequency']}x {item['name']} [{item['category']}]{price}{reorder}{stores}")
+
+    # Show top regulars
+    regulars = [i for i in deduped if i["type"] == "Regular"]
+    if regulars:
+        print(f"\nTop Regular items ({len(regulars)} total):")
+        for item in regulars[:10]:
+            price = f" ${item['avg_price']:.2f}" if item.get("avg_price") else ""
+            stores = f" @{'+'.join(item['stores'])}" if item.get("stores") else ""
+            print(f"  {item['frequency']}x {item['name']} [{item['category']}]{price}{stores}")
 
     if do_clear:
         print(f"\nClearing existing Notion Grocery History database...")
