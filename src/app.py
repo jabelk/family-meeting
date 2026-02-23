@@ -280,6 +280,67 @@ async def grandma_schedule_prompt(background_tasks: BackgroundTasks):
 
 
 # ---------------------------------------------------------------------------
+# Feature 003: Nudge Scanner (T010)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/nudges/scan", dependencies=[Depends(verify_n8n_auth)])
+async def nudge_scan():
+    """Scan calendar for departure events, process pending nudges.
+
+    Called by n8n every 15 minutes (7am-8:30pm Pacific).
+    Creates departure nudges for upcoming events, then delivers all due nudges.
+    """
+    from src.tools.nudges import scan_upcoming_departures, process_pending_nudges
+    from src.tools.notion import check_quiet_day, count_sent_today
+
+    logger.info("Nudge scan triggered")
+
+    result = {
+        "departures_created": 0,
+        "chores_suggested": 0,
+        "nudges_sent": 0,
+        "nudges_batched": 0,
+        "daily_count": count_sent_today(),
+        "daily_cap": 8,
+        "quiet_day": False,
+        "errors": [],
+    }
+
+    # Check quiet day first
+    if check_quiet_day():
+        result["quiet_day"] = True
+        logger.info("Quiet day active — skipping all nudge processing")
+        return result
+
+    # Scan for upcoming departure events
+    try:
+        result["departures_created"] = scan_upcoming_departures()
+    except Exception as e:
+        logger.error("Departure scan failed: %s", e)
+        result["errors"].append(f"departure_scan: {e}")
+
+    # Process and deliver pending nudges
+    try:
+        delivery = await process_pending_nudges()
+        result["nudges_sent"] = delivery["nudges_sent"]
+        result["nudges_batched"] = delivery["nudges_batched"]
+        result["daily_count"] = delivery["daily_count"]
+        result["errors"].extend(delivery["errors"])
+    except Exception as e:
+        logger.error("Nudge delivery failed: %s", e)
+        result["errors"].append(f"nudge_delivery: {e}")
+
+    logger.info(
+        "Nudge scan complete: %d departures, %d sent, %d/%d daily",
+        result["departures_created"],
+        result["nudges_sent"],
+        result["daily_count"],
+        result["daily_cap"],
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # US2: Grocery Reorder (T029-T030)
 # ---------------------------------------------------------------------------
 

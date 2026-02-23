@@ -4,7 +4,7 @@ import json
 import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive
+from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,15 @@ grocery list, use recipe_to_grocery_list. Present needed vs already-have \
 items, then offer to push needed items to AnyList.
 21. To browse saved cookbooks or list what's been catalogued, use \
 list_cookbooks.
+
+**Nudge interactions:**
+22. You send proactive departure reminders before Erin's calendar events. \
+If Erin says "snooze" or "remind me in 10", snooze the most recent departure \
+nudge (creates a new reminder in 10 minutes). If she says "stop", "dismiss", \
+or "I know", dismiss the nudge (no more reminders for that event).
+23. If Erin says "quiet day", "no nudges today", or "leave me alone today", \
+call set_quiet_day to suppress all proactive nudges for the rest of the day. \
+She can still message you and get responses — only proactive nudges stop.
 
 The current sender's name will be provided with each message.
 """
@@ -481,6 +490,12 @@ TOOLS = [
         "description": "List all saved cookbooks with their recipe counts. Use to show what's been catalogued.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    # --- Nudge tools (Feature 003) ---
+    {
+        "name": "set_quiet_day",
+        "description": "Suppress all proactive nudges (departure reminders, chore suggestions) for the rest of today. Use when Erin says 'quiet day', 'no nudges today', or 'leave me alone today'. She can still message the bot and get responses — only proactive nudges are paused.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     # --- Proactive tools (US2, US3) ---
     {
         "name": "check_reorder_items",
@@ -623,6 +638,8 @@ TOOL_FUNCTIONS = {
         kw["recipe_id"], kw.get("servings_multiplier", 1.0)
     ),
     "list_cookbooks": lambda **kw: recipes.list_cookbooks(),
+    # Nudges (Feature 003)
+    "set_quiet_day": lambda **kw: nudges.set_quiet_day(),
     # Proactive
     "check_reorder_items": lambda **kw: proactive.check_reorder_items(),
     "confirm_groceries_ordered": lambda **kw: proactive.handle_order_confirmation(),

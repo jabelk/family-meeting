@@ -44,12 +44,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Create src/tools/nudges.py — implement is_virtual_event(event_dict) using conferenceData detection and keyword matching ("call", "virtual", "remote", "online", "zoom", "meet", "teams", "webinar") per plan.md virtual event detection rules; also detect all-day events and assistant-created events
-- [ ] T007 [US1] Implement scan_upcoming_departures(hours_ahead=2) in src/tools/nudges.py — call get_events_for_date_raw() for Erin's and family calendars, filter out virtual events, skip events already in Nudge Queue (match by Event ID), create departure nudge records with Scheduled Time = event_start - 30 min (or immediate if <15 min away)
-- [ ] T008 [US1] Implement process_pending_nudges() in src/tools/nudges.py — query Nudge Queue for Status=Pending AND Scheduled Time <= now, check daily cap (count_sent_today() < 8), batch nudges within 5-min window into single messages (FR-011), send via WhatsApp with template fallback, update status to Sent
-- [ ] T009 [US1] Implement set_quiet_day() in src/tools/nudges.py — create quiet_day nudge record, cancel all Pending non-laundry nudges for today
-- [ ] T010 [US1] Add POST /api/v1/nudges/scan endpoint in src/app.py — protected by verify_n8n_auth, calls scan_upcoming_departures() then process_pending_nudges(), returns JSON response per contracts/nudge-endpoints.md schema, skips processing if check_quiet_day() is true
-- [ ] T011 [US1] Register set_quiet_day tool in src/assistant.py — add tool definition with no parameters, wire to nudges.set_quiet_day(), add snooze/dismiss natural language handling in system prompt (snooze → create new Pending nudge +10 min and update original to Snoozed; dismiss → update to Dismissed)
+- [x] T006 [US1] Create src/tools/nudges.py — implement is_virtual_event(event_dict) using conferenceData detection and keyword matching ("call", "virtual", "remote", "online", "zoom", "meet", "teams", "webinar") per plan.md virtual event detection rules; also detect all-day events and assistant-created events
+- [x] T007 [US1] Implement scan_upcoming_departures(hours_ahead=2) in src/tools/nudges.py — call get_events_for_date_raw() for Erin's and family calendars, filter out virtual events, skip events already in Nudge Queue (match by Event ID), create departure nudge records with Scheduled Time = event_start - 30 min (or immediate if <15 min away)
+- [x] T008 [US1] Implement process_pending_nudges() in src/tools/nudges.py — query Nudge Queue for Status=Pending AND Scheduled Time <= now, check daily cap (count_sent_today() < 8), batch nudges within 5-min window into single messages (FR-011), send via WhatsApp with template fallback, update status to Sent
+- [x] T009 [US1] Implement set_quiet_day() in src/tools/nudges.py — create quiet_day nudge record, cancel all Pending non-laundry nudges for today
+- [x] T010 [US1] Add POST /api/v1/nudges/scan endpoint in src/app.py — protected by verify_n8n_auth, calls scan_upcoming_departures() then process_pending_nudges(), returns JSON response per contracts/nudge-endpoints.md schema, skips processing if check_quiet_day() is true
+- [x] T011 [US1] Register set_quiet_day tool in src/assistant.py — add tool definition with no parameters, wire to nudges.set_quiet_day(), add snooze/dismiss natural language handling in system prompt (snooze → create new Pending nudge +10 min and update original to Snoozed; dismiss → update to Dismissed)
 - [ ] T012 [US1] Create n8n workflow WF-009 (Nudge Scanner) — cron `*/15 7-20 * * *`, HTTP POST to /api/v1/nudges/scan with X-N8N-Auth header
 
 **Checkpoint**: Departure nudges fully functional — Erin receives reminders before calendar events, can snooze/dismiss/quiet-day
