@@ -25,7 +25,7 @@
 - [x] T002 [P] Update .env.example to add v2 env vars (OUTLOOK_CALENDAR_ICS_URL, GOOGLE_CALENDAR_JASON_ID, GOOGLE_CALENDAR_ERIN_ID, GOOGLE_CALENDAR_FAMILY_ID, ANYLIST_EMAIL, ANYLIST_PASSWORD, ANYLIST_SIDECAR_URL, NOTION_BACKLOG_DB, NOTION_GROCERY_HISTORY_DB) and replace old GOOGLE_CALENDAR_ID with the 3 new calendar IDs in .env.example
 - [x] T003 [P] Update src/config.py to load and validate all new env vars (OUTLOOK_CALENDAR_ICS_URL, 3 Google Calendar IDs, AnyList credentials, ANYLIST_SIDECAR_URL, NOTION_BACKLOG_DB, NOTION_GROCERY_HISTORY_DB) with optional flags for services not yet configured in src/config.py
 - [x] T004 [P] Create Dockerfile for FastAPI service: Python 3.12 slim, install requirements, copy src/, expose 8000, CMD uvicorn in Dockerfile
-- [ ] T005 Complete Notion workspace setup per docs/notion-setup.md: create Action Items, Meal Plans, Meetings databases with properties per contracts/notion-schema.md, create Backlog database (7 properties per data-model.md), create Grocery History database (5 properties per data-model.md), create Family Profile page with all sections, share all with integration, record database IDs in .env (manual step, paused mid-setup)
+- [x] T005 Complete Notion workspace setup per docs/notion-setup.md: create Action Items, Meal Plans, Meetings databases with properties per contracts/notion-schema.md, create Backlog database (7 properties per data-model.md), create Grocery History database (5 properties per data-model.md), create Family Profile page with all sections, share all with integration, record database IDs in .env (manual step, paused mid-setup)
 
 ---
 
