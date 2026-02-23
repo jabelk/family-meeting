@@ -4,7 +4,7 @@ import json
 import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry
+from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,11 @@ or "I know", dismiss the nudge (no more reminders for that event).
 23. If Erin says "quiet day", "no nudges today", or "leave me alone today", \
 call set_quiet_day to suppress all proactive nudges for the rest of the day. \
 She can still message you and get responses — only proactive nudges stop.
-24. When Erin says "started laundry", "doing a load", "washing clothes", etc., \
+24. When you send a chore suggestion and Erin replies "done", "finished", or \
+"did it", call complete_chore with the chore name. If she says "skip", "not \
+now", or "pass", call skip_chore. Be encouraging when she completes chores \
+and guilt-free when she skips.
+25. When Erin says "started laundry", "doing a load", "washing clothes", etc., \
 call start_laundry. She can optionally specify times ("washer takes 50 min"). \
 When she says "moved to dryer" or "put it in the dryer", call advance_laundry. \
 If she says "never mind", "didn't do laundry", or "cancel laundry", call \
@@ -502,6 +506,28 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
+        "name": "complete_chore",
+        "description": "Mark a chore as completed. Updates the Chores database and marks the nudge as done. Use when Erin says 'done', 'finished', 'did it' after a chore suggestion.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "chore_name": {"type": "string", "description": "Name of the completed chore (matched against Chores DB)."},
+            },
+            "required": ["chore_name"],
+        },
+    },
+    {
+        "name": "skip_chore",
+        "description": "Skip a suggested chore (won't be re-suggested today). Use when Erin says 'skip', 'not now', 'pass' to a chore suggestion.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "chore_name": {"type": "string", "description": "Name of the skipped chore."},
+            },
+            "required": ["chore_name"],
+        },
+    },
+    {
         "name": "start_laundry",
         "description": "Start a laundry session with timed reminders. Creates washer-done nudge and follow-up nudge. Checks calendar for conflicts with dryer timing. Use when Erin says 'started laundry', 'doing a load', etc.",
         "input_schema": {
@@ -675,6 +701,8 @@ TOOL_FUNCTIONS = {
     "list_cookbooks": lambda **kw: recipes.list_cookbooks(),
     # Nudges (Feature 003)
     "set_quiet_day": lambda **kw: nudges.set_quiet_day(),
+    "complete_chore": lambda **kw: chores.complete_chore(kw["chore_name"]),
+    "skip_chore": lambda **kw: chores.skip_chore(kw["chore_name"]),
     "start_laundry": lambda **kw: laundry.start_laundry_session(
         kw.get("washer_minutes", 45), kw.get("dryer_minutes", 60)
     ),

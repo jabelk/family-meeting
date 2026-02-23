@@ -81,11 +81,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T017 [P] [US3] Create src/tools/chores.py — implement detect_free_windows(date) by comparing get_events_for_date_raw() results against routine templates from Family Profile page, return list of {start, end, duration_minutes} for gaps >= 15 min
-- [ ] T018 [US3] Implement suggest_chore(free_window_minutes) in src/tools/chores.py — query Chores DB, filter by Duration <= free_window_minutes, calculate overdue score (days_since_last / frequency_days), boost if today matches Preferred Day, deprioritize disliked chores (still suggest if overdue > 2x), return top 1-2 suggestions per data-model.md chore selection algorithm
-- [ ] T019 [US3] Implement complete_chore(chore_name) and skip_chore(chore_name) in src/tools/chores.py — complete: update Last Completed to today, increment Times Completed, mark associated nudge as Done; skip: mark nudge as Dismissed, track skipped chore for today (don't re-suggest)
-- [ ] T020 [US3] Extend POST /api/v1/nudges/scan in src/app.py — after departure scanning, call detect_free_windows() and suggest_chore() for the next upcoming free window, create chore nudge in Nudge Queue with Context JSON containing chore_id and chore details; add chores_suggested to response
-- [ ] T021 [US3] Register complete_chore and skip_chore tools in src/assistant.py — complete_chore with chore_name param, skip_chore with chore_name param, both wired to chores.py; seed default chores on first scan if Chores DB is empty
+- [x] T017 [P] [US3] Create src/tools/chores.py — implement detect_free_windows(date) by comparing get_events_for_date_raw() results against routine templates from Family Profile page, return list of {start, end, duration_minutes} for gaps >= 15 min
+- [x] T018 [US3] Implement suggest_chore(free_window_minutes) in src/tools/chores.py — query Chores DB, filter by Duration <= free_window_minutes, calculate overdue score (days_since_last / frequency_days), boost if today matches Preferred Day, deprioritize disliked chores (still suggest if overdue > 2x), return top 1-2 suggestions per data-model.md chore selection algorithm
+- [x] T019 [US3] Implement complete_chore(chore_name) and skip_chore(chore_name) in src/tools/chores.py — complete: update Last Completed to today, increment Times Completed, mark associated nudge as Done; skip: mark nudge as Dismissed, track skipped chore for today (don't re-suggest)
+- [x] T020 [US3] Extend POST /api/v1/nudges/scan in src/app.py — after departure scanning, call detect_free_windows() and suggest_chore() for the next upcoming free window, create chore nudge in Nudge Queue with Context JSON containing chore_id and chore details; add chores_suggested to response
+- [x] T021 [US3] Register complete_chore and skip_chore tools in src/assistant.py — complete_chore with chore_name param, skip_chore with chore_name param, both wired to chores.py; seed default chores on first scan if Chores DB is empty
 
 **Checkpoint**: Chore suggestions during free windows — context-aware suggestions, done/skip responses, overdue prioritization all working
 

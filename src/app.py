@@ -291,7 +291,9 @@ async def nudge_scan():
     Creates departure nudges for upcoming events, then delivers all due nudges.
     """
     from src.tools.nudges import scan_upcoming_departures, process_pending_nudges
-    from src.tools.notion import check_quiet_day, count_sent_today
+    from src.tools.notion import check_quiet_day, count_sent_today, seed_default_chores
+    from src.tools.chores import detect_free_windows, suggest_chore
+    from src.tools.notion import create_nudge
 
     logger.info("Nudge scan triggered")
 
@@ -312,12 +314,55 @@ async def nudge_scan():
         logger.info("Quiet day active — skipping all nudge processing")
         return result
 
+    # Seed default chores on first run if DB is empty
+    try:
+        seed_default_chores()
+    except Exception as e:
+        logger.warning("Chore seed check failed: %s", e)
+
     # Scan for upcoming departure events
     try:
         result["departures_created"] = scan_upcoming_departures()
     except Exception as e:
         logger.error("Departure scan failed: %s", e)
         result["errors"].append(f"departure_scan: {e}")
+
+    # Detect free windows and suggest chores
+    try:
+        import json as _json
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo as _ZI
+        _now = _dt.now(tz=_ZI("America/Los_Angeles"))
+        windows = detect_free_windows(_now.date())
+
+        # Find the next upcoming free window (starts after now)
+        for window in windows:
+            if window["start"] > _now and window["duration_minutes"] >= 15:
+                suggestions = suggest_chore(window["duration_minutes"])
+                for suggestion in suggestions:
+                    context = _json.dumps({
+                        "chore_id": suggestion["id"],
+                        "chore_name": suggestion["name"],
+                        "duration": suggestion["duration"],
+                        "window_start": window["start"].isoformat(),
+                        "window_end": window["end"].isoformat(),
+                    })
+                    msg = (
+                        f"Free window coming up! How about: {suggestion['name']} "
+                        f"(~{suggestion['duration']} min)?"
+                    )
+                    create_nudge(
+                        summary=f"Chore: {suggestion['name']}",
+                        nudge_type="chore",
+                        scheduled_time=window["start"].isoformat(),
+                        message=msg,
+                        context=context,
+                    )
+                    result["chores_suggested"] += 1
+                break  # Only suggest for the next upcoming window
+    except Exception as e:
+        logger.error("Chore suggestion failed: %s", e)
+        result["errors"].append(f"chore_suggestion: {e}")
 
     # Process and deliver pending nudges
     try:
