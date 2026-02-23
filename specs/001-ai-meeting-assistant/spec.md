@@ -170,7 +170,7 @@ After a meal plan is generated, the grocery list should flow into a delivery ord
 - **FR-013**: System MUST use WhatsApp as the primary conversational interface via a shared family group chat (both partners + assistant), leveraging rich formatting (bold, lists, links)
 - **FR-014**: System MUST generate daily plans that account for: childcare schedule (who has Zoey), Jason's meeting windows (from work + personal calendars), defined chore blocks, personal development/growth time, rest/out-of-house time, exercise, and any side work obligations
 - **FR-015**: System MUST maintain a personal backlog of one-off tasks for Erin (e.g., clean the garage, reorganize tupperware, knitting projects) that gets reviewed and updated weekly. One item is surfaced daily. Backlog items require follow-up at the weekly meeting (done or carry over). Recurring activities (chores, gym, rest) are assumed done — no tracking or check-in needed, just calendar blocks for structure.
-- **FR-016**: System MUST track recurring childcare schedule (Jason's mom watches Zoey 1-2 half days/week) and adapt daily plans based on who has Zoey that day
+- **FR-016**: System MUST track recurring childcare schedule (Sandy Belk: Mon 9-12, Tue 10-1; future: Milestones preschool late Apr/May) and adapt daily plans based on who has Zoey that day
 - **FR-017**: System MUST read Jason's work calendar (Outlook) to determine his meeting schedule so Erin can plan breakfast timing and know his availability
 - **FR-018**: System MUST write daily time blocks (chores, rest, development, exercise, etc.) to Erin's Google Calendar so they appear as events in her Apple Calendar app with push notifications
 - **FR-019**: System MUST be Erin's sole interface — she texts WhatsApp, the assistant handles everything (Notion updates, calendar writes, schedule lookups). She should never need to open Notion.
@@ -217,8 +217,9 @@ After a meal plan is generated, the grocery list should flow into a delivery ord
 - Weekly meetings happen on a consistent day (assumed Sunday, configurable)
 - The two children (ages 3 and 5) are not direct users of the system
 - An always-on backend service is acceptable (cloud-hosted)
-- Jason's mom's childcare schedule (1-2 half days/week) is communicated to the assistant and can change week to week
-- Vienna's school drop-off is 9:30am M-F (Erin drops off)
+- Sandy Belk (Jason's mom) takes Zoey Monday 9-12 and Tuesday 10-1. This will shift to Milestones preschool late April/early May.
+- Vienna's school drop-off is 9:30am M-F (Erin drops off, except Thursday — Jason drops off for BSF)
+- Vienna's pickup varies: Tue 3:15 (gymnastics), Wed 3:45, other days 3:30
 - Erin does occasional side work for her father's real estate development business
 - Jason has a local Intel NUC server at home running n8n (workflow automation), accessible on home WiFi. This can be used for scheduled automations (e.g., weekly calendar population, daily briefing triggers, recurring syncs) without paying for cloud hosting of those workflows.
 - AnyList ($12/year) is the chosen grocery bridge — connects to Instacart/Whole Foods for delivery
@@ -229,22 +230,84 @@ After a meal plan is generated, the grocery list should flow into a delivery ord
 - Works from home at Cisco
 - Has Google Calendar (personal) + Outlook (work)
 - Breakfast preference: 1 scrambled egg, 2 bacon, high fiber tortilla, sriracha ketchup + Crystal hot sauce, Coke Zero or Diet Dr Pepper
+- Thursday: does driving drop-off for Vienna (needs to be at BSF at Sparks Christian Fellowship by 10am)
 
 **Erin:**
 - Stays at home with the kids
-- Drops off Vienna at school (Roy Gomm) at 9:30am M-F
+- Drops off Vienna at school (Roy Gomm) at 9:30am M-F (except Thu — Jason drops off)
 - Learning knitting (personal development)
 - Does side work for her father's real estate development business
 - Wants defined daily structure: chore time, rest/out-of-house time, personal development, exercise
 - Wants to make Jason breakfast consistently
 - Tends to procrastinate on getting out of the house — the assistant should help with this
+- Laundry pain point: must be home for washer→dryer transfer; good time for dryer is 2:30 before Vienna pickup
+- Wants scheduled blocks for vacuum, laundry, and cooking
+- Likes meal prep but open to efficient daily cooking if the schedule works better
 
 **Childcare:**
 - Zoey (age 3): with Erin most days
-- Jason's mom watches Zoey 1-2 days/week for half days (schedule varies)
-- Vienna (age 5): kindergarten at Roy Gomm, M-F
+- Sandy Belk (Jason's mom) takes Zoey: Monday 9am-12pm, Tuesday 10am-1pm
+- Zoey will start Milestones preschool late April/early May (replaces Sandy's babysitting days)
+- Vienna (age 5): kindergarten at Roy Gomm, M-F. Pickup varies: Tue 3:15 (gymnastics), Wed 3:45, other days 3:30
+
+**Weekly Activities:**
+- Tue: Zoey's gymnastics class (after 3:15 Vienna pickup)
+- Fri: Nature class at Bartley Ranch Park 10:20-11:20 (March 4 – May 27)
+- Sat: Vienna's ski lesson 9-11, leave house by 8am (~5 weeks, ending late March)
+- Sun: Church 9-10, leave house by 8:15. Next 4 weeks: Erin's parents take kids after church until ~4pm → Jason & Erin attend marriage class
 
 ---
+
+### Session 2026-02-22 (Erin schedule review)
+
+- Sandy Belk (MIL) childcare schedule confirmed: Mon 9-12, Tue 10-1 (not "1-2 days varies")
+- Vienna pickup times vary by day: Tue 3:15 (gymnastics), Wed 3:45, default 3:30
+- Thursday: Jason does Vienna drop-off (BSF at Sparks Christian Fellowship by 10am)
+- Nature class at Bartley Ranch Park Fri 10:20-11:20 (Mar 4–May 27)
+- Vienna ski lesson Sat 9-11 (~5 weeks), leave house 8am
+- Church Sun 9-10, leave 8:15. Erin's parents take kids after church til ~4pm for next 4 weeks → marriage class
+- Zoey starts Milestones preschool late April/early May (replaces Sandy days)
+- Erin needs laundry scheduling — must be home for washer→dryer transfer. Idea: dryer at 2:30 before pickup.
+- Needs vacuum and cooking blocks scheduled
+- Likes meal prep but open to efficient daily cooking
+- Each day of the week is genuinely different — generic "with Zoey / with grandma" templates are insufficient
+- Routine templates must be day-specific (Mon-Sun) to account for varying pickups, activities, and childcare
+
+## Future User Stories (shaped by Erin's feedback)
+
+### User Story 7 — Day-Specific Routine Templates (Priority: P2)
+
+The current daily planner uses two generic templates ("Zoey with Erin" vs "Zoey with Grandma"), but Erin's actual week is far more varied. Each day has different pickup times, activities, and childcare arrangements. The assistant should use day-of-week-specific routine templates that account for these differences and generate plans that match reality.
+
+**Acceptance Scenarios:**
+
+1. **Given** it's Tuesday morning, **When** the daily plan is generated, **Then** it shows Sandy has Zoey 10-1, Vienna pickup at 3:15 (not 3:30), and Zoey's gymnastics after pickup.
+2. **Given** it's Thursday morning, **When** the daily plan is generated, **Then** it shows Jason is doing Vienna drop-off (not Erin), and Erin's morning opens up earlier.
+3. **Given** it's Friday during nature class season (Mar 4–May 27), **When** the daily plan is generated, **Then** it includes travel to Bartley Ranch Park by 10:00 and nature class 10:20-11:20.
+4. **Given** it's Saturday during ski season, **When** the daily plan is generated, **Then** it shows "leave house by 8am" and ski lesson 9-11.
+5. **Given** it's Sunday during the 4-week marriage class window, **When** the daily plan is generated, **Then** it shows church, grandparents taking kids, and marriage class — with no chore blocks scheduled (it's a free afternoon).
+
+### User Story 8 — Intelligent Chore Scheduling (Priority: P2)
+
+Erin struggles with knowing when to vacuum, do laundry, and cook. Laundry is especially tricky because she must be physically home for the washer-to-dryer transfer. The assistant should schedule chore blocks intelligently based on the day's constraints, not just drop in a generic "chore block."
+
+**Acceptance Scenarios:**
+
+1. **Given** it's a day where Erin is home all morning (e.g., Wed, Thu, Fri), **When** the daily plan is generated, **Then** it schedules "start laundry" in the morning chore block and "move to dryer" at ~2:30 before Vienna pickup.
+2. **Given** it's Monday (Sandy has Zoey 9-12), **When** the daily plan is generated, **Then** it suggests vacuum during the kid-free morning window since vacuuming is easier without a toddler.
+3. **Given** Erin has asked about meal prep vs daily cooking, **When** the weekly meal plan is generated, **Then** the assistant suggests which meals to prep on Sunday (during grandparent time) vs cook fresh on busy days, based on that week's schedule density.
+4. **Given** a day has tight time blocks (e.g., Friday with nature class), **When** the daily plan is generated, **Then** chore blocks are shorter or deferred to a less packed day, with a note like "Light chore day — catch up tomorrow."
+
+### User Story 9 — Seasonal & Temporary Schedule Management (Priority: P3)
+
+The family has several time-limited recurring activities (ski lessons ~5 weeks, nature class Mar-May, marriage class 4 weeks). The assistant should track end dates and automatically remove activities from the template when they expire, without manual intervention.
+
+**Acceptance Scenarios:**
+
+1. **Given** Vienna's ski lessons end after ~5 weeks, **When** the end date passes, **Then** Saturday morning plans no longer include ski lessons and the assistant notes the freed-up time.
+2. **Given** the marriage class runs for 4 Sundays, **When** the 4 weeks are over, **Then** Sunday afternoon plans revert to normal (kids come home after church, no marriage class block).
+3. **Given** Zoey starts Milestones preschool in late April, **When** the transition happens, **Then** the Monday/Tuesday templates update from "Sandy has Zoey" to "Zoey at preschool" with the new drop-off/pickup times.
+4. **Given** a seasonal activity is approaching its end, **When** the weekly meeting agenda is generated, **Then** it flags "Last week of ski lessons!" or "Nature class ends May 27" so the family can plan ahead.
 
 ## Future Enhancements (Backlog)
 

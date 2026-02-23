@@ -131,30 +131,102 @@ python -m scripts.import_grocery_history orders.csv
 - Goals and long-term items
 
 ## Childcare Schedule
-- Zoey: with Erin most days, Jason's mom watches her 1-2 half days/week (varies)
-- Vienna: kindergarten at Roy Gomm, M-F, 9:30am drop-off
+- Sandy Belk (Jason's mom) takes Zoey: Monday 9am-12pm, Tuesday 10am-1pm
+- Zoey starts Milestones preschool late April/early May (replaces Sandy days)
+- Vienna: kindergarten at Roy Gomm, M-F, 9:30am drop-off (pickup varies by day)
+
+## Weekly Schedule Notes
+- Mon: Sandy has Zoey 9-12. Vienna pickup 3:30.
+- Tue: Sandy has Zoey 10-1. Vienna pickup 3:15 (early — Zoey's gymnastics).
+- Wed: Zoey with Erin. Vienna pickup 3:45.
+- Thu: Jason drops off Vienna (BSF at Sparks Christian Fellowship by 10am). Zoey with Erin. Vienna pickup 3:30.
+- Fri: Nature class at Bartley Ranch Park 10:20-11:20 (Mar 4–May 27). Vienna pickup 3:30.
+- Sat: Leave house 8am → Vienna ski lesson 9-11 (~5 weeks ending late Mar).
+- Sun: Leave house 8:15 → church 9-10. Next 4 weeks: grandparents take kids until ~4pm, Jason & Erin attend marriage class.
+
+## Chore Notes
+- Laundry: must be home for washer→dryer. Start wash in morning, dryer at ~2:30 before pickup.
+- Vacuum and cooking need scheduled blocks.
+- Erin likes meal prep but open to efficient daily cooking.
+- Best chore windows: Mon morning (Zoey with Sandy), Tue morning (Zoey with Sandy).
 
 ## Routine Templates
-### Weekday with Zoey
+### Monday (Sandy has Zoey 9-12)
 - 7:00-7:30 — Breakfast prep (check Jason's meetings for timing)
 - 7:30-8:00 — Kids breakfast + cleanup
-- 9:00-9:30 — Drive Vienna to school
-- 9:30-11:30 — Chore block (with Zoey)
-- 11:30-12:00 — Lunch
-- 12:00-2:00 — Zoey nap / Rest time (get out of house!)
-- 2:00-3:30 — Development block / Side work / Nap for Erin and Zoey
-- 3:30-4:00 — Pick up Vienna
+- 9:00-9:30 — Drop off Vienna + Zoey to Sandy
+- 9:30-10:00 — Start laundry / Vacuum
+- 10:00-11:30 — Exercise / Gym or errands
+- 11:30-12:00 — Pick up Zoey from Sandy / Lunch
+- 12:00-2:00 — Zoey nap / Rest time / Personal development
+- 2:00-2:30 — Side work / Backlog item
+- 2:30-3:00 — Move laundry to dryer
+- 3:00-3:30 — Pick up Vienna
 
-### Weekday with Grandma
+### Tuesday (Sandy has Zoey 10-1)
 - 7:00-7:30 — Breakfast prep
 - 7:30-8:00 — Kids breakfast + cleanup
-- 9:00-9:30 — Drive Vienna to school / Drop Zoey at grandma's
-- 9:30-11:30 — Extended chore block or errands
+- 9:00-9:30 — Drop off Vienna
+- 9:30-10:00 — Drop off Zoey at Sandy's / Start laundry
+- 10:00-11:30 — Exercise / Gym or errands
+- 11:30-12:30 — Personal development (knitting, projects)
+- 12:30-1:00 — Pick up Zoey from Sandy / Lunch
+- 1:00-2:30 — Zoey nap / Side work / Backlog item
+- 2:30-3:00 — Move laundry to dryer
+- 3:00-3:15 — Pick up Vienna (early for gymnastics)
+- 3:15+ — Zoey's gymnastics class
+
+### Wednesday (Zoey with Erin all day)
+- 7:00-7:30 — Breakfast prep
+- 7:30-8:00 — Kids breakfast + cleanup
+- 9:00-9:30 — Drop off Vienna
+- 9:30-11:00 — Chore block (vacuum, laundry start) with Zoey
+- 11:00-11:30 — Out-of-house / errand time
 - 11:30-12:00 — Lunch
-- 12:00-1:30 — Exercise / Gym
-- 1:30-3:00 — Development block / Side work / Nap for Erin and Zoey
-- 3:00-3:30 — Pick up Zoey from grandma's
-- 3:30-4:00 — Pick up Vienna
+- 12:00-2:00 — Zoey nap / Rest time (get out of house!)
+- 2:00-2:30 — Personal development / Side work
+- 2:30-3:00 — Move laundry to dryer
+- 3:00-3:45 — Backlog item
+- 3:45-4:00 — Pick up Vienna
+
+### Thursday (Jason drops off Vienna — BSF by 10am)
+- 7:00-7:30 — Breakfast prep
+- 7:30-8:00 — Kids breakfast + cleanup
+- 8:30-9:00 — Jason drops off Vienna
+- 9:00-11:00 — Chore block with Zoey / Start laundry
+- 11:00-11:30 — Out-of-house / errand time
+- 11:30-12:00 — Lunch
+- 12:00-2:00 — Zoey nap / Rest time
+- 2:00-2:30 — Personal development / Side work
+- 2:30-3:00 — Move laundry to dryer
+- 3:00-3:30 — Pick up Vienna
+
+### Friday (Nature class 10:20-11:20, Mar 4–May 27)
+- 7:00-7:30 — Breakfast prep
+- 7:30-8:00 — Kids breakfast + cleanup
+- 9:00-9:30 — Drop off Vienna
+- 9:30-10:00 — Quick chores / Start laundry
+- 10:00-10:20 — Drive to Bartley Ranch Park
+- 10:20-11:20 — Nature class (with Zoey)
+- 11:20-12:00 — Lunch
+- 12:00-2:00 — Zoey nap / Rest time
+- 2:00-2:30 — Personal development / Side work
+- 2:30-3:00 — Move laundry to dryer
+- 3:00-3:30 — Pick up Vienna
+
+### Saturday (Ski lesson, ~5 weeks ending late Mar)
+- 7:30-8:00 — Get kids ready
+- 8:00 — Leave house for ski lesson
+- 9:00-11:00 — Vienna ski lesson
+- 11:00+ — Family time / errands
+
+### Sunday (Church + marriage class, next 4 weeks)
+- 8:00-8:15 — Get kids ready
+- 8:15 — Leave house for church
+- 9:00-10:00 — Church
+- 10:00+ — Grandparents take kids until ~4pm
+- 10:00-4:00 — Marriage class (Jason & Erin)
+- Evening — Weekly family meeting
 
 ## Configuration
 - Meeting day: Sunday
