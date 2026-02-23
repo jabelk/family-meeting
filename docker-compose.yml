@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     env_file: .env
     volumes:
-      - ./token.json:/app/token.json:ro
+      - ./token.json:/app/token.json
       - ./credentials.json:/app/credentials.json:ro
     depends_on:
       - anylist-sidecar
