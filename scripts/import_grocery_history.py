@@ -1,19 +1,24 @@
 """Import Whole Foods order history into the Notion Grocery History database.
 
-Parses CSV or text exports from Amazon/Whole Foods orders, deduplicates items,
-counts purchase frequency, and marks items ordered 50%+ of the time as staples.
+Parses CSV, text, or PDF exports from Amazon/Whole Foods orders, deduplicates
+items, counts purchase frequency, and marks items ordered 50%+ of the time as
+staples.
 
 Usage:
     python -m scripts.import_grocery_history orders.csv
+    python -m scripts.import_grocery_history receipt1.pdf receipt2.pdf ...
+    python -m scripts.import_grocery_history data/receipts/    (all PDFs in dir)
 
-Input format (CSV):
-    Expected columns: Item Name (or Product), Category (optional), Quantity (optional)
-    The script auto-detects common column names.
-
-    Alternatively, a plain text file with one item per line (item name only).
+Input formats:
+    CSV:  Expected columns: Item Name (or Product), Category (optional)
+    Text: One item per line
+    PDF:  Amazon/Whole Foods order receipts — uses Claude to extract item names
 """
 
+import base64
 import csv
+import glob
+import json
 import os
 import sys
 from collections import Counter
@@ -24,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 
+from anthropic import Anthropic
 from notion_client import Client
 
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
@@ -47,6 +53,73 @@ CATEGORY_KEYWORDS = {
     "Beverages": ["water", "juice", "soda", "coffee", "tea", "coke", "sprite",
                   "sparkling", "drink", "beer", "wine", "kombucha"],
 }
+
+
+def parse_pdfs(filepaths: list[str]) -> list[dict]:
+    """Extract grocery items from PDF receipts using Claude."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        print("Error: ANTHROPIC_API_KEY required for PDF parsing")
+        sys.exit(1)
+
+    client = Anthropic(api_key=api_key)
+    all_items = []
+
+    for filepath in filepaths:
+        print(f"  Extracting items from {os.path.basename(filepath)}...")
+        with open(filepath, "rb") as f:
+            pdf_data = base64.standard_b64encode(f.read()).decode("utf-8")
+
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=4096,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": pdf_data,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "Extract every grocery/food item name from this Amazon/Whole Foods receipt. "
+                            "Return ONLY a JSON array of strings with the product names. "
+                            "Use the actual product name as shown (e.g., '365 Organic Whole Milk' not just 'milk'). "
+                            "Exclude non-food items, fees, tips, taxes, and delivery charges. "
+                            "Example: [\"365 Organic Whole Milk\", \"Honeycrisp Apples\", \"Dave's Killer Bread\"]"
+                        ),
+                    },
+                ],
+            }],
+        )
+
+        text = response.content[0].text.strip()
+        # Extract JSON array from response
+        try:
+            # Handle case where Claude wraps in markdown code block
+            if "```" in text:
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+                text = text.strip()
+            items = json.loads(text)
+            if isinstance(items, list):
+                for name in items:
+                    if isinstance(name, str) and name.strip():
+                        all_items.append({"name": name.strip(), "category": guess_category(name.strip())})
+                print(f"    Found {len(items)} items")
+            else:
+                print(f"    Warning: unexpected response format from {filepath}")
+        except json.JSONDecodeError:
+            print(f"    Warning: could not parse response from {filepath}")
+            print(f"    Raw: {text[:200]}")
+
+    return all_items
 
 
 def guess_category(item_name: str) -> str:
@@ -157,17 +230,42 @@ def upload_to_notion(items: list[dict]) -> int:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python -m scripts.import_grocery_history <orders.csv>")
-        print("\nAccepts CSV (with 'Item Name' or 'Product' column) or plain text (one item per line).")
+        print("Usage: python -m scripts.import_grocery_history <file_or_dir> [file2 ...]")
+        print("\nAccepts:")
+        print("  CSV file (with 'Item Name' or 'Product' column)")
+        print("  Text file (one item per line)")
+        print("  PDF files (Amazon/Whole Foods receipts — uses Claude to extract)")
+        print("  Directory path (processes all PDFs in it)")
         sys.exit(1)
 
-    filepath = sys.argv[1]
-    if not os.path.exists(filepath):
-        print(f"Error: File not found: {filepath}")
+    # Collect all input files
+    input_files = []
+    for arg in sys.argv[1:]:
+        if os.path.isdir(arg):
+            pdfs = sorted(glob.glob(os.path.join(arg, "*.pdf")))
+            print(f"Found {len(pdfs)} PDFs in {arg}/")
+            input_files.extend(pdfs)
+        elif os.path.exists(arg):
+            input_files.append(arg)
+        else:
+            print(f"Warning: File not found: {arg}")
+
+    if not input_files:
+        print("Error: No valid input files found")
         sys.exit(1)
 
-    print(f"Parsing {filepath}...")
-    items = parse_csv(filepath)
+    # Split into PDFs and CSV/text
+    pdf_files = [f for f in input_files if f.lower().endswith(".pdf")]
+    csv_files = [f for f in input_files if not f.lower().endswith(".pdf")]
+
+    items = []
+    if pdf_files:
+        print(f"Processing {len(pdf_files)} PDF receipt(s) with Claude...")
+        items.extend(parse_pdfs(pdf_files))
+    for filepath in csv_files:
+        print(f"Parsing {filepath}...")
+        items.extend(parse_csv(filepath))
+
     print(f"Found {len(items)} total item entries")
 
     deduped = deduplicate(items)
