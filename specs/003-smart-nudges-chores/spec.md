@@ -11,6 +11,13 @@ Erin is a stay-at-home mom managing two young children (Vienna, 5, in school; Zo
 
 The family assistant bot already has full access to Erin's Google Calendar, daily routine templates (day-specific, stored in Notion), and knowledge of who has the kids on any given day. This feature adds proactive, time-aware nudges that leverage that existing context to help Erin stay on track throughout the day without her having to ask.
 
+## Clarifications
+
+### Session 2026-02-23
+
+- Q: Default departure assumption — should events be assumed to require departure or not? → A: All events assume departure UNLESS they contain virtual indicators (Zoom/Meet link, "call", "virtual" in title). Missing a real event is worse than an occasional unnecessary nudge.
+- Q: Should nudges have quiet hours restricting when they can fire? → A: Yes, nudges only fire between 7:00 AM and 8:30 PM. Matches daily briefing start and respects evening wind-down.
+
 ## User Scenarios & Testing
 
 ### User Story 1 — Departure Nudges (Priority: P1)
@@ -99,7 +106,7 @@ Erin can tell the bot her chore preferences (frequency, which chores she dislike
 
 - **FR-001**: System MUST scan Erin's calendar periodically and identify events that require leaving the house.
 - **FR-002**: System MUST send departure nudge messages 15–30 minutes before qualifying calendar events via the existing messaging channel.
-- **FR-003**: System MUST distinguish between in-person events (requiring departure) and virtual events (no nudge needed) using event metadata and title keywords.
+- **FR-003**: System MUST assume all calendar events require departure by default. Events are excluded from departure nudges ONLY if they contain virtual indicators: a video conferencing link (Zoom, Google Meet, Teams), or keywords like "call", "virtual", "remote", "online" in the title or description.
 - **FR-004**: System MUST allow Erin to trigger a laundry workflow by sending a natural language message (e.g., "started laundry," "doing a load of wash").
 - **FR-005**: System MUST send timed reminders at configurable intervals for washer completion (~45 min) and dryer completion (~60 min).
 - **FR-006**: System MUST cross-reference laundry timing with calendar events and warn if the dryer cycle will conflict with a departure.
@@ -118,6 +125,7 @@ Erin can tell the bot her chore preferences (frequency, which chores she dislike
 - **NFR-002**: The system MUST NOT send more than 8 proactive messages per day (excluding direct replies to Erin's messages) to avoid notification fatigue.
 - **NFR-003**: All nudge messages MUST use a warm, encouraging tone — never nagging or guilt-inducing.
 - **NFR-004**: Erin MUST be able to silence all nudges for the day with a single command ("quiet day" or "no nudges today").
+- **NFR-005**: Proactive nudges MUST only be sent between 7:00 AM and 8:30 PM Pacific time. Events outside this window do not trigger nudges.
 
 ### Key Entities
 
