@@ -99,9 +99,9 @@
 
 ### Implementation for User Story 4
 
-- [ ] T022 [P] [US4] Implement set_chore_preference(chore_name, preference, preferred_days, frequency) in src/tools/chores.py — fuzzy-match chore_name against Chores DB, update matching fields (only non-None params), return confirmation
-- [ ] T023 [P] [US4] Implement get_chore_history(days=7) in src/tools/chores.py — query Nudge Queue for nudge_type=chore AND Status=Done within date range, join with Chores DB for names and durations, return formatted summary grouped by date
-- [ ] T024 [US4] Register set_chore_preference and get_chore_history tools in src/assistant.py — set_chore_preference with chore_name (required), preference/preferred_days/frequency (optional); get_chore_history with optional days param; update system prompt with natural language examples ("I hate cleaning bathrooms" → preference=dislike)
+- [x] T022 [P] [US4] Implement set_chore_preference(chore_name, preference, preferred_days, frequency) in src/tools/chores.py — fuzzy-match chore_name against Chores DB, update matching fields (only non-None params), return confirmation
+- [x] T023 [P] [US4] Implement get_chore_history(days=7) in src/tools/chores.py — query Nudge Queue for nudge_type=chore AND Status=Done within date range, join with Chores DB for names and durations, return formatted summary grouped by date
+- [x] T024 [US4] Register set_chore_preference and get_chore_history tools in src/assistant.py — set_chore_preference with chore_name (required), preference/preferred_days/frequency (optional); get_chore_history with optional days param; update system prompt with natural language examples ("I hate cleaning bathrooms" → preference=dislike)
 
 **Checkpoint**: Chore preferences and history — Erin can set preferences conversationally, view history, and suggestions adapt to preferences
 

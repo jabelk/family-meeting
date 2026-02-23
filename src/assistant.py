@@ -156,7 +156,12 @@ She can still message you and get responses — only proactive nudges stop.
 "did it", call complete_chore with the chore name. If she says "skip", "not \
 now", or "pass", call skip_chore. Be encouraging when she completes chores \
 and guilt-free when she skips.
-25. When Erin says "started laundry", "doing a load", "washing clothes", etc., \
+25. When Erin mentions chore preferences ("I like to vacuum on Wednesdays", \
+"I hate cleaning bathrooms", "can we do laundry every other day?"), call \
+set_chore_preference. Map natural language: "hate"/"ugh" → dislike, \
+"love"/"enjoy" → like. When she asks "what chores have I done?" or "chore \
+history", call get_chore_history.
+26. When Erin says "started laundry", "doing a load", "washing clothes", etc., \
 call start_laundry. She can optionally specify times ("washer takes 50 min"). \
 When she says "moved to dryer" or "put it in the dryer", call advance_laundry. \
 If she says "never mind", "didn't do laundry", or "cancel laundry", call \
@@ -557,6 +562,47 @@ TOOLS = [
         "description": "Cancel the active laundry session and all pending laundry reminders. Use when Erin says 'never mind', 'didn't do laundry', or 'cancel laundry'.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "name": "set_chore_preference",
+        "description": "Update Erin's preferences for a chore: how often, preferred days, and like/dislike. Use when Erin says things like 'I like to vacuum on Wednesdays', 'I hate cleaning bathrooms', 'vacuum weekly instead of daily'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "chore_name": {"type": "string", "description": "Chore to update preferences for."},
+                "preference": {
+                    "type": "string",
+                    "description": "'like', 'neutral', or 'dislike'. Use 'like' for 'I enjoy...', 'dislike' for 'I hate...', etc.",
+                    "enum": ["like", "neutral", "dislike"],
+                },
+                "preferred_days": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Preferred days of the week (e.g., ['Monday', 'Wednesday']).",
+                },
+                "frequency": {
+                    "type": "string",
+                    "description": "How often: 'daily', 'every_other_day', 'weekly', 'biweekly', 'monthly'.",
+                    "enum": ["daily", "every_other_day", "weekly", "biweekly", "monthly"],
+                },
+            },
+            "required": ["chore_name"],
+        },
+    },
+    {
+        "name": "get_chore_history",
+        "description": "Show what chores Erin has completed recently. Use when she asks 'what have I done this week?', 'chore history', etc.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "description": "Number of days to look back. Default 7.",
+                    "default": 7,
+                },
+            },
+            "required": [],
+        },
+    },
     # --- Proactive tools (US2, US3) ---
     {
         "name": "check_reorder_items",
@@ -703,6 +749,10 @@ TOOL_FUNCTIONS = {
     "set_quiet_day": lambda **kw: nudges.set_quiet_day(),
     "complete_chore": lambda **kw: chores.complete_chore(kw["chore_name"]),
     "skip_chore": lambda **kw: chores.skip_chore(kw["chore_name"]),
+    "set_chore_preference": lambda **kw: chores.set_chore_preference(
+        kw["chore_name"], kw.get("preference"), kw.get("preferred_days"), kw.get("frequency")
+    ),
+    "get_chore_history": lambda **kw: chores.get_chore_history(kw.get("days", 7)),
     "start_laundry": lambda **kw: laundry.start_laundry_session(
         kw.get("washer_minutes", 45), kw.get("dryer_minutes", 60)
     ),
