@@ -1,18 +1,19 @@
-"""Import Whole Foods order history into the Notion Grocery History database.
+"""Import grocery order history from multiple stores into Notion Grocery History.
 
-Parses CSV, text, or PDF exports from Amazon/Whole Foods orders, deduplicates
-items, counts purchase frequency, and marks items ordered 50%+ of the time as
-staples.
+Parses PDF receipts from Amazon/Whole Foods, Costco, and Raley's. Uses Claude
+to extract items (decoding store abbreviations), then normalizes names across
+stores so "CINNTOASTCRN" (Costco) and "Gm Cinn Toast Crunch Xl" (Raley's)
+merge into one canonical "Cinnamon Toast Crunch" entry.
 
 Usage:
-    python -m scripts.import_grocery_history orders.csv
     python -m scripts.import_grocery_history receipt1.pdf receipt2.pdf ...
     python -m scripts.import_grocery_history data/receipts/    (all PDFs in dir)
+    python -m scripts.import_grocery_history --clear data/receipts/  (wipe DB first)
 
 Input formats:
     CSV:  Expected columns: Item Name (or Product), Category (optional)
     Text: One item per line
-    PDF:  Amazon/Whole Foods order receipts — uses Claude to extract item names
+    PDF:  Receipts from Amazon/Whole Foods, Costco, Raley's — uses Claude to extract
 """
 
 import base64
@@ -40,23 +41,37 @@ CATEGORY_KEYWORDS = {
     "Produce": ["apple", "banana", "lettuce", "tomato", "onion", "potato", "carrot",
                  "broccoli", "spinach", "avocado", "pepper", "celery", "garlic",
                  "berry", "grape", "lemon", "lime", "orange", "cucumber", "corn",
-                 "mushroom", "kale", "cilantro", "basil", "ginger", "fruit", "veggie"],
+                 "mushroom", "kale", "cilantro", "basil", "ginger", "fruit", "veggie",
+                 "scallion", "green onion", "zucchini", "squash", "pear", "mango",
+                 "blueberr", "strawberr", "raspberr", "cranberr"],
     "Meat": ["chicken", "beef", "pork", "turkey", "salmon", "shrimp", "bacon",
-             "sausage", "steak", "ground", "tilapia", "cod", "lamb", "ham", "meat"],
+             "sausage", "steak", "ground", "tilapia", "cod", "lamb", "ham", "meat",
+             "tenderloin", "bulgogi", "prime tender"],
     "Dairy": ["milk", "cheese", "yogurt", "butter", "cream", "egg", "sour cream",
-              "cottage", "mozzarella", "cheddar", "parmesan"],
+              "cottage", "mozzarella", "cheddar", "parmesan", "fage", "greek yogurt"],
     "Pantry": ["rice", "pasta", "bread", "cereal", "flour", "sugar", "oil", "sauce",
                "soup", "bean", "tortilla", "cracker", "chip", "nut", "peanut",
-               "oat", "honey", "syrup", "vinegar", "spice", "salt", "pepper"],
+               "oat", "honey", "syrup", "vinegar", "spice", "salt", "pesto",
+               "toast crunch", "lucky charms", "raisin bran", "froot loop",
+               "cookie crisp", "frosted wheat", "mini wheat"],
     "Frozen": ["frozen", "ice cream", "pizza", "waffle", "fries"],
-    "Bakery": ["bagel", "muffin", "croissant", "cake", "donut", "roll", "baguette"],
+    "Bakery": ["bagel", "muffin", "croissant", "cake", "donut", "roll", "baguette",
+               "dave's", "killer bread"],
     "Beverages": ["water", "juice", "soda", "coffee", "tea", "coke", "sprite",
-                  "sparkling", "drink", "beer", "wine", "kombucha"],
+                  "sparkling", "drink", "beer", "wine", "kombucha", "poppi",
+                  "snapple", "dr pepper", "zero sugar"],
+    "Snacks": ["cookie", "cracker", "chip", "popcorn", "pretzel", "bar", "granola",
+               "simple mills"],
+    "Supplements": ["protein powder", "vitamin", "supplement", "orgain", "collagen"],
 }
 
 
 def parse_pdfs(filepaths: list[str]) -> list[dict]:
-    """Extract grocery items with order dates from PDF receipts using Claude."""
+    """Extract grocery items with order dates from PDF receipts using Claude.
+
+    Handles Amazon/Whole Foods, Costco, and Raley's receipt formats.
+    Claude decodes store-specific abbreviations into readable product names.
+    """
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         print("Error: ANTHROPIC_API_KEY required for PDF parsing")
@@ -87,13 +102,26 @@ def parse_pdfs(filepaths: list[str]) -> list[dict]:
                     {
                         "type": "text",
                         "text": (
-                            "Extract the order date and every grocery/food item from this Amazon/Whole Foods receipt. "
+                            "Extract grocery/food items from this receipt. It may be from "
+                            "Amazon/Whole Foods, Costco, or Raley's.\n\n"
                             "Return ONLY a JSON object with this structure:\n"
-                            '{"order_date": "YYYY-MM-DD", "items": [{"name": "Product Name", "qty": 1, "price": 4.99}, ...]}\n'
-                            "Use the actual product name as shown (e.g., '365 Organic Whole Milk' not just 'milk'). "
-                            "Include quantity and price per item if shown. Default qty to 1 if not listed. "
-                            "Exclude non-food items, fees, tips, taxes, and delivery charges. "
-                            "For the date, use the order/delivery date shown on the receipt."
+                            '{"store": "Store Name", "order_date": "YYYY-MM-DD", '
+                            '"items": [{"name": "Product Name", "qty": 1, "price": 4.99}, ...]}\n\n'
+                            "IMPORTANT RULES:\n"
+                            "- Decode ALL abbreviations into full readable product names:\n"
+                            '  - Costco: "CINNTOASTCRN" → "Cinnamon Toast Crunch", '
+                            '"KS COOKD BCN" → "Kirkland Cooked Bacon", '
+                            '"ORG WHL MILK" → "Organic Whole Milk", '
+                            '"FAGE GRK 48Z" → "Fage Greek Yogurt 48oz"\n'
+                            '  - Raley\'s: "Gm Cinn Toast Crunch Xl" → "General Mills Cinnamon Toast Crunch XL", '
+                            '"Kell Frstd Mini Wht B/S" → "Kellogg\'s Frosted Mini Wheats Bite Size"\n'
+                            "- For Amazon/Whole Foods, use the product name as shown\n"
+                            "- Include quantity and per-unit price. Default qty to 1.\n"
+                            "- For Costco, the price shown is total price; if qty>1, compute per-unit price\n"
+                            "- Exclude non-food items (cleaning, paper goods, etc.), fees, tips, taxes, "
+                            "delivery charges, and coupon/discount lines\n"
+                            "- For the date, use the order/purchase/delivery date on the receipt\n"
+                            "- For store, use: 'Whole Foods', 'Costco', or 'Raley\\'s'"
                         ),
                     },
                 ],
@@ -109,15 +137,16 @@ def parse_pdfs(filepaths: list[str]) -> list[dict]:
                 text = text.strip()
             data = json.loads(text)
 
+            store = data.get("store", "Unknown")
             order_date = data.get("order_date", "")
             items = data.get("items", [])
             if isinstance(items, list):
                 for item in items:
                     if isinstance(item, str):
-                        # Backwards compat: plain string list
                         all_items.append({
                             "name": item.strip(),
                             "category": guess_category(item.strip()),
+                            "store": store,
                             "order_date": order_date,
                             "qty": 1,
                             "price": None,
@@ -127,12 +156,13 @@ def parse_pdfs(filepaths: list[str]) -> list[dict]:
                         all_items.append({
                             "name": name,
                             "category": guess_category(name),
+                            "store": store,
                             "order_date": order_date,
                             "qty": item.get("qty", 1),
                             "price": item.get("price"),
                         })
-                date_str = f" (ordered {order_date})" if order_date else ""
-                print(f"    Found {len(items)} items{date_str}")
+                date_str = f" ({order_date})" if order_date else ""
+                print(f"    [{store}] {len(items)} items{date_str}")
             else:
                 print(f"    Warning: unexpected response format from {filepath}")
         except json.JSONDecodeError:
@@ -140,6 +170,114 @@ def parse_pdfs(filepaths: list[str]) -> list[dict]:
             print(f"    Raw: {text[:200]}")
 
     return all_items
+
+
+def normalize_items(items: list[dict]) -> list[dict]:
+    """Use Claude to normalize item names across stores.
+
+    Groups items that are the same product under a canonical name, e.g.:
+    - "Organic Whole Milk" (Costco) + "Horizon Organic DHA Omega-3 Milk" (WF)
+      → kept separate (different products)
+    - "Cinnamon Toast Crunch" (Costco) + "General Mills Cinnamon Toast Crunch XL" (Raley's)
+      → merged as "Cinnamon Toast Crunch"
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return items  # Skip normalization if no API key
+
+    # Collect unique names with their stores
+    unique_names: dict[str, set[str]] = {}
+    for item in items:
+        unique_names.setdefault(item["name"], set()).add(item.get("store", "Unknown"))
+
+    if len(unique_names) < 2:
+        return items
+
+    print(f"\nNormalizing {len(unique_names)} unique item names across stores...")
+
+    client = Anthropic(api_key=api_key)
+
+    # Build the list for Claude — include store info to help matching
+    name_list = []
+    for name, stores in sorted(unique_names.items()):
+        store_str = "/".join(sorted(stores))
+        name_list.append(f"  {name} [{store_str}]")
+
+    # Process in batches of ~150 to stay within context limits
+    batch_size = 150
+    name_entries = list(unique_names.keys())
+    mapping: dict[str, str] = {}
+
+    for batch_start in range(0, len(name_entries), batch_size):
+        batch = name_entries[batch_start:batch_start + batch_size]
+        batch_lines = []
+        for name in batch:
+            stores = "/".join(sorted(unique_names[name]))
+            batch_lines.append(f"  {name} [{stores}]")
+
+        batch_num = batch_start // batch_size + 1
+        total_batches = (len(name_entries) + batch_size - 1) // batch_size
+        if total_batches > 1:
+            print(f"  Batch {batch_num}/{total_batches} ({len(batch)} items)...")
+
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=8192,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "You are normalizing a grocery list across multiple stores (Whole Foods, "
+                    "Costco, Raley's). Items that are the SAME product should get the SAME "
+                    "canonical name.\n\n"
+                    "RULES:\n"
+                    "- Merge items that are clearly the same product regardless of store/brand/size:\n"
+                    '  e.g., "Cinnamon Toast Crunch" + "General Mills Cinnamon Toast Crunch XL" → "Cinnamon Toast Crunch"\n'
+                    '  e.g., "Organic Baby Spinach" (WF) + "Organic Spinach" (Costco) → "Organic Spinach"\n'
+                    '  e.g., "Organic Banana, 1 Each" + "Bananas Organic" → "Organic Bananas"\n'
+                    "- Keep items SEPARATE if they're genuinely different products:\n"
+                    '  e.g., "Horizon Organic DHA Omega-3 Milk" vs "Kirkland Organic Whole Milk" → different\n'
+                    '  e.g., "Fage Greek Yogurt" vs "Straus Family Creamery Greek Yogurt" → different\n'
+                    "- Use short, clean canonical names (drop size/oz, store brand prefixes like '365 by WFM')\n"
+                    "- Keep brand names when they distinguish the product (e.g., 'Dave\\'s Killer Bread')\n\n"
+                    "Return ONLY a JSON object mapping original name → canonical name.\n"
+                    "Items with no match just map to a cleaned-up version of themselves.\n\n"
+                    "Items:\n" + "\n".join(batch_lines)
+                ),
+            }],
+        )
+
+        text = response.content[0].text.strip()
+        try:
+            if "```" in text:
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+                text = text.strip()
+            batch_mapping = json.loads(text)
+            if isinstance(batch_mapping, dict):
+                mapping.update(batch_mapping)
+        except json.JSONDecodeError:
+            print(f"    Warning: normalization parse error, using original names for batch")
+            for name in batch:
+                mapping[name] = name
+
+    # Count merges
+    canonical_set = set(mapping.values())
+    merged = len(mapping) - len(canonical_set)
+    if merged > 0:
+        print(f"  Merged {merged} duplicate items across stores → {len(canonical_set)} unique")
+
+    # Apply mapping
+    for item in items:
+        original = item["name"]
+        canonical = mapping.get(original, original)
+        if canonical != original:
+            item["original_name"] = original
+        item["name"] = canonical
+        # Re-categorize based on canonical name
+        item["category"] = guess_category(canonical)
+
+    return items
 
 
 def guess_category(item_name: str) -> str:
@@ -194,13 +332,14 @@ def parse_csv(filepath: str) -> list[dict]:
 
 
 def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
-    """Count frequency for each item, track order dates, and deduplicate."""
+    """Count frequency for each item, track order dates and stores, and deduplicate."""
     from datetime import datetime
 
     name_counter: Counter = Counter()
     name_to_category: dict[str, str] = {}
     name_to_dates: dict[str, list[str]] = {}
     name_to_prices: dict[str, list[float]] = {}
+    name_to_stores: dict[str, set[str]] = {}
 
     for item in items:
         normalized = item["name"].strip()
@@ -216,6 +355,10 @@ def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
         if price is not None:
             name_to_prices.setdefault(normalized, []).append(float(price))
 
+        store = item.get("store", "")
+        if store:
+            name_to_stores.setdefault(normalized, set()).add(store)
+
     if not total_orders:
         total_orders = len(set(d for dates in name_to_dates.values() for d in dates)) or 1
     staple_threshold = max(total_orders * 0.5, 2)
@@ -224,6 +367,7 @@ def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
     for name, freq in name_counter.most_common():
         dates = sorted(set(name_to_dates.get(name, [])))
         prices = name_to_prices.get(name, [])
+        stores = sorted(name_to_stores.get(name, set()))
 
         # Calculate average days between orders
         avg_days = None
@@ -243,6 +387,7 @@ def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
             "category": name_to_category[name],
             "frequency": freq,
             "staple": freq >= staple_threshold,
+            "stores": stores,
             "order_dates": dates,
             "first_ordered": dates[0] if dates else None,
             "last_ordered": dates[-1] if dates else None,
@@ -250,6 +395,35 @@ def deduplicate(items: list[dict], total_orders: int = 0) -> list[dict]:
             "avg_price": round(sum(prices) / len(prices), 2) if prices else None,
         })
     return results
+
+
+def clear_notion_db() -> int:
+    """Delete all existing pages from the Grocery History database."""
+    if not NOTION_TOKEN or not NOTION_GROCERY_HISTORY_DB:
+        return 0
+
+    client = Client(auth=NOTION_TOKEN)
+    deleted = 0
+
+    # Paginate through all pages
+    has_more = True
+    start_cursor = None
+    while has_more:
+        kwargs = {"database_id": NOTION_GROCERY_HISTORY_DB, "page_size": 100}
+        if start_cursor:
+            kwargs["start_cursor"] = start_cursor
+        response = client.databases.query(**kwargs)
+
+        for page in response["results"]:
+            client.pages.update(page_id=page["id"], archived=True)
+            deleted += 1
+            if deleted % 50 == 0:
+                print(f"  ... {deleted} items cleared")
+
+        has_more = response.get("has_more", False)
+        start_cursor = response.get("next_cursor")
+
+    return deleted
 
 
 def upload_to_notion(items: list[dict]) -> int:
@@ -275,6 +449,10 @@ def upload_to_notion(items: list[dict]) -> int:
                 properties["Avg Reorder Days"] = {"number": item["avg_reorder_days"]}
             if item.get("avg_price") is not None:
                 properties["Avg Price"] = {"number": item["avg_price"]}
+            if item.get("stores"):
+                properties["Store"] = {
+                    "multi_select": [{"name": s} for s in item["stores"]]
+                }
 
             client.pages.create(
                 parent={"database_id": NOTION_GROCERY_HISTORY_DB},
@@ -291,17 +469,24 @@ def upload_to_notion(items: list[dict]) -> int:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python -m scripts.import_grocery_history <file_or_dir> [file2 ...]")
+        print("Usage: python -m scripts.import_grocery_history [--clear] <file_or_dir> [file2 ...]")
+        print("\nOptions:")
+        print("  --clear    Delete all existing items from Notion DB before importing")
         print("\nAccepts:")
         print("  CSV file (with 'Item Name' or 'Product' column)")
         print("  Text file (one item per line)")
-        print("  PDF files (Amazon/Whole Foods receipts — uses Claude to extract)")
+        print("  PDF files (receipts from Whole Foods, Costco, Raley's)")
         print("  Directory path (processes all PDFs in it)")
         sys.exit(1)
 
+    # Parse flags
+    args = sys.argv[1:]
+    do_clear = "--clear" in args
+    args = [a for a in args if not a.startswith("--")]
+
     # Collect all input files
     input_files = []
-    for arg in sys.argv[1:]:
+    for arg in args:
         if os.path.isdir(arg):
             pdfs = sorted(glob.glob(os.path.join(arg, "*.pdf")))
             print(f"Found {len(pdfs)} PDFs in {arg}/")
@@ -327,19 +512,39 @@ def main():
         print(f"Parsing {filepath}...")
         items.extend(parse_csv(filepath))
 
-    print(f"Found {len(items)} total item entries")
+    print(f"\nFound {len(items)} total item entries")
+
+    # Normalize names across stores
+    if any(item.get("store") for item in items):
+        items = normalize_items(items)
 
     deduped = deduplicate(items)
     staple_count = sum(1 for i in deduped if i["staple"])
     print(f"Deduplicated to {len(deduped)} unique items ({staple_count} staples)")
 
-    print("\nTop 10 items by frequency:")
-    for item in deduped[:10]:
-        star = " ⭐" if item["staple"] else ""
+    # Store summary
+    all_stores = set()
+    for item in deduped:
+        all_stores.update(item.get("stores", []))
+    if all_stores:
+        print(f"Stores: {', '.join(sorted(all_stores))}")
+        multi_store = sum(1 for i in deduped if len(i.get("stores", [])) > 1)
+        if multi_store:
+            print(f"Items found at multiple stores: {multi_store}")
+
+    print("\nTop 15 items by frequency:")
+    for item in deduped[:15]:
+        star = " *" if item["staple"] else ""
         reorder = f" (every ~{item['avg_reorder_days']}d)" if item.get("avg_reorder_days") else ""
         price = f" ${item['avg_price']:.2f}" if item.get("avg_price") else ""
         last = f" last:{item['last_ordered']}" if item.get("last_ordered") else ""
-        print(f"  {item['frequency']}x {item['name']} [{item['category']}]{price}{reorder}{last}{star}")
+        stores = f" @{'+'.join(item['stores'])}" if item.get("stores") else ""
+        print(f"  {item['frequency']}x {item['name']} [{item['category']}]{price}{reorder}{last}{stores}{star}")
+
+    if do_clear:
+        print(f"\nClearing existing Notion Grocery History database...")
+        cleared = clear_notion_db()
+        print(f"Cleared {cleared} existing items")
 
     print(f"\nUploading to Notion Grocery History database...")
     created = upload_to_notion(deduped)
