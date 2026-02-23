@@ -33,6 +33,7 @@ async function ensureAuth() {
 
   anylist = new AnyList({ email: EMAIL, password: PASSWORD });
   await anylist.login();
+  await anylist.getLists();
   authenticated = true;
   console.log("AnyList authenticated successfully");
 }
@@ -42,7 +43,7 @@ async function withReauth(fn) {
     await ensureAuth();
     return await fn();
   } catch (err) {
-    if (err.message && err.message.includes("401")) {
+    if (err.message && (err.message.includes("401") || err.message.includes("auth"))) {
       console.log("Auth expired, re-authenticating...");
       authenticated = false;
       await ensureAuth();
@@ -53,9 +54,12 @@ async function withReauth(fn) {
 }
 
 function findList(listName) {
-  const lists = anylist.getLists();
   const name = (listName || "Grocery").toLowerCase();
-  return lists.find((l) => l.name.toLowerCase() === name) || lists[0];
+  const list = anylist.getListByName(listName || "Grocery");
+  if (list) return list;
+  // Fallback: try partial match
+  const lists = anylist.lists || [];
+  return lists.find((l) => l.name.toLowerCase().includes(name));
 }
 
 // Health check
@@ -63,10 +67,25 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", authenticated });
 });
 
+// List all available lists
+app.get("/lists", async (_req, res) => {
+  try {
+    const lists = await withReauth(async () => {
+      await anylist.getLists();
+      return (anylist.lists || []).map((l) => ({ name: l.name, id: l.identifier, itemCount: l.items.length }));
+    });
+    res.json({ lists });
+  } catch (err) {
+    console.error("GET /lists error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get items from a list
 app.get("/items", async (req, res) => {
   try {
     const items = await withReauth(async () => {
+      await anylist.getLists();
       const list = findList(req.query.list);
       if (!list) return [];
       return list.items.map((item) => ({
@@ -89,8 +108,9 @@ app.post("/add", async (req, res) => {
     if (!item) return res.status(400).json({ error: "item is required" });
 
     await withReauth(async () => {
+      await anylist.getLists();
       const list = findList(listName);
-      if (!list) throw new Error("List not found");
+      if (!list) throw new Error(`List not found: ${listName || "Grocery"}`);
       const newItem = anylist.createItem({ name: item });
       await list.addItem(newItem);
     });
@@ -109,8 +129,9 @@ app.post("/add-bulk", async (req, res) => {
       return res.status(400).json({ error: "items array is required" });
 
     const added = await withReauth(async () => {
+      await anylist.getLists();
       const list = findList(listName);
-      if (!list) throw new Error("List not found");
+      if (!list) throw new Error(`List not found: ${listName || "Grocery"}`);
 
       let count = 0;
       for (const name of items) {
@@ -134,12 +155,17 @@ app.post("/remove", async (req, res) => {
     if (!item) return res.status(400).json({ error: "item is required" });
 
     await withReauth(async () => {
+      await anylist.getLists();
       const list = findList(listName);
-      if (!list) throw new Error("List not found");
+      if (!list) throw new Error(`List not found: ${listName || "Grocery"}`);
       const existing = list.items.find(
         (i) => i.name.toLowerCase() === item.toLowerCase()
       );
-      if (existing) await list.removeItem(existing);
+      if (existing) {
+        await list.removeItem(existing);
+      } else {
+        throw new Error(`Item not found: ${item}`);
+      }
     });
     res.json({ status: "removed", item });
   } catch (err) {
@@ -153,8 +179,9 @@ app.post("/clear", async (req, res) => {
   try {
     const { list: listName } = req.body || {};
     const cleared = await withReauth(async () => {
+      await anylist.getLists();
       const list = findList(listName);
-      if (!list) throw new Error("List not found");
+      if (!list) throw new Error(`List not found: ${listName || "Grocery"}`);
 
       let count = 0;
       for (const item of [...list.items]) {
