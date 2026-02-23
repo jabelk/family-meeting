@@ -2,7 +2,7 @@
 
 **Feature Branch**: `002-proactive-recipes-automation`
 **Created**: 2026-02-22
-**Status**: Draft
+**Status**: Implemented (deployed to NUC 2026-02-23)
 **Input**: Proactive scheduled automations (grocery reorder suggestions, daily briefing, meal plan generation, budget summaries, calendar conflict detection, action item reminders) via n8n workflows, plus recipe cookbook management where Erin can photograph physical cookbook pages, build a searchable recipe catalogue with OCR-extracted ingredients and instructions, and push ingredients directly to the grocery list.
 
 ## Context
@@ -233,6 +233,12 @@ Sunday afternoon before the family meeting, Mom Bot pulls the YNAB budget data a
 - Q: Should the recipe catalogue support online recipe URLs in addition to cookbook photos? → A: Photos only for this feature. URL-based recipe import noted as a future enhancement.
 - Q: Should Saturday's grocery reorder and meal plan be separate messages or combined? → A: Combined into one Saturday morning message — meal plan + merged grocery list that includes both reorder staples and meal-specific ingredients.
 - Q: How should "Last Ordered" dates stay fresh for reorder accuracy? → A: Update when Erin confirms "groceries ordered" after AnyList push. If no confirmation within ~2 days of pushing to AnyList, send a gentle reminder to confirm the order was placed.
+
+### Session 2026-02-23 (Implementation)
+
+- Q: How should recipe photo data flow from WhatsApp to the extraction tool? → A: Store in module-level buffer in assistant.py. Claude's tool call only passes `cookbook_name`; the handler retrieves buffered images directly. This avoids base64 truncation in Claude's tool-call JSON.
+- Q: How to handle multi-page recipes? → A: Images accumulate in a buffer across consecutive messages. All buffered images are combined into one Claude vision call when `extract_and_save_recipe` is invoked. System prompt instructs Claude to wait for all pages before extracting.
+- Q: Which Claude model for production? → A: Temporarily using claude-sonnet-4-20250514 (Haiku was overloaded 2026-02-23). Plan to swap back to claude-haiku-4-5-20251001 for cost savings when available. Model ID is in 3 files: assistant.py, recipes.py, proactive.py.
 
 ## Success Criteria *(mandatory)*
 

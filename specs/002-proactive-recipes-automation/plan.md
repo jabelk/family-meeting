@@ -1,6 +1,6 @@
 # Implementation Plan: Proactive Automations & Recipe Management
 
-**Branch**: `002-proactive-recipes-automation` | **Date**: 2026-02-22 | **Spec**: [spec.md](./spec.md)
+**Branch**: `002-proactive-recipes-automation` (merged to `main`) | **Date**: 2026-02-22 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/002-proactive-recipes-automation/spec.md`
 
 ## Summary
@@ -10,7 +10,7 @@ Add proactive scheduled automations and recipe cookbook management to the existi
 ## Technical Context
 
 **Language/Version**: Python 3.12 (existing codebase)
-**Primary Dependencies**: FastAPI, anthropic SDK (Claude Haiku 4.5 + Claude vision for OCR), notion-client >=2.2.0,<2.3.0, boto3 (Cloudflare R2 S3-compatible API), httpx, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn
+**Primary Dependencies**: FastAPI, anthropic SDK (Claude Sonnet 4 for vision/OCR — temporary, plan to use Haiku 4.5 when available), notion-client >=2.2.0,<2.3.0, boto3 (Cloudflare R2 S3-compatible API), httpx, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn
 **Storage**: Notion (2 new databases: Recipes, Cookbooks) + Cloudflare R2 (recipe photo storage) + existing 5 Notion databases
 **Testing**: pytest + manual WhatsApp integration testing
 **Target Platform**: Linux server (Docker on home NUC) + Cloudflare Tunnel
@@ -77,6 +77,31 @@ tests/                        # Future: pytest suite (not in initial tasks)
 ```
 
 **Structure Decision**: Extends existing single-project layout. Two new tool modules (`recipes.py`, `proactive.py`) keep new logic separated from existing Notion/calendar tools. New n8n instance added to docker-compose alongside existing services.
+
+## Implementation Notes (2026-02-23)
+
+### Deployed Stack
+- **fastapi** (port 8000): Main application with 10+ API endpoints + WhatsApp webhook
+- **anylist-sidecar** (port 3000): Node.js Express sidecar for AnyList grocery integration
+- **cloudflared**: Cloudflare Tunnel for public HTTPS at mombot.sierrastoryco.com
+- **n8n-mombot** (port 5679): Dedicated n8n instance for scheduled workflows (container running, workflows not yet created)
+
+### Key Architecture Decisions During Implementation
+1. **Image buffer pattern**: Recipe photos stored in module-level `_buffered_images` list in assistant.py, not passed through Claude tool-call JSON (base64 truncation issue)
+2. **Multi-page recipes**: Images accumulate across consecutive WhatsApp messages; all combined into one Claude vision call
+3. **Graceful degradation**: All Notion queries wrapped in try/except for properties that may not exist yet (Pending Order, Last Push Date)
+4. **10 automation endpoints**: All protected by X-N8N-Auth header verification; /webhook uses Meta's own verification
+
+### Notion Database IDs
+- Recipes: `3109ffec3341804fb9fececc7f21a799`
+- Cookbooks: `3109ffec3341808c8c98d6b4c986cadb`
+- R2 Bucket: `family-recipes` on account `0a44dcf1a367731493a778e1f0d44990`
+
+### Remaining Work
+- n8n workflow creation (T040-T042) — manual UI setup at http://192.168.4.152:5679
+- E2E validation tasks — manual testing for each user story
+- Documentation (T007, T053, T056)
+- Model swap back to Haiku when available (3 files: assistant.py, recipes.py, proactive.py)
 
 ## Complexity Tracking
 
