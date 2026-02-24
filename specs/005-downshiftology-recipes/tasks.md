@@ -86,8 +86,8 @@
 **Purpose**: System prompt refinements, deployment, and validation
 
 - [x] T018 Update system prompt in src/assistant.py with comprehensive Downshiftology interaction guidelines — explain all 3 recipe tools, natural language pattern mapping ("find me a recipe" → search_downshiftology, "save number N" → import_downshiftology_recipe, "tell me more" → get_downshiftology_details, "what should I make tonight?" → search with dinner course), note that Downshiftology is the only external recipe source
-- [ ] T019 Deploy to NUC via ./scripts/nuc.sh deploy
-- [ ] T020 Run quickstart.md validation — Test 1 (recipe search), Test 2 (recipe details), Test 3 (recipe import), Test 4 (duplicate detection), Test 5 (grocery cross-reference), Test 6 (error handling)
+- [x] T019 Deploy to NUC via ./scripts/nuc.sh deploy
+- [x] T020 Run quickstart.md validation — Test 1 (recipe search), Test 2 (recipe details), Test 3 (recipe import), Test 4 (duplicate detection), Test 5 (grocery cross-reference), Test 6 (error handling)
 
 ---
 
