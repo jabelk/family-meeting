@@ -50,7 +50,7 @@
 - [x] T009 [US1] Implement set_quiet_day() in src/tools/nudges.py — create quiet_day nudge record, cancel all Pending non-laundry nudges for today
 - [x] T010 [US1] Add POST /api/v1/nudges/scan endpoint in src/app.py — protected by verify_n8n_auth, calls scan_upcoming_departures() then process_pending_nudges(), returns JSON response per contracts/nudge-endpoints.md schema, skips processing if check_quiet_day() is true
 - [x] T011 [US1] Register set_quiet_day tool in src/assistant.py — add tool definition with no parameters, wire to nudges.set_quiet_day(), add snooze/dismiss natural language handling in system prompt (snooze → create new Pending nudge +10 min and update original to Snoozed; dismiss → update to Dismissed)
-- [ ] T012 [US1] Create n8n workflow WF-009 (Nudge Scanner) — cron `*/15 7-20 * * *`, HTTP POST to /api/v1/nudges/scan with X-N8N-Auth header
+- [x] T012 [US1] Create n8n workflow WF-009 (Nudge Scanner) — cron `*/15 7-20 * * *`, HTTP POST to /api/v1/nudges/scan with X-N8N-Auth header
 
 **Checkpoint**: Departure nudges fully functional — Erin receives reminders before calendar events, can snooze/dismiss/quiet-day
 
@@ -112,8 +112,8 @@
 **Purpose**: Documentation, deployment, and end-to-end validation
 
 - [x] T025 Update system prompt in src/assistant.py with comprehensive nudge interaction guidelines — warm encouraging tone (NFR-003), examples of snooze/dismiss/done/skip responses, quiet day activation, laundry natural language triggers
-- [ ] T026 Deploy to NUC via ./scripts/nuc.sh deploy and push .env with new Notion database IDs via ./scripts/nuc.sh env
-- [ ] T027 Run quickstart.md validation — Test 1 (departure nudge), Test 2 (virtual exclusion), Test 3 (laundry workflow), Test 4 (chore suggestion), Test 5 (quiet day), Test 6 (daily cap)
+- [x] T026 Deploy to NUC via ./scripts/nuc.sh deploy and push .env with new Notion database IDs via ./scripts/nuc.sh env
+- [x] T027 Run quickstart.md validation — Test 1 (departure nudge), Test 2 (virtual exclusion), Test 3 (laundry workflow), Test 4 (chore suggestion), Test 5 (quiet day), Test 6 (daily cap)
 
 ---
 
