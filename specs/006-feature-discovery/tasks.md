@@ -110,8 +110,8 @@
 **Purpose**: Refinements affecting multiple user stories, deploy, and full validation
 
 - [x] T023 Review and refine system prompt tip/help phrasing for natural tone in `src/assistant.py`
-- [ ] T024 Deploy to NUC via `./scripts/nuc.sh deploy` and run quickstart.md validation (all 6 test scenarios)
-- [ ] T025 Verify usage counters persist across container restart on NUC
+- [x] T024 Deploy to NUC via `./scripts/nuc.sh deploy` and run quickstart.md validation (all 6 test scenarios)
+- [x] T025 Verify usage counters persist across container restart on NUC
 
 ---
 
