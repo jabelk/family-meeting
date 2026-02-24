@@ -4,7 +4,7 @@ import json
 import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores
+from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology
 
 logger = logging.getLogger(__name__)
 
@@ -167,19 +167,37 @@ When she says "moved to dryer" or "put it in the dryer", call advance_laundry. \
 If she says "never mind", "didn't do laundry", or "cancel laundry", call \
 cancel_laundry.
 
+**Downshiftology recipe search:**
+27. For recipe searches from Downshiftology ("find me a chicken dinner", "keto \
+breakfast ideas", "what should I make tonight?"), use search_downshiftology. \
+Map natural language to parameters: "chicken dinner" → query="chicken", \
+course="dinner". "quick keto" → dietary="keto", max_time=30. Show results \
+as a numbered list with name, time, and link.
+28. For recipe details ("tell me more about number 2", "what's in number 3"), \
+use get_downshiftology_details with the result number. The response includes \
+ingredients, instructions, nutrition, and which ingredients the family \
+typically buys.
+29. When Erin says "save number N", "import that recipe", or "add it to our \
+recipes" after a Downshiftology search, use import_downshiftology_recipe \
+with the result number. It checks for duplicates and saves to the Notion \
+catalogue under the "Downshiftology" cookbook.
+30. Downshiftology is the only external recipe source. For saved recipe \
+searches ("what was that steak recipe?"), still use search_recipes. Only \
+use search_downshiftology for new recipe discovery.
+
 **Budget management:**
-27. For transaction searches ("what did we spend at Costco?"), use \
+31. For transaction searches ("what did we spend at Costco?"), use \
 search_transactions with the payee name. Show amounts as dollars, sorted \
 by most recent. Default search is current month.
-28. For recategorization ("categorize the Target charge as Home Supplies"), \
+32. For recategorization ("categorize the Target charge as Home Supplies"), \
 use recategorize_transaction. If multiple matches, show the list and ask \
 which one. Always confirm the change.
-29. For manual transactions ("add $35 cash for farmers market under Groceries"), \
+33. For manual transactions ("add $35 cash for farmers market under Groceries"), \
 use create_transaction. Default to checking account and today's date.
-30. For budget moves ("move $100 from Dining Out to Groceries"), use move_money. \
+34. For budget moves ("move $100 from Dining Out to Groceries"), use move_money. \
 Always confirm both categories' new amounts. Warn if source category would go \
 negative.
-31. For budget adjustments ("budget $200 more for Groceries"), use \
+35. For budget adjustments ("budget $200 more for Groceries"), use \
 update_category_budget. Confirm old and new budgeted amounts.
 
 The current sender's name will be provided with each message.
@@ -590,6 +608,45 @@ TOOLS = [
         "description": "List all saved cookbooks with their recipe counts. Use to show what's been catalogued.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    # --- Downshiftology recipe tools (Feature 005) ---
+    {
+        "name": "search_downshiftology",
+        "description": "Search Downshiftology.com for healthy recipes by course, cuisine, ingredient, dietary preference, or time constraint. Returns a numbered list of matching recipes with names, times, tags, and links.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Free-text search term (e.g., 'chicken', 'sweet potato')."},
+                "course": {"type": "string", "description": "Course type: dinner, breakfast, appetizer, side-dish, salad, soup, snack, dessert, drinks."},
+                "cuisine": {"type": "string", "description": "Cuisine: american, mexican, italian, mediterranean, asian, french, indian, greek, middle-eastern."},
+                "dietary": {"type": "string", "description": "Dietary preference: keto, paleo, whole30, gluten-free, dairy-free, vegan, vegetarian."},
+                "max_time": {"type": "number", "description": "Maximum total time in minutes (e.g., 30 for quick meals)."},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_downshiftology_details",
+        "description": "Get full details of a Downshiftology recipe from search results, including ingredients, instructions, nutrition, and grocery history match.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "result_number": {"type": "number", "description": "Number from the most recent Downshiftology search results (1-based)."},
+            },
+            "required": ["result_number"],
+        },
+    },
+    {
+        "name": "import_downshiftology_recipe",
+        "description": "Import a Downshiftology recipe into the family's recipe catalogue for meal planning. Checks for duplicates by source URL.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "result_number": {"type": "number", "description": "Number from most recent search results (e.g., 2)."},
+                "recipe_name": {"type": "string", "description": "Recipe name to search and import (alternative to number)."},
+            },
+            "required": [],
+        },
+    },
     # --- Nudge tools (Feature 003) ---
     {
         "name": "set_quiet_day",
@@ -845,6 +902,15 @@ TOOL_FUNCTIONS = {
         kw["recipe_id"], kw.get("servings_multiplier", 1.0)
     ),
     "list_cookbooks": lambda **kw: recipes.list_cookbooks(),
+    # Downshiftology
+    "search_downshiftology": lambda **kw: downshiftology.search_downshiftology(
+        kw.get("query", ""), kw.get("course", ""), kw.get("cuisine", ""),
+        kw.get("dietary", ""), int(kw.get("max_time", 0))
+    ),
+    "get_downshiftology_details": lambda **kw: downshiftology.get_downshiftology_details(int(kw["result_number"])),
+    "import_downshiftology_recipe": lambda **kw: downshiftology.import_downshiftology_recipe(
+        int(kw.get("result_number", 0)), kw.get("recipe_name", "")
+    ),
     # Nudges (Feature 003)
     "set_quiet_day": lambda **kw: nudges.set_quiet_day(),
     "complete_chore": lambda **kw: chores.complete_chore(kw["chore_name"]),

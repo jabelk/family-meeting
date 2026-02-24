@@ -603,6 +603,22 @@ def get_grocery_history(category: str = "") -> str:
     return "\n".join(items)
 
 
+def get_all_grocery_items() -> list[str]:
+    """Get all grocery item names for cross-referencing (e.g., recipe ingredient matching)."""
+    if not NOTION_GROCERY_HISTORY_DB:
+        return []
+
+    results = notion.databases.query(
+        database_id=NOTION_GROCERY_HISTORY_DB,
+        page_size=100,
+    )
+    return [
+        _get_title(page["properties"].get("Item Name", {})).lower()
+        for page in results["results"]
+        if _get_title(page["properties"].get("Item Name", {}))
+    ]
+
+
 def get_staple_items() -> str:
     """Get frequently purchased items (staples) for auto-suggestions."""
     if not NOTION_GROCERY_HISTORY_DB:
@@ -640,6 +656,7 @@ def create_recipe(
     photo_url: str = "",
     tags: list[str] | None = None,
     cuisine: str = "Other",
+    source_url: str = "",
 ) -> str:
     """Create a recipe in the Recipes database. Returns the Notion page ID."""
     if not NOTION_RECIPES_DB:
@@ -666,6 +683,8 @@ def create_recipe(
         properties["Tags"] = {"multi_select": [{"name": t} for t in tags]}
     if cuisine:
         properties["Cuisine"] = {"select": {"name": cuisine}}
+    if source_url:
+        properties["Source URL"] = {"url": source_url}
 
     page = notion.pages.create(parent={"database_id": NOTION_RECIPES_DB}, properties=properties)
     logger.info("Created recipe '%s' in Notion: %s", name, page["id"])
@@ -704,6 +723,21 @@ def search_recipes_by_title(title_contains: str) -> list[dict]:
             "cookbook": cookbook_name,
         })
     return recipes
+
+
+def search_recipes_by_source_url(url: str) -> list[dict]:
+    """Search recipes by Source URL for duplicate detection. Returns list of {id, name}."""
+    if not NOTION_RECIPES_DB or not url:
+        return []
+
+    results = notion.databases.query(
+        database_id=NOTION_RECIPES_DB,
+        filter={"property": "Source URL", "url": {"equals": url}},
+    )
+    return [
+        {"id": page["id"], "name": _get_title(page["properties"].get("Name", {}))}
+        for page in results["results"]
+    ]
 
 
 def get_all_recipes() -> list[dict]:
