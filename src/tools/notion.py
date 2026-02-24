@@ -2,6 +2,7 @@
 
 import logging
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from notion_client import Client
 from src.config import (
     NOTION_TOKEN,
@@ -991,7 +992,7 @@ def count_sent_today() -> int:
     if not NOTION_NUDGE_QUEUE_DB:
         return 0
 
-    today = date.today().isoformat()
+    today = datetime.now(tz=ZoneInfo("America/Los_Angeles")).date().isoformat()
     results = notion.databases.query(
         database_id=NOTION_NUDGE_QUEUE_DB,
         filter={
@@ -1014,7 +1015,7 @@ def check_quiet_day() -> bool:
     if not NOTION_NUDGE_QUEUE_DB:
         return False
 
-    today = date.today().isoformat()
+    today = datetime.now(tz=ZoneInfo("America/Los_Angeles")).date().isoformat()
     results = notion.databases.query(
         database_id=NOTION_NUDGE_QUEUE_DB,
         filter={
