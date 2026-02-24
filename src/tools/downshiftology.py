@@ -106,7 +106,10 @@ def _format_recipe_summary(recipe: dict) -> dict:
     keyword_names = [t.get("name", "") for t in tags.get("keyword", [])]
 
     rating = r.get("rating", {})
-    avg_rating = rating.get("average", 0) if isinstance(rating, dict) else 0
+    try:
+        avg_rating = float(rating.get("average", 0)) if isinstance(rating, dict) else 0
+    except (ValueError, TypeError):
+        avg_rating = 0
 
     total_time = r.get("total_time", "")
     try:
