@@ -440,6 +440,53 @@ def get_next_backlog_suggestion() -> str:
     return f"{desc}{label}"
 
 
+def get_backlog_for_nudge(assignee: str = "Erin") -> dict | None:
+    """Get the highest-priority incomplete backlog item for nudge suggestions.
+
+    Returns dict with id, description, category, priority, or None if empty.
+    Updates Last Surfaced so the same item isn't re-suggested immediately.
+    """
+    if not NOTION_BACKLOG_DB:
+        return None
+
+    results = notion.databases.query(
+        database_id=NOTION_BACKLOG_DB,
+        filter={
+            "and": [
+                {"property": "Status", "status": {"does_not_equal": "Done"}},
+                {"property": "Assignee", "select": {"equals": assignee}},
+            ]
+        },
+        sorts=[
+            {"property": "Priority", "direction": "ascending"},
+            {"property": "Last Surfaced", "direction": "ascending"},
+        ],
+        page_size=1,
+    )
+
+    if not results["results"]:
+        return None
+
+    page = results["results"][0]
+    page_id = page["id"]
+    desc = _get_title(page["properties"].get("Description", {}))
+    category = _get_select(page["properties"].get("Category", {}))
+    priority = _get_select(page["properties"].get("Priority", {}))
+
+    # Update Last Surfaced so it rotates
+    notion.pages.update(
+        page_id=page_id,
+        properties={"Last Surfaced": {"date": {"start": datetime.now(tz=ZoneInfo("America/Los_Angeles")).date().isoformat()}}},
+    )
+
+    return {
+        "id": page_id,
+        "description": desc,
+        "category": category or "Other",
+        "priority": priority or "Medium",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Routine Templates (T010 — stored in Family Profile page)
 # ---------------------------------------------------------------------------

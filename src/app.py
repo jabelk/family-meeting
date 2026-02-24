@@ -292,8 +292,8 @@ async def nudge_scan():
     """
     from src.tools.nudges import scan_upcoming_departures, process_pending_nudges
     from src.tools.notion import check_quiet_day, count_sent_today, seed_default_chores
+    from src.tools.notion import create_nudge, get_backlog_for_nudge
     from src.tools.chores import detect_free_windows, suggest_chore
-    from src.tools.notion import create_nudge
 
     logger.info("Nudge scan triggered")
 
@@ -363,6 +363,33 @@ async def nudge_scan():
     except Exception as e:
         logger.error("Chore suggestion failed: %s", e)
         result["errors"].append(f"chore_suggestion: {e}")
+
+    # Surface a backlog item alongside chore suggestions (max 1 per day)
+    try:
+        from src.tools.notion import query_nudges_by_type
+        existing_backlog = query_nudges_by_type("backlog", statuses=["Pending", "Sent"])
+        backlog = get_backlog_for_nudge() if not existing_backlog else None
+        if backlog:
+            msg = f"Backlog reminder: {backlog['description']}"
+            if backlog["priority"] == "High":
+                msg = f"High priority: {backlog['description']}"
+            context = _json.dumps({
+                "backlog_id": backlog["id"],
+                "description": backlog["description"],
+                "category": backlog["category"],
+            })
+            create_nudge(
+                summary=f"Backlog: {backlog['description'][:50]}",
+                nudge_type="backlog",
+                scheduled_time=_now.isoformat(),
+                message=msg,
+                context=context,
+            )
+            result["backlog_surfaced"] = 1
+            logger.info("Surfaced backlog item: %s", backlog["description"][:60])
+    except Exception as e:
+        logger.error("Backlog suggestion failed: %s", e)
+        result["errors"].append(f"backlog_suggestion: {e}")
 
     # Process and deliver pending nudges
     try:
