@@ -87,8 +87,8 @@
 **Purpose**: System prompt refinements, deployment, and validation
 
 - [x] T019 Update system prompt in src/assistant.py with comprehensive budget interaction guidelines — explain all 7 budget tools (search, recategorize, create, update_budget, move_money, plus existing get_budget_summary), instruct warm helpful tone for financial conversations, examples of natural language patterns ("what did we spend on X" → search_transactions, "categorize" → recategorize_transaction, "move $X from A to B" → move_money)
-- [ ] T020 Deploy to NUC via ./scripts/nuc.sh deploy
-- [ ] T021 Run quickstart.md validation — Test 1 (transaction search), Test 2 (recategorize), Test 3 (create manual transaction), Test 4 (budget rebalancing), Test 5 (overspend alert), Test 6 (uncategorized nudge), Test 7 (model quality)
+- [x] T020 Deploy to NUC via ./scripts/nuc.sh deploy
+- [x] T021 Run quickstart.md validation — Test 1 (transaction search), Test 2 (recategorize), Test 3 (create manual transaction), Test 4 (budget rebalancing), Test 5 (overspend alert), Test 6 (uncategorized nudge), Test 7 (model quality)
 
 ---
 
