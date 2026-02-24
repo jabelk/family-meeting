@@ -413,6 +413,209 @@ async def nudge_scan():
 
 
 # ---------------------------------------------------------------------------
+# Budget Scan (Feature 004 — YNAB Smart Budget)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/budget/scan", dependencies=[Depends(verify_n8n_auth)])
+async def budget_scan():
+    """Proactive budget insight scanner — overspending, uncategorized, anomalies, goals.
+
+    Called by n8n daily at 9am Pacific.
+    """
+    from src.tools.nudges import process_pending_nudges
+    from src.tools.notion import check_quiet_day, count_sent_today, create_nudge, query_nudges_by_type
+    from src.tools.ynab import (
+        check_overspend_warnings, check_uncategorized_pileup,
+        check_spending_anomalies, check_savings_goals,
+    )
+    import json as _json
+    from datetime import datetime as _dt
+    from zoneinfo import ZoneInfo as _ZI
+
+    logger.info("Budget scan triggered")
+    _now = _dt.now(tz=_ZI("America/Los_Angeles"))
+
+    result = {
+        "insights_created": 0,
+        "uncategorized_count": 0,
+        "overspend_warnings": 0,
+        "anomalies_detected": 0,
+        "goal_gaps": 0,
+        "nudges_sent": 0,
+        "daily_count": count_sent_today(),
+        "daily_cap": 8,
+        "quiet_day": False,
+        "errors": [],
+    }
+
+    # Check quiet day first
+    if check_quiet_day():
+        result["quiet_day"] = True
+        logger.info("Quiet day active — skipping budget scan")
+        return result
+
+    budget_nudges_created = 0
+    MAX_BUDGET_NUDGES = 2  # NFR-002: cap at 2 per scan
+
+    # Daily: overspend warnings
+    try:
+        warnings = check_overspend_warnings()
+        result["overspend_warnings"] = len(warnings)
+        for w in warnings:
+            if budget_nudges_created >= MAX_BUDGET_NUDGES:
+                break
+            # Dedup: check if we already sent an overspend nudge for this category today
+            existing = query_nudges_by_type("budget", statuses=["Pending", "Sent"])
+            already_warned = any(
+                w["category_name"] in (n.get("summary") or "")
+                for n in existing
+            )
+            if already_warned:
+                continue
+
+            msg = (
+                f"Heads up: *{w['category_name']}* is at {w['percent_used']:.0f}% "
+                f"(${w['spent']:,.0f} / ${w['budgeted']:,.0f}) with "
+                f"{w['days_remaining']} days left this month."
+            )
+            context = _json.dumps({
+                "insight_type": "overspend_warning",
+                "category_name": w["category_name"],
+                "spent": w["spent"],
+                "budgeted": w["budgeted"],
+                "percent_used": w["percent_used"],
+            })
+            create_nudge(
+                summary=f"Overspend: {w['category_name']}",
+                nudge_type="budget",
+                scheduled_time=_now.isoformat(),
+                message=msg,
+                context=context,
+            )
+            budget_nudges_created += 1
+            result["insights_created"] += 1
+    except Exception as e:
+        logger.error("Overspend check failed: %s", e)
+        result["errors"].append(f"overspend: {e}")
+
+    # Daily: uncategorized pile-up
+    try:
+        pileup = check_uncategorized_pileup()
+        if pileup and budget_nudges_created < MAX_BUDGET_NUDGES:
+            result["uncategorized_count"] = pileup["count"]
+            # Dedup
+            existing = query_nudges_by_type("budget", statuses=["Pending", "Sent"])
+            already_nudged = any("uncategorized" in (n.get("summary") or "").lower() for n in existing)
+            if not already_nudged:
+                msg = (
+                    f"You have {pileup['count']} uncategorized transactions "
+                    f"totaling ${pileup['total_amount']:,.2f} (oldest: {pileup['oldest_date']}). "
+                    f"Want help categorizing them?"
+                )
+                context = _json.dumps({
+                    "insight_type": "uncategorized_pileup",
+                    "count": pileup["count"],
+                    "total_amount": pileup["total_amount"],
+                    "oldest_date": pileup["oldest_date"],
+                })
+                create_nudge(
+                    summary="Uncategorized transactions pileup",
+                    nudge_type="budget",
+                    scheduled_time=_now.isoformat(),
+                    message=msg,
+                    context=context,
+                )
+                budget_nudges_created += 1
+                result["insights_created"] += 1
+    except Exception as e:
+        logger.error("Uncategorized check failed: %s", e)
+        result["errors"].append(f"uncategorized: {e}")
+
+    # Weekly (Monday only): spending anomalies
+    if _now.weekday() == 0:  # Monday
+        try:
+            anomalies = check_spending_anomalies()
+            result["anomalies_detected"] = len(anomalies)
+            for a in anomalies:
+                if budget_nudges_created >= MAX_BUDGET_NUDGES:
+                    break
+                msg = (
+                    f"Spending alert: *{a['category_name']}* is at "
+                    f"${a['current_amount']:,.0f} this month — "
+                    f"{a['percent_above']:.0f}% above your 3-month average "
+                    f"of ${a['average_amount']:,.0f}."
+                )
+                context = _json.dumps({
+                    "insight_type": "spending_anomaly",
+                    "category_name": a["category_name"],
+                    "current_month": a["current_amount"],
+                    "rolling_average": a["average_amount"],
+                    "percent_above": a["percent_above"],
+                })
+                create_nudge(
+                    summary=f"Anomaly: {a['category_name']}",
+                    nudge_type="budget",
+                    scheduled_time=_now.isoformat(),
+                    message=msg,
+                    context=context,
+                )
+                budget_nudges_created += 1
+                result["insights_created"] += 1
+        except Exception as e:
+            logger.error("Anomaly check failed: %s", e)
+            result["errors"].append(f"anomalies: {e}")
+
+        # Weekly: savings goal gaps
+        try:
+            gaps = check_savings_goals()
+            result["goal_gaps"] = len(gaps)
+            for g in gaps:
+                if budget_nudges_created >= MAX_BUDGET_NUDGES:
+                    break
+                msg = (
+                    f"Goal check: *{g['category_name']}* is {g['percent_complete']}% funded "
+                    f"but should be ~{g['expected_percent']:.0f}% by now. "
+                    f"Shortfall: ${g['shortfall']:,.0f}."
+                )
+                context = _json.dumps({
+                    "insight_type": "savings_goal_gap",
+                    "goal_name": g["category_name"],
+                    "funded": g["funded"],
+                    "target": g["goal_target"],
+                    "shortfall": g["shortfall"],
+                })
+                create_nudge(
+                    summary=f"Goal gap: {g['category_name']}",
+                    nudge_type="budget",
+                    scheduled_time=_now.isoformat(),
+                    message=msg,
+                    context=context,
+                )
+                budget_nudges_created += 1
+                result["insights_created"] += 1
+        except Exception as e:
+            logger.error("Goal check failed: %s", e)
+            result["errors"].append(f"goals: {e}")
+
+    # Process and deliver pending nudges
+    try:
+        delivery = await process_pending_nudges()
+        result["nudges_sent"] = delivery["nudges_sent"]
+        result["daily_count"] = delivery["daily_count"]
+        result["errors"].extend(delivery["errors"])
+    except Exception as e:
+        logger.error("Budget nudge delivery failed: %s", e)
+        result["errors"].append(f"nudge_delivery: {e}")
+
+    logger.info(
+        "Budget scan complete: %d insights, %d overspend, %d uncategorized, %d anomalies, %d goal gaps",
+        result["insights_created"], result["overspend_warnings"],
+        result["uncategorized_count"], result["anomalies_detected"], result["goal_gaps"],
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # US2: Grocery Reorder (T029-T030)
 # ---------------------------------------------------------------------------
 

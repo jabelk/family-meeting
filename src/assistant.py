@@ -167,6 +167,21 @@ When she says "moved to dryer" or "put it in the dryer", call advance_laundry. \
 If she says "never mind", "didn't do laundry", or "cancel laundry", call \
 cancel_laundry.
 
+**Budget management:**
+27. For transaction searches ("what did we spend at Costco?"), use \
+search_transactions with the payee name. Show amounts as dollars, sorted \
+by most recent. Default search is current month.
+28. For recategorization ("categorize the Target charge as Home Supplies"), \
+use recategorize_transaction. If multiple matches, show the list and ask \
+which one. Always confirm the change.
+29. For manual transactions ("add $35 cash for farmers market under Groceries"), \
+use create_transaction. Default to checking account and today's date.
+30. For budget moves ("move $100 from Dining Out to Groceries"), use move_money. \
+Always confirm both categories' new amounts. Warn if source category would go \
+negative.
+31. For budget adjustments ("budget $200 more for Groceries"), use \
+update_category_budget. Confirm old and new budgeted amounts.
+
 The current sender's name will be provided with each message.
 """
 
@@ -333,6 +348,77 @@ TOOLS = [
                 "category": {"type": "string", "description": "Optional category name to filter to (e.g., 'Dining Out', 'Groceries')."},
             },
             "required": [],
+        },
+    },
+    # --- YNAB transaction tools (US1) ---
+    {
+        "name": "search_transactions",
+        "description": "Search recent YNAB transactions by payee name, category, or uncategorized status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "payee": {"type": "string", "description": "Payee name to search for (fuzzy match)."},
+                "category": {"type": "string", "description": "Category name to filter by."},
+                "since_date": {"type": "string", "description": "ISO date floor (default: first of current month)."},
+                "uncategorized_only": {"type": "boolean", "description": "If true, return only uncategorized transactions."},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "recategorize_transaction",
+        "description": "Change the category of an existing transaction. Finds by payee/amount/date, then updates.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "payee": {"type": "string", "description": "Payee name to find the transaction."},
+                "amount": {"type": "number", "description": "Dollar amount to match (helps disambiguate)."},
+                "date": {"type": "string", "description": "Date to match (ISO format)."},
+                "new_category": {"type": "string", "description": "Target category name (fuzzy matched)."},
+            },
+            "required": ["new_category"],
+        },
+    },
+    {
+        "name": "create_transaction",
+        "description": "Create a manual YNAB transaction (e.g., cash purchase, reimbursement).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "payee": {"type": "string", "description": "Payee/merchant name."},
+                "amount": {"type": "number", "description": "Dollar amount (positive number — system makes it negative for outflow)."},
+                "category": {"type": "string", "description": "Category name (fuzzy matched)."},
+                "date": {"type": "string", "description": "ISO date (default: today)."},
+                "memo": {"type": "string", "description": "Optional memo/note."},
+                "account": {"type": "string", "description": "Account name (default: primary checking)."},
+            },
+            "required": ["payee", "amount", "category"],
+        },
+    },
+    # --- YNAB budget rebalancing tools (US3) ---
+    {
+        "name": "update_category_budget",
+        "description": "Adjust the budgeted amount for a YNAB category this month (add or subtract dollars).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string", "description": "Category name (fuzzy matched)."},
+                "amount": {"type": "number", "description": "Dollar amount to add (positive) or subtract (negative)."},
+            },
+            "required": ["category", "amount"],
+        },
+    },
+    {
+        "name": "move_money",
+        "description": "Move budgeted money from one YNAB category to another.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "from_category": {"type": "string", "description": "Source category name (fuzzy matched)."},
+                "to_category": {"type": "string", "description": "Destination category name (fuzzy matched)."},
+                "amount": {"type": "number", "description": "Dollar amount to move (positive number)."},
+            },
+            "required": ["from_category", "to_category", "amount"],
         },
     },
     # --- Backlog tools (US5) ---
@@ -721,6 +807,20 @@ TOOL_FUNCTIONS = {
     "save_meal_plan": lambda **kw: notion.save_meal_plan(kw["week_start"], kw["plan_content"], kw["grocery_list"]),
     "get_meal_plan": lambda **kw: notion.get_meal_plan(kw.get("week_start", "")),
     "get_budget_summary": lambda **kw: ynab.get_budget_summary(kw.get("month", ""), kw.get("category", "")),
+    "search_transactions": lambda **kw: ynab.search_transactions(
+        kw.get("payee", ""), kw.get("category", ""), kw.get("since_date", ""), kw.get("uncategorized_only", False)
+    ),
+    "recategorize_transaction": lambda **kw: ynab.recategorize_transaction(
+        kw.get("payee", ""), kw.get("amount", 0), kw.get("date", ""), kw.get("new_category", "")
+    ),
+    "create_transaction": lambda **kw: ynab.create_transaction(
+        kw.get("payee", ""), kw.get("amount", 0), kw.get("category", ""),
+        kw.get("date", ""), kw.get("memo", ""), kw.get("account", "")
+    ),
+    "update_category_budget": lambda **kw: ynab.update_category_budget(kw.get("category", ""), kw.get("amount", 0)),
+    "move_money": lambda **kw: ynab.move_money(
+        kw.get("from_category", ""), kw.get("to_category", ""), kw.get("amount", 0)
+    ),
     # Backlog
     "get_backlog_items": lambda **kw: notion.get_backlog_items(kw.get("assignee", ""), kw.get("status", "")),
     "add_backlog_item": lambda **kw: notion.add_backlog_item(
@@ -822,7 +922,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
             return "I hit my processing limit for this request. Please try a simpler question or break it into parts."
 
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-20250514",
             max_tokens=2048,
             system=SYSTEM_PROMPT,
             tools=TOOLS,
