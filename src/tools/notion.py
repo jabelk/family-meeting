@@ -1021,7 +1021,12 @@ def check_quiet_day() -> bool:
         filter={
             "and": [
                 {"property": "Nudge Type", "select": {"equals": "quiet_day"}},
-                {"property": "Status", "status": {"equals": "Pending"}},
+                {
+                    "or": [
+                        {"property": "Status", "status": {"equals": "Pending"}},
+                        {"property": "Status", "status": {"equals": "Sent"}},
+                    ]
+                },
                 {"property": "Scheduled Time", "date": {"equals": today}},
             ]
         },

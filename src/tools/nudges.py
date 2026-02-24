@@ -178,7 +178,9 @@ async def process_pending_nudges() -> dict:
             "errors": [],
         }
 
-    pending = query_pending_nudges(due_before=now.isoformat())
+    all_pending = query_pending_nudges(due_before=now.isoformat())
+    # Filter out quiet_day markers — they're not real nudges to send
+    pending = [n for n in all_pending if n.get("nudge_type") != "quiet_day"]
     if not pending:
         return {
             "nudges_sent": 0,
@@ -272,11 +274,11 @@ def set_quiet_day() -> str:
     if check_quiet_day():
         return "Quiet day is already active. No proactive nudges will be sent today."
 
-    # Create quiet day marker
+    # Create quiet day marker (use noon Pacific to avoid date boundary issues)
     create_nudge(
         summary="Quiet day activated",
         nudge_type="quiet_day",
-        scheduled_time=f"{today_str}T00:00:00",
+        scheduled_time=f"{today_str}T12:00:00-08:00",
         message="Quiet day — no proactive nudges today.",
     )
 
