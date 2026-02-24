@@ -16,6 +16,9 @@ credentials.json
 node_modules/
 *.log
 
+# Data (usage counters — persist locally but don't commit)
+data/*.json
+
 # OS
 .DS_Store
 Thumbs.db

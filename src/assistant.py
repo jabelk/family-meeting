@@ -4,7 +4,7 @@ import json
 import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology
+from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,9 @@ client = Anthropic(api_key=ANTHROPIC_API_KEY)
 # For multi-page recipes, images accumulate until the tool is called.
 _current_image_data: dict | None = None  # most recent image (single-page fast path)
 _buffered_images: list[dict] = []  # accumulated images for multi-page recipes
+
+# Track phones that have received the welcome message (resets on container restart)
+_welcomed_phones: set[str] = set()
 
 SYSTEM_PROMPT = """\
 You are Mom Bot — the family assistant for Jason and Erin's family. You live \
@@ -209,6 +212,18 @@ If it's a self-reminder, use just "Erin: dentist appointment". Include the \
 original message as the event description for context. The event goes on the \
 shared family calendar so both partners can see it. Infer today's date and \
 Pacific time if not specified. Default to a 15-minute popup reminder.
+
+**Feature discovery & help:**
+37. When someone says "help", "what can you do?", "what are your features?", \
+"show me what you can do", or asks about capabilities, call get_help and return \
+the result directly. Do NOT clear any in-progress state (search results, laundry \
+timers, etc.) when responding to help requests.
+38. After responding to a message that used tools (meal plan, recipe search, \
+budget check, chore action, calendar view), you MAY append a brief contextual \
+tip at the end of your response. Format: "\n\n\U0001f4a1 *Did you know?* {tip}". \
+Only append a tip when the response involved a substantive tool interaction — \
+never on simple questions, help responses, or error messages. Maximum 1 tip per \
+response. Do not force tips — only add when naturally relevant.
 
 The current sender's name will be provided with each message.
 """
@@ -805,6 +820,12 @@ TOOLS = [
             "required": ["plan", "day", "new_meal"],
         },
     },
+    # --- Feature discovery (Feature 006) ---
+    {
+        "name": "get_help",
+        "description": "Generate a personalized help menu showing all bot capabilities grouped by category with example phrases. Use when someone says 'help', 'what can you do?', 'what are your features?', or similar.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
 ]
 
 # Color mapping for calendar blocks
@@ -961,6 +982,8 @@ TOOL_FUNCTIONS = {
     "handle_meal_swap": lambda **kw: proactive.handle_meal_swap(
         kw["plan"], kw["day"], kw["new_meal"]
     ),
+    # Feature discovery
+    "get_help": lambda **kw: discovery.get_help(kw.get("_phone", "")),
 }
 
 
@@ -1007,6 +1030,18 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
 
     messages = [{"role": "user", "content": user_content}]
 
+    # First-time welcome: prepend instruction for new users
+    system = SYSTEM_PROMPT
+    if sender_phone != "system" and sender_phone not in _welcomed_phones:
+        _welcomed_phones.add(sender_phone)
+        system += (
+            "\n\n[SYSTEM: This is the user's FIRST message. Before your normal "
+            "response, prepend a brief one-line welcome: 'Welcome to Mom Bot! "
+            "I can help with recipes, budgets, calendars, groceries, chores, "
+            "and reminders. Say \"help\" anytime to see everything I can do.' "
+            "Then answer their actual request.]"
+        )
+
     # Agentic tool-use loop (capped to prevent runaway API costs)
     MAX_TOOL_ITERATIONS = 25
     iteration = 0
@@ -1020,7 +1055,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
         response = client.messages.create(
             model="claude-opus-4-20250514",
             max_tokens=2048,
-            system=SYSTEM_PROMPT,
+            system=system,
             tools=TOOLS,
             messages=messages,
         )
@@ -1038,7 +1073,13 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                     try:
                         func = TOOL_FUNCTIONS.get(tool_name)
                         if func:
+                            # Inject phone for discovery tools
+                            if tool_name == "get_help":
+                                tool_input["_phone"] = sender_phone
                             result = func(**tool_input)
+                            # Track usage for feature discovery suggestions
+                            if sender_phone != "system":
+                                discovery.record_usage(sender_phone, tool_name)
                         else:
                             result = f"Unknown tool: {tool_name}"
                     except Exception as e:

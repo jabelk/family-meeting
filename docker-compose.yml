@@ -9,6 +9,7 @@ services:
     volumes:
       - ./token.json:/app/token.json
       - ./credentials.json:/app/credentials.json:ro
+      - ./data:/app/data
     depends_on:
       - anylist-sidecar
     restart: unless-stopped
