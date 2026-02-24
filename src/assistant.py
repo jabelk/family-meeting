@@ -200,6 +200,16 @@ negative.
 35. For budget adjustments ("budget $200 more for Groceries"), use \
 update_category_budget. Confirm old and new budgeted amounts.
 
+**Quick reminders & events:**
+36. When someone says "remind me to...", "remind Jason to...", "pick up X at \
+Y time", "don't forget to...", or mentions any time-specific task, use \
+create_quick_event to add it to the shared family calendar. Format the \
+summary as "Sender → Assignee: task" (e.g., "Erin → Jason: pick up dog"). \
+If it's a self-reminder, use just "Erin: dentist appointment". Include the \
+original message as the event description for context. The event goes on the \
+shared family calendar so both partners can see it. Infer today's date and \
+Pacific time if not specified. Default to a 15-minute popup reminder.
+
 The current sender's name will be provided with each message.
 """
 
@@ -513,6 +523,22 @@ TOOLS = [
                 },
             },
             "required": ["blocks"],
+        },
+    },
+    # --- Quick reminder/event tool ---
+    {
+        "name": "create_quick_event",
+        "description": "Create a reminder or event on the shared family calendar. Both Jason and Erin will see it. Use when someone says 'remind me to...', 'pick up X at Y time', 'don't forget to...', or any time-specific task. Includes a 15-minute popup reminder by default.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "Event title. Format as 'Sender → Assignee: task' (e.g., 'Erin → Jason: pick up dog'). If self-reminder, use 'Erin: dentist appointment'."},
+                "start_time": {"type": "string", "description": "ISO datetime (e.g., '2026-02-24T12:30:00-08:00'). Infer today's date if not specified."},
+                "end_time": {"type": "string", "description": "ISO datetime. Defaults to start + 30 min if omitted."},
+                "description": {"type": "string", "description": "Original message text for context (e.g., 'Erin said: remind Jason to pick up the dog at 12:30')."},
+                "reminder_minutes": {"type": "number", "description": "Minutes before event to send popup reminder. Default 15.", "default": 15},
+            },
+            "required": ["summary", "start_time"],
         },
     },
     # --- Grocery tools (US3 + US6) ---
@@ -888,6 +914,10 @@ TOOL_FUNCTIONS = {
     "get_routine_templates": lambda **kw: notion.get_routine_templates(),
     # Calendar write
     "write_calendar_blocks": _handle_write_calendar_blocks,
+    "create_quick_event": lambda **kw: calendar.create_quick_event(
+        kw["summary"], kw["start_time"], kw.get("end_time", ""),
+        kw.get("description", ""), int(kw.get("reminder_minutes", 15))
+    ),
     # Grocery
     "get_grocery_history": lambda **kw: notion.get_grocery_history(kw.get("category", "")),
     "get_staple_items": lambda **kw: notion.get_staple_items(),

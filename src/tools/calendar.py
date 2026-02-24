@@ -257,6 +257,65 @@ def create_event(
     return f"Created event: {summary} ({event.get('id', '')})"
 
 
+COLOR_REMINDER = "11"  # Tomato (red — stands out for reminders)
+
+
+def create_quick_event(
+    summary: str,
+    start_time: str,
+    end_time: str = "",
+    description: str = "",
+    reminder_minutes: int = 15,
+) -> str:
+    """Create a quick reminder/event on the shared family calendar.
+
+    Always writes to the family calendar so both Jason and Erin can see it.
+    Includes a popup reminder notification.
+
+    Args:
+        summary: Event title (e.g., "Erin → Jason: pick up dog")
+        start_time: ISO datetime string
+        end_time: ISO datetime string (defaults to start_time + 30 min)
+        description: Event body text (original message context)
+        reminder_minutes: Minutes before event to send reminder (default 15)
+    """
+    cal_id = CALENDAR_IDS.get("family")
+    if not cal_id:
+        return "Family calendar not configured."
+
+    if not end_time:
+        # Default to 30-minute event
+        from datetime import datetime as dt
+        try:
+            start_dt = dt.fromisoformat(start_time)
+            end_dt = start_dt + timedelta(minutes=30)
+            end_time = end_dt.isoformat()
+        except ValueError:
+            end_time = start_time
+
+    service = _get_service()
+    event_body = {
+        "summary": summary,
+        "start": {"dateTime": start_time, "timeZone": "America/Los_Angeles"},
+        "end": {"dateTime": end_time, "timeZone": "America/Los_Angeles"},
+        "colorId": COLOR_REMINDER,
+        "reminders": {
+            "useDefault": False,
+            "overrides": [
+                {"method": "popup", "minutes": reminder_minutes},
+            ],
+        },
+        "extendedProperties": {
+            "private": {"createdBy": CREATED_BY_TAG}
+        },
+    }
+    if description:
+        event_body["description"] = description
+
+    event = service.events().insert(calendarId=cal_id, body=event_body).execute()
+    return f"Created reminder on family calendar: {summary} ({event.get('id', '')})"
+
+
 def batch_create_events(events_data: list[dict], calendar_name: str = "erin") -> int:
     """Create multiple events on a calendar. Returns count of events created.
 
