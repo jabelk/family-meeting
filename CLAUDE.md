@@ -56,6 +56,8 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Notion (2 new databases: Recipes, Cookbooks) + Cloudflare R2 (recipe photo storage) + existing 5 Notion databases (002-proactive-recipes-automation)
 - Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Sonnet 4), notion-client >=2.2.0,<2.3.0, httpx, google-api-python-clien (003-smart-nudges-chores)
 - Notion API (2 new databases: Nudge Queue, Chores) + existing Google Calendar read (003-smart-nudges-chores)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), httpx (YNAB API calls), notion-client >=2.2.0,<2.3.0 (004-ynab-smart-budget)
+- YNAB API (external, transactions + budgets), Notion Nudge Queue (budget insights as nudges) (004-ynab-smart-budget)
 
 ## Deployment (NUC)
 
@@ -93,6 +95,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 004-ynab-smart-budget: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), httpx (YNAB API calls), notion-client >=2.2.0,<2.3.0
 - 003-smart-nudges-chores: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Sonnet 4), notion-client >=2.2.0,<2.3.0, httpx, google-api-python-clien
 - 002-proactive-recipes-automation: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 + Claude vision for OCR), notion-client >=2.2.0,<2.3.0, boto3 (Cloudflare R2 S3-compatible API), httpx, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn
-- Mom Bot is live — WhatsApp → FastAPI → Claude Haiku → WhatsApp reply working end-to-end
