@@ -84,7 +84,7 @@ The bot incorporates YNAB best practices into the sync flow, teaching good budge
 - What happens when Amazon ships items from the same order separately (resulting in multiple charges that don't match a single order total)? The bot should handle partial shipments by matching individual charge amounts to shipment subtotals, not just order grand totals.
 - What happens when Amazon issues a refund? (Frequent — Erin returns items regularly.) The bot should detect refund transactions (negative amounts with Amazon payee), match them to the original purchase by amount and date proximity, and reverse the original split proportionally. For partial refunds (returning 1 of 3 items), the bot should match the refund amount to the specific item and credit only that category. If the refund can't be matched to a specific original purchase, the bot should ask Erin which category to credit.
 - What happens when a transaction amount doesn't match any Amazon order (e.g., gift card reload, Prime membership, digital purchase)? The bot should have fallback categories for known Amazon charge types (Prime → Subscriptions, Kindle → Entertainment). Truly unrecognizable charges get memo tagged "Unmatched Amazon charge" and Erin is asked to categorize via WhatsApp. After a few months of accumulated data, the bot should be able to suggest new YNAB categories based on emerging Amazon spending patterns and YNAB best practices.
-- What happens when Amazon credentials expire or 2FA fails? The bot should notify Erin that the sync needs re-authentication and continue enriching memos for any orders it already has cached.
+- What happens when the Gmail OAuth token expires? (Google OAuth tokens in testing mode expire every 7 days.) The bot should detect the auth failure, notify Erin that the sync needs re-authentication (re-run OAuth flow on the NUC), and skip the sync gracefully until the token is refreshed.
 - What happens when the same item could reasonably go in multiple categories (e.g., a kids' vitamin — Healthcare or Kids)? The bot should use the family's past categorization choices to break ties, and when no precedent exists, ask.
 - What happens during high-volume periods (Prime Day, holiday shopping) when there might be 10+ Amazon transactions in a day? The bot should batch suggestions into a single consolidated message rather than spamming individual notifications.
 
@@ -106,7 +106,7 @@ The bot incorporates YNAB best practices into the sync flow, teaching good budge
 - **FR-012**: The system MUST learn from Erin's past approvals and corrections to improve future categorization accuracy
 - **FR-013**: The system MUST handle Amazon refunds (a frequent occurrence) by detecting negative-amount Amazon transactions, matching them to the original purchase when possible, and categorizing the refund to the same category as the original split — including reversing the proportional split if the original transaction was split across multiple categories
 - **FR-014**: The system MUST recognize non-order Amazon charges (Prime membership, Kindle purchases, gift card reloads) and categorize them appropriately without requiring order matching. For truly unrecognizable charges, the system MUST tag the memo with "Unmatched Amazon charge" and ask Erin to categorize manually via WhatsApp
-- **FR-015**: The system MUST gracefully handle authentication failures by notifying the user and continuing to process any cached/available data
+- **FR-015**: The system MUST gracefully handle Gmail OAuth token expiration by logging the error, notifying Erin that the sync is paused until re-authentication, and skipping the sync run without sending error details
 - **FR-016**: The system MUST follow YNAB best practices: proper memo formatting (concise item descriptions), clean split structure, and never creating categories that don't already exist in the user's budget
 
 ### Key Entities
@@ -136,13 +136,21 @@ The bot incorporates YNAB best practices into the sync flow, teaching good budge
 - Q: How should the transition from suggestion mode to auto-split mode work? → A: Bot suggests enabling auto-split after 80%+ unmodified acceptance rate over 2 weeks; Erin must confirm to activate
 - Q: How should unmatched Amazon transactions (no order match, not a recognized charge type) be handled? → A: Tag memo with "Unmatched Amazon charge" and ask Erin via WhatsApp to categorize manually. Plan to revisit category structure after a few months of data — LLM can suggest new categories based on YNAB best practices and emerging spending patterns.
 
+### Session 2026-02-25 — Data Source Pivot
+
+- Q: How should the system fetch Amazon order data? → A: **Gmail API** (not `amazon-orders` scraping library)
+- **Reason for pivot**: The `amazon-orders` Python library relies on scraping Amazon.com, which is blocked by Amazon's JavaScript CAPTCHA/WAF bot detection. There is no official Amazon API for consumer purchase history (SP-API is seller-only, Alexa APIs don't expose order data). Amazon order confirmation emails sent to Gmail contain all needed data: order numbers, item names, quantities, prices, shipping costs, and delivery dates. Refund/return emails are also available.
+- **Benefits of Gmail approach**: (1) Google API OAuth already configured with `google-api-python-client`, (2) no bot detection issues, (3) Amazon emails include structured order data, (4) refund/return emails are also searchable, (5) more reliable long-term than web scraping
+- **Implementation change**: Replace `get_amazon_orders()` (which used `amazon-orders` library) with Gmail API search for Amazon emails (`from:auto-confirm@amazon.com`, `from:shipment-tracking@amazon.com`, etc.), then use Claude to parse email HTML into structured order data. The rest of the pipeline (matching, classification, splitting, suggestions) remains unchanged.
+- **Removed**: `amazon-orders>=4.0.18` from requirements.txt, `AMAZON_USERNAME`/`AMAZON_PASSWORD`/`AMAZON_OTP_SECRET_KEY` env vars no longer needed, Dockerfile C build deps (gcc/libjpeg/zlib) removed
+
 ## Assumptions
 
 - The family uses a single Amazon account for all household purchases
-- Amazon credentials (email + password + optional 2FA secret) can be securely stored alongside other service credentials
+- Amazon order confirmation emails are sent to Jason's Gmail (jbelk122@gmail.com), which already has Google API OAuth configured
 - The family's existing YNAB categories are sufficient to cover Amazon purchases — the bot should map into existing categories, not create new ones
 - YNAB's API supports split transactions (confirmed: YNAB API supports sub-transactions on a single transaction)
-- Amazon order data is available for the current month and recent history (the scraping library supports date-range filtering)
+- Amazon order data is extracted from Gmail order confirmation/shipping/refund emails using Claude to parse HTML into structured data
 - Most Amazon transactions can be matched to orders using ±3 day date window and exact penny amount, though partial shipments are matched against shipment subtotals rather than order grand totals
 - The family is comfortable with a 24-hour delay between purchase and categorization (nightly sync)
 

@@ -1,8 +1,10 @@
-"""Amazon-YNAB Smart Sync — order fetching, matching, classification, and sync orchestration."""
+"""Amazon-YNAB Smart Sync — Gmail email parsing, order matching, classification, and sync orchestration."""
 
+import base64
 import httpx
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field, asdict
 from datetime import date, datetime, timedelta
@@ -198,47 +200,201 @@ def save_sync_config(config: SyncConfig) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Amazon order fetching (T007)
+# Gmail API helpers (T007 — Gmail pivot)
 # ---------------------------------------------------------------------------
 
-def get_amazon_orders(days: int = 30, full_details: bool = True) -> tuple[list, bool]:
-    """Fetch Amazon order history.
+_TOKEN_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "token.json")
+_GMAIL_SCOPES = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/gmail.readonly",
+]
+
+
+def _get_gmail_service():
+    """Build and return an authenticated Gmail API service."""
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    creds = None
+    if os.path.exists(_TOKEN_PATH):
+        creds = Credentials.from_authorized_user_file(_TOKEN_PATH, _GMAIL_SCOPES)
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            with open(_TOKEN_PATH, "w") as f:
+                f.write(creds.to_json())
+        else:
+            raise RuntimeError(
+                "Gmail OAuth token not found or invalid. "
+                "Re-run setup_calendar.py to authorize Gmail access."
+            )
+    return build("gmail", "v1", credentials=creds)
+
+
+def _extract_html_body(message: dict) -> str:
+    """Extract HTML body from a Gmail API message payload."""
+    payload = message.get("payload", {})
+
+    # Direct body
+    if payload.get("mimeType") == "text/html":
+        data = payload.get("body", {}).get("data", "")
+        if data:
+            return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+
+    # Check parts (and nested multipart)
+    for part in payload.get("parts", []):
+        if part.get("mimeType") == "text/html":
+            data = part.get("body", {}).get("data", "")
+            if data:
+                return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+        for subpart in part.get("parts", []):
+            if subpart.get("mimeType") == "text/html":
+                data = subpart.get("body", {}).get("data", "")
+                if data:
+                    return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+
+    return ""
+
+
+def _parse_order_email(html_body: str) -> dict | None:
+    """Use Claude to parse Amazon order confirmation email HTML into structured data.
+
+    Returns dict with keys: order_number, order_date, grand_total, items, shipments.
+    Returns None if parsing fails.
+    """
+    from anthropic import Anthropic
+    from src.config import ANTHROPIC_API_KEY
+
+    # Truncate very long emails to stay within token limits
+    if len(html_body) > 50000:
+        html_body = html_body[:50000]
+
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    prompt = (
+        "Parse this Amazon order confirmation email HTML and extract the order details.\n\n"
+        "Return ONLY valid JSON with this structure:\n"
+        "{\n"
+        '  "order_number": "123-4567890-1234567",\n'
+        '  "order_date": "2026-02-20",\n'
+        '  "grand_total": 87.42,\n'
+        '  "items": [\n'
+        '    {"title": "Product Name", "price": 25.00, "quantity": 1}\n'
+        "  ],\n"
+        '  "shipments": [\n'
+        '    {"total": 87.42}\n'
+        "  ]\n"
+        "}\n\n"
+        "Rules:\n"
+        "- grand_total is the final charged amount including tax and shipping\n"
+        "- item prices should be per-unit pre-tax prices\n"
+        "- order_date format: YYYY-MM-DD\n"
+        "- If you can't determine a field, omit it\n"
+        "- Return ONLY the JSON, no other text\n\n"
+        f"Email HTML:\n{html_body}"
+    )
+
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        text = response.content[0].text.strip()
+        if "{" in text:
+            json_str = text[text.index("{"):text.rindex("}") + 1]
+            order = json.loads(json_str)
+
+            # Validate minimum required fields
+            if not order.get("order_number") and not order.get("items"):
+                return None
+
+            # Normalize date format
+            if order.get("order_date"):
+                try:
+                    parsed_date = datetime.strptime(order["order_date"], "%Y-%m-%d").date()
+                    order["order_date"] = parsed_date.isoformat()
+                except ValueError:
+                    pass
+
+            return order
+
+    except Exception as e:
+        logger.warning("Claude email parsing failed: %s", e)
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Amazon order fetching via Gmail API (T007)
+# ---------------------------------------------------------------------------
+
+def get_amazon_orders(days: int = 30) -> tuple[list[dict], bool]:
+    """Fetch Amazon order data from Gmail order confirmation emails.
+
+    Searches Gmail for Amazon order confirmation emails, parses HTML with Claude
+    to extract structured order data.
 
     Returns:
         Tuple of (orders_list, auth_failed).
-        - orders_list: List of Order objects (empty on failure).
-        - auth_failed: True if login failed (caller should notify Erin per FR-015).
+        - orders_list: List of order dicts with keys: order_number, order_date,
+          grand_total, items (list of {title, price, quantity}), shipments.
+        - auth_failed: True if Gmail OAuth failed (caller should notify per FR-015).
     """
-    from src.config import AMAZON_USERNAME, AMAZON_PASSWORD, AMAZON_OTP_SECRET_KEY
-
-    if not AMAZON_USERNAME or not AMAZON_PASSWORD:
-        logger.warning("Amazon credentials not configured — skipping order fetch")
+    try:
+        service = _get_gmail_service()
+    except Exception as e:
+        logger.error("Gmail auth failed: %s", e)
         return [], True
 
+    since_date = (date.today() - timedelta(days=days)).strftime("%Y/%m/%d")
+    query = f"from:auto-confirm@amazon.com after:{since_date}"
+
     try:
-        from amazonorders.session import AmazonSession
-        from amazonorders.orders import AmazonOrders
+        results = service.users().messages().list(
+            userId="me", q=query, maxResults=50
+        ).execute()
+        messages = results.get("messages", [])
 
-        session = AmazonSession(
-            username=AMAZON_USERNAME,
-            password=AMAZON_PASSWORD,
-            otp_secret_key=AMAZON_OTP_SECRET_KEY or None,
+        if not messages:
+            logger.info("No Amazon order emails found in last %d days", days)
+            return [], False
+
+        orders = []
+        seen_order_numbers = set()
+        for msg_meta in messages:
+            try:
+                msg = service.users().messages().get(
+                    userId="me", id=msg_meta["id"], format="full"
+                ).execute()
+                html_body = _extract_html_body(msg)
+                if not html_body:
+                    continue
+
+                parsed = _parse_order_email(html_body)
+                if parsed:
+                    # Deduplicate by order number
+                    order_num = parsed.get("order_number", "")
+                    if order_num and order_num in seen_order_numbers:
+                        continue
+                    if order_num:
+                        seen_order_numbers.add(order_num)
+                    orders.append(parsed)
+            except Exception as e:
+                logger.warning("Failed to process email %s: %s", msg_meta["id"], e)
+                continue
+
+        logger.info(
+            "Parsed %d Amazon orders from %d emails (last %d days)",
+            len(orders), len(messages), days,
         )
-        session.login()
-
-        amazon = AmazonOrders(session)
-        orders = amazon.get_order_history(
-            time_filter="last30",
-            full_details=full_details,
-        )
-
-        logger.info("Fetched %d Amazon orders (last %d days)", len(orders), days)
-        return list(orders), False
+        return orders, False
 
     except Exception as e:
-        logger.error("Amazon order fetch failed: %s", e)
-        # Determine if this is an auth failure
-        auth_keywords = ("login", "auth", "password", "captcha", "mfa", "otp", "sign")
+        logger.error("Gmail API error: %s", e)
+        auth_keywords = ("token", "auth", "credentials", "oauth", "expired", "invalid_grant")
         is_auth = any(kw in str(e).lower() for kw in auth_keywords)
         return [], is_auth
 
@@ -287,7 +443,7 @@ def find_amazon_transactions(days: int = 30) -> list[dict]:
 
 def match_orders_to_transactions(
     ynab_transactions: list[dict],
-    amazon_orders: list,
+    amazon_orders: list[dict],
 ) -> list[dict]:
     """Match YNAB transactions to Amazon orders by date (±3 days) and exact penny amount.
 
@@ -304,23 +460,27 @@ def match_orders_to_transactions(
         match_type = "unmatched"
 
         for order in amazon_orders:
-            order_num = getattr(order, "order_number", "") or ""
+            order_num = order.get("order_number", "") or ""
             if order_num in used_orders:
                 continue
 
-            order_date = getattr(order, "order_placed_date", None)
-            if order_date is None:
+            order_date_str = order.get("order_date")
+            if not order_date_str:
+                continue
+
+            # Parse order date (already ISO format from Claude parsing)
+            try:
+                order_date = date.fromisoformat(order_date_str)
+            except ValueError:
                 continue
 
             # Check date within ±3 days
-            if isinstance(order_date, datetime):
-                order_date = order_date.date()
             day_diff = abs((txn_date - order_date).days)
             if day_diff > 3:
                 continue
 
             # Check exact penny match on grand_total
-            grand_total = getattr(order, "grand_total", None)
+            grand_total = order.get("grand_total")
             if grand_total is not None:
                 order_amount_milli = int(round(abs(grand_total) * 1000))
                 if order_amount_milli == txn_amount:
@@ -330,9 +490,8 @@ def match_orders_to_transactions(
                     break
 
             # Try shipment subtotals for partial shipment matching
-            shipments = getattr(order, "shipments", []) or []
-            for shipment in shipments:
-                ship_total = getattr(shipment, "total", None) or getattr(shipment, "grand_total", None)
+            for shipment in order.get("shipments", []):
+                ship_total = shipment.get("total") or shipment.get("grand_total")
                 if ship_total is not None:
                     ship_milli = int(round(abs(ship_total) * 1000))
                     if ship_milli == txn_amount:
@@ -476,7 +635,7 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
             enriched.append(match)
             continue
 
-        items = getattr(order, "items", []) or []
+        items = order.get("items", []) or []
         if not items:
             enriched.append(match)
             continue
@@ -485,9 +644,9 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
         item_names = []
         classified_items = []
         for item in items:
-            title = getattr(item, "title", "") or "Unknown item"
-            price = getattr(item, "price", 0) or 0
-            qty = getattr(item, "quantity", 1) or 1
+            title = item.get("title", "") or "Unknown item"
+            price = item.get("price", 0) or 0
+            qty = item.get("quantity", 1) or 1
             item_names.append(title[:50])  # Truncate long titles
 
             classification = classify_item(title, price, cat_list, past_mappings)
@@ -495,7 +654,7 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
                 title=title,
                 price=float(price),
                 quantity=qty,
-                seller=getattr(item, "seller", "") or "",
+                seller=item.get("seller", "") or "",
                 classified_category=classification["category_name"],
                 classified_category_id=classification["category_id"],
                 confidence=classification["confidence"],
@@ -526,7 +685,7 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
         now = datetime.now().isoformat()
         record = SyncRecord(
             ynab_transaction_id=txn["id"],
-            amazon_order_number=getattr(order, "order_number", "") or "",
+            amazon_order_number=order.get("order_number", "") or "",
             status="enriched",
             matched_at=now,
             enriched_at=now,
@@ -808,7 +967,7 @@ def run_nightly_sync() -> str | None:
         # Fetch Amazon orders
         orders, auth_failed = get_amazon_orders()
         if auth_failed:
-            return "⚠️ Amazon sync needs re-authentication — ask Jason to update credentials."
+            return "⚠️ Amazon sync paused — Gmail OAuth token expired. Ask Jason to re-run setup_calendar.py on the NUC."
         if not orders:
             logger.info("Nightly sync: no Amazon orders found")
             return None

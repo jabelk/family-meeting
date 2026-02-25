@@ -23,7 +23,10 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
+SCOPES = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/gmail.readonly",
+]
 TOKEN_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "token.json")
 CREDENTIALS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "credentials.json")
 
@@ -38,11 +41,14 @@ def main():
     if os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
         print(f"Existing token found at {TOKEN_PATH}")
-        # Check if scope needs upgrading (readonly → events)
-        if creds and creds.scopes and "calendar.readonly" in str(creds.scopes):
-            print("Token has readonly scope — deleting to re-auth with calendar.events scope.")
-            os.remove(TOKEN_PATH)
-            creds = None
+        # Check if token is missing the gmail.readonly scope
+        if creds and creds.scopes:
+            has_gmail = any("gmail.readonly" in s for s in creds.scopes)
+            has_readonly_cal = any("calendar.readonly" in s for s in creds.scopes) and not any("auth/calendar" == s.split("/")[-1] for s in creds.scopes)
+            if not has_gmail or has_readonly_cal:
+                print("Token missing required scope(s) — deleting to re-auth with all scopes.")
+                os.remove(TOKEN_PATH)
+                creds = None
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:

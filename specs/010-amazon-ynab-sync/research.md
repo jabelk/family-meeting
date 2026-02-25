@@ -4,28 +4,38 @@
 
 ## R1: Amazon Order Data Extraction
 
-**Decision**: Use `amazon-orders` Python library (v4.0.18) for scraping Amazon order history.
+**Decision**: Use Gmail API to fetch Amazon order confirmation emails, then Claude to parse email HTML into structured order data.
 
-**Rationale**: Only viable option for consumer Amazon order data — Amazon has no public API for purchase history. Library is MIT-licensed, actively maintained (815 commits, last release Dec 2025), handles 2FA automatically with OTP secret key. Provides item-level detail needed for categorization.
+**Rationale**: The original plan used the `amazon-orders` Python scraping library, but Amazon's JavaScript CAPTCHA/WAF bot detection blocked headless login from the Docker container. There is no official Amazon API for consumer purchase history (SP-API is seller-only). Gmail API is already configured with OAuth for Google Calendar, making this a zero-new-dependency approach. Amazon sends detailed order confirmation emails with all needed data.
+
+**Previous approach (abandoned)**: `amazon-orders` v4.0.18 scraping library — blocked by Amazon's JavaScript authentication challenge. See https://amazon-orders.readthedocs.io/troubleshooting.html#captcha-blocking-login
 
 **Alternatives considered**:
 - Amazon SP-API: Seller-only, not consumer purchase history
 - Browser extension approach: Requires user interaction, not automatable
-- Email parsing (order confirmation emails): Incomplete data, inconsistent formatting, doesn't include per-item prices reliably
+- `amazon-orders` scraping library: Blocked by CAPTCHA/WAF on headless Docker environments
+- Alexa APIs: Smart home only, no order data access
+- Amazon order CSV export: Manual download required, not automatable
 
-**Key findings**:
-- Auth via env vars: `AMAZON_USERNAME`, `AMAZON_PASSWORD`, `AMAZON_OTP_SECRET_KEY`
-- `full_details=True` required for per-item prices, tax, shipping — but makes extra HTTP request per order
-- No arbitrary date range: use `time_filter="last30"` for nightly sync, filter by date in Python
-- Item fields: `title`, `price`, `quantity`, `seller`, `link`, `image_link`, `condition`
-- Order fields: `order_number`, `order_placed_date`, `grand_total`, `subtotal`, `estimated_tax`, `shipping_total`, `refund_total`
-- Shipment-level data available for partial shipment matching
+**Key findings — Gmail approach**:
+- Google API OAuth already configured (`google-api-python-client`, `google-auth-oauthlib`)
+- Search queries: `from:auto-confirm@amazon.com`, `from:shipment-tracking@amazon.com`, `from:returns@amazon.com`
+- Order confirmation emails contain: order number, item names, quantities, per-item prices, subtotal, tax, shipping, delivery date
+- Refund/return emails also available via Gmail search
+- Use Claude to parse email HTML into structured data (handles template variations without code changes)
+- Gmail API quota: 250 quota units per user per second (more than sufficient)
+- Reference project: [gbrodman/order-tracking](https://github.com/gbrodman/order-tracking) — parses Amazon emails from Gmail via IMAP
+
+**Email senders to search**:
+- `auto-confirm@amazon.com` — order confirmations (item names, prices, order total)
+- `shipment-tracking@amazon.com` — shipping notifications (tracking, delivery dates)
+- `returns@amazon.com` — refund confirmations (refund amounts, items returned)
+- `no-reply@amazon.com` — digital orders, Prime, Kindle purchases
 
 **Risks**:
-- Scraping-based: Amazon HTML changes can break it (mitigated by active maintenance)
-- WAF puzzle captchas not supported (traditional captchas auto-solved)
-- Rate limiting: avoid rapid bulk fetches, use single nightly batch
-- Sessions expire: re-authenticate per sync run (stateless approach)
+- Amazon email template changes could affect Claude parsing (mitigated: LLM handles variations)
+- Gmail OAuth token expires every 7 days in testing mode (existing issue, same as Calendar)
+- Email may arrive before/after YNAB transaction posts — handled by ±3 day matching window
 
 ## R2: YNAB Split Transaction API
 
