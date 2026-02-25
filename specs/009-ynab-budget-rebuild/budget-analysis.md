@@ -266,9 +266,107 @@ The bot can help with this: when a large deposit lands, Erin can say "I just got
 
 ---
 
+## Problem #5: The Amazon Black Hole
+
+Amazon is the hardest category to budget because it's not a category — it's a *store* where you buy everything from vitamins to electronics to house supplies. Your 3-month average is **$524/mo** with wild swings ($18 in Dec, $1,140 in Jan, $415 in Feb). A single "Amazon" budget line is meaningless.
+
+### The Challenge
+
+- Credit card statements show "Amazon.com $87.42" with no item details
+- YNAB imports these as generic Amazon transactions
+- You'd have to manually cross-reference Amazon order history to know what each charge was
+- Nobody actually does this, so Amazon stays a junk drawer category
+
+### YNAB's Built-in Solution (Partial)
+
+As of April 2025, YNAB's mobile app shows a **link to your order history** when you tap an Amazon transaction. This helps you see what items were in each charge so you can manually split them. But it's still manual — you have to tap each transaction, check Amazon, then split it in YNAB.
+
+### Programmatic Solution: `amazon-orders` Python Library
+
+There's an actively maintained Python library ([amazon-orders](https://github.com/alexdlaird/amazon-orders), MIT license, v4.0.18, Dec 2025) that scrapes your Amazon order history and returns structured data:
+
+**Item-level data available**:
+- `title` — full product name (e.g., "Nature Made Vitamin D3 2000 IU")
+- `price` — per-item price
+- `quantity` — how many ordered
+- `seller` — who sold it (Amazon vs third party)
+- `link` — product URL
+- `image_link` — product image
+
+**Order-level data**:
+- `order_number`, `order_placed_date`, `grand_total`
+- `items[]` — list of all items in the order
+- `payment_method` + `payment_method_last_4` — which card was charged
+- `subtotal`, `shipping_total`, `subscription_discount`
+
+**Authentication**: Uses Amazon email + password (supports 2FA via OTP secret). Credentials can be stored as environment variables.
+
+**Limitations**:
+- Web scraping (not an official API) — can break if Amazon changes their site
+- `full_details=True` mode is slower (one extra request per order)
+- Only supports English .com Amazon
+
+### Proposed Integration: Auto-Categorize Amazon Transactions
+
+**How it would work**:
+
+1. **Nightly sync** (or on-demand via bot): Fetch recent Amazon orders using `amazon-orders`
+2. **Match to YNAB**: Cross-reference Amazon order dates/amounts with YNAB's Amazon transactions using the YNAB API
+3. **LLM classification**: For each item, Claude categorizes it based on the product title:
+   - "Nature Made Vitamin D3" → Healthcare
+   - "LEGO Duplo Train Set" → Kids Toys
+   - "Replacement HEPA Filter" → Home Repairs
+   - "USB-C Hub" → Jason Fun / Electronics
+4. **Auto-split in YNAB**: Use YNAB's split transaction API to break the single Amazon charge into its component categories
+5. **Add item details to memo**: Even if you keep a single category, append item names to the YNAB transaction memo so you know what you bought
+
+**Example flow**:
+```
+YNAB shows: Amazon.com — $87.42 — Uncategorized
+
+Bot fetches Amazon order #112-3456789:
+  - Vitamin D3 (2-pack): $24.99 → Healthcare
+  - LEGO train set: $42.43 → Kids Toys
+  - Phone charger cable: $12.99 → Jason Fun
+  - Shipping: $7.01 → (split proportionally)
+
+Bot splits YNAB transaction:
+  - $25.84 → Healthcare
+  - $43.83 → Kids Toys
+  - $17.75 → Jason Fun (includes proportional shipping/tax)
+```
+
+**Alternate simpler approach**: If full auto-split is too complex, just add item titles to the YNAB memo field. Then at least when you're categorizing, you can see "Vitamin D3, LEGO train, phone charger" instead of just "Amazon.com $87.42". This alone would save significant time.
+
+### What We'd Need
+
+- Amazon email/password stored in `.env` (same pattern as other credentials)
+- `amazon-orders` added to `requirements.txt`
+- New tool function: `sync_amazon_orders()` — fetches recent orders, matches to YNAB, updates memos and/or splits
+- Category mapping: A simple LLM prompt that classifies item titles into your YNAB categories
+- Could run nightly via n8n, or on-demand ("hey, categorize my Amazon orders")
+
+### Decision Point
+
+There are three levels of Amazon automation to discuss:
+
+| Level | Effort | Value |
+|-------|--------|-------|
+| **1. Memo enrichment only** | Low — just add item titles to YNAB memos | Know what you bought without opening Amazon |
+| **2. Memo + suggested categories** | Medium — LLM classifies, bot suggests | "I think this Amazon order was $25 Healthcare + $43 Kids Toys — should I split it?" |
+| **3. Full auto-split** | Higher — auto-split transactions in YNAB | Fully automated, Amazon charges get categorized without any manual work |
+
+**Recommendation**: Start with Level 2. Memo enrichment + LLM suggestion, with Erin confirming before the bot actually splits. Once you trust the categorization, graduate to Level 3.
+
+---
+
 ## Sources
 
 - [YNAB: Organize Your Budget, Organize Your Life](https://www.ynab.com/blog/organize-your-budget)
 - [YNAB: Real Examples](https://www.ynab.com/category/real-examples)
 - [YNAB: Category Templates](https://support.ynab.com/en_us/category-templates-HknjS_RA)
 - [YNAB: Spending Categories](https://www.ynab.com/tags/spending-categories)
+- [YNAB: Big-Box Store Categorization](https://www.ynab.com/whats-new/an-easier-way-to-categorize-big-box-orders)
+- [YNAB: Split Transactions Guide](https://support.ynab.com/en_us/split-transactions-a-guide-SJLEKwY0q)
+- [amazon-orders Python Library](https://github.com/alexdlaird/amazon-orders) — v4.0.18, MIT, actively maintained
+- [AmazonSyncForYNAB](https://github.com/davidz627/AmazonSyncForYNAB) — prior art (deprecated, rewritten as Ace My Budget)
