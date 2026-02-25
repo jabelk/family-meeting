@@ -1043,7 +1043,7 @@ def _handle_amazon_sync_trigger() -> str:
     try:
         orders, auth_failed = amazon_sync.get_amazon_orders()
         if auth_failed:
-            return "⚠️ Amazon sync needs re-authentication. Ask Jason to update the Amazon credentials."
+            return "⚠️ Amazon sync paused — Gmail OAuth token expired. Ask Jason to re-run setup_calendar.py on the NUC."
         if not orders:
             return "No Amazon orders found in the last 30 days."
 

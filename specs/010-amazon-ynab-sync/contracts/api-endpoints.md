@@ -20,7 +20,7 @@ Triggers nightly Amazon-YNAB sync. Called by n8n on schedule (default: 10pm dail
 ```
 
 **Background behavior**:
-1. Fetches Amazon orders (last 30 days, full_details=True)
+1. Fetches Amazon order confirmation emails via Gmail API (last 30 days), parses with Claude
 2. Fetches YNAB transactions with Amazon payee (last 30 days)
 3. Matches unprocessed transactions to orders
 4. Enriches memos with item names

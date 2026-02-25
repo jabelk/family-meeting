@@ -4,21 +4,19 @@
 
 ## Prerequisites
 
-1. Amazon credentials configured:
-   - `AMAZON_USERNAME` — Amazon account email
-   - `AMAZON_PASSWORD` — Amazon account password
-   - `AMAZON_OTP_SECRET_KEY` — TOTP secret from Amazon 2FA setup (the base32 key, not the 6-digit code)
+1. Gmail API OAuth configured (already set up for Google Calendar):
+   - Gmail read-only scope (`gmail.readonly`) added to OAuth consent screen
+   - `credentials.json` and `token.json` present in project root
+   - Amazon order confirmation emails arrive at `jbelk122@gmail.com`
 2. Existing YNAB integration working (`YNAB_ACCESS_TOKEN`, `YNAB_BUDGET_ID`)
 3. Existing WhatsApp integration working
-4. `amazon-orders>=4.0.18` added to requirements.txt
 
 ## Setup Steps
 
-1. Add Amazon credentials to `.env`
-2. Add `amazon-orders` to requirements.txt
-3. Deploy updated container to NUC
-4. Configure n8n workflow to call `/api/v1/amazon/sync` at 10pm daily
-5. Make a test Amazon purchase and wait for it to appear in YNAB
+1. Add `gmail.readonly` scope to Google OAuth setup (re-run `setup_calendar.py` or update scopes)
+2. Deploy updated container to NUC
+3. Configure n8n workflow to call `/api/v1/amazon/sync` at 10pm daily
+4. Make a test Amazon purchase and wait for it to appear in YNAB
 
 ## Integration Test Scenarios
 
@@ -97,7 +95,7 @@
    - Headers:
      - `X-N8N-Auth`: `{{$env.N8N_WEBHOOK_SECRET}}`
      - `Content-Type`: `application/json`
-   - Timeout: 120000 (2 minutes — Amazon scraping is slow)
+   - Timeout: 120000 (2 minutes — Gmail fetch + Claude parsing)
 4. **Activate workflow**
 
 ### Manual Trigger
@@ -113,11 +111,11 @@ To test or manually trigger a sync outside the nightly schedule:
 ## Smoke Test (First Deploy)
 
 ```bash
-# 1. Verify Amazon credentials work
+# 1. Verify Gmail API can fetch Amazon emails
 curl -X POST https://mombot.sierrastoryco.com/api/v1/amazon/sync \
   -H "X-N8N-Auth: $N8N_WEBHOOK_SECRET"
 
-# 2. Check logs for successful sync
+# 2. Check logs for successful sync (should see "Fetched N Amazon emails")
 ./scripts/nuc.sh logs fastapi 50
 
 # 3. Verify in YNAB that memos were updated

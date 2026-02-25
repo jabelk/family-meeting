@@ -15,26 +15,26 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Add amazon-orders dependency, configure credentials, initialize persistence layer
+**Purpose**: Configure Gmail API access, initialize persistence layer
 
-- [X] T001 Add `amazon-orders>=4.0.18` to requirements.txt
-- [X] T002 Add AMAZON_USERNAME, AMAZON_PASSWORD, AMAZON_OTP_SECRET_KEY env var validation to src/config.py (optional — graceful degradation if missing, like existing optional services)
+- [X] ~~T001 Add `amazon-orders>=4.0.18` to requirements.txt~~ **REMOVED** — pivoted to Gmail API (no new dependencies needed)
+- [ ] T002 Add Gmail `gmail.readonly` scope to Google OAuth setup in src/tools/calendar.py or setup_calendar.py — extend existing OAuth flow to request Gmail read access alongside Calendar. **IMPORTANT**: Delete existing `token.json` and re-run OAuth flow to generate a new token with both Calendar and Gmail scopes (Google OAuth tokens are scoped at creation time). Update config.py to validate Gmail API is available (graceful degradation if not).
 - [X] T003 Create data model classes and JSON persistence helpers in src/tools/amazon_sync.py — implement SyncRecord, MatchedItem, CategoryMapping, Correction, SyncConfig dataclasses plus atomic JSON read/write functions for data/amazon_sync_records.json, data/category_mappings.json, data/amazon_sync_config.json (follow data-model.md entities and the tmp-file+rename pattern from src/tools/discovery.py)
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: YNAB split transaction support and Amazon session management — MUST complete before any user story
+**Purpose**: YNAB split transaction support and Gmail-based Amazon order fetching — MUST complete before any user story
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
 - [X] T004 Implement `split_transaction(transaction_id, subtransactions)` in src/tools/ynab.py — accepts YNAB transaction UUID and list of {amount_milliunits, category_id, memo} dicts, calls PUT /budgets/{id}/transactions/{id} with subtransactions array, validates amounts sum to parent total. Follow existing httpx + HEADERS pattern.
 - [X] T005 Implement `update_transaction_memo(transaction_id, memo)` in src/tools/ynab.py — updates memo field on existing transaction via PUT, appends to existing memo if present (separated by " | ")
 - [X] T006 [P] Implement `delete_transaction(transaction_id)` in src/tools/ynab.py — calls DELETE /budgets/{id}/transactions/{id} for the undo flow (reverting splits)
-- [X] T007 [P] Implement Amazon session login helper in src/tools/amazon_sync.py — create `get_amazon_orders(days=30, full_details=True)` function that creates AmazonSession with credentials from config, calls login(), fetches order history with time_filter="last30", returns list of Order objects. Handle auth failures gracefully: log error, return empty list, and return an auth_failed flag so the caller (run_nightly_sync) can notify Erin that Amazon sync needs re-authentication (FR-015).
+- [ ] T007 [P] Implement Gmail-based Amazon order fetching in src/tools/amazon_sync.py — replace `get_amazon_orders()` to use Gmail API: (1) build Gmail service using existing Google OAuth credentials + `gmail.readonly` scope, (2) search for Amazon emails (`from:auto-confirm@amazon.com OR from:shipment-tracking@amazon.com OR from:returns@amazon.com`) within last 30 days, (3) fetch full email content (HTML body), (4) use Claude to parse each email HTML into structured order data (order_number, order_date, items list with title/price/quantity, subtotal, tax, shipping, grand_total), (5) return list of parsed order dicts. Handle Gmail API errors gracefully: log error, return empty list. Follow existing Google API patterns from src/tools/calendar.py.
 
-**Checkpoint**: YNAB split API and Amazon data access ready — user story implementation can begin
+**Checkpoint**: YNAB split API and Gmail-based Amazon order access ready — user story implementation can begin
 
 ---
 
@@ -121,9 +121,9 @@
 - [X] T032 Add Amazon sync to help system in src/tools/discovery.py — add "amazon_sync" entries to TOOL_TO_CATEGORY (under "budget" category), add tip definitions for Amazon sync features, update budget category capabilities text to mention Amazon sync
 - [X] T033 Python syntax check — run `python -m py_compile src/tools/amazon_sync.py && python -m py_compile src/tools/ynab.py && python -m py_compile src/assistant.py && python -m py_compile src/app.py`
 - [ ] T034 Deploy to NUC — commit changes, push to main, run `./scripts/nuc.sh deploy`, verify container starts cleanly via `./scripts/nuc.sh logs fastapi 50`
-- [ ] T035 Add Amazon credentials to NUC .env — add AMAZON_USERNAME, AMAZON_PASSWORD, AMAZON_OTP_SECRET_KEY to .env, run `./scripts/nuc.sh env` to push and restart
-- [ ] T036 Configure n8n nightly sync workflow — create new n8n workflow: HTTP Request node → POST https://mombot.sierrastoryco.com/api/v1/amazon/sync with X-N8N-Auth header, cron trigger at 22:00 daily
-- [ ] T037 End-to-end validation — trigger manual sync via WhatsApp ("sync my Amazon"), verify: (1) Amazon orders fetched, (2) YNAB transactions matched, (3) memos enriched, (4) classification working, (5) WhatsApp suggestion received, (6) approval flow works, (7) YNAB split applied correctly
+- [X] ~~T035 Add Amazon credentials to NUC .env~~ **REMOVED** — no longer needed (Gmail API uses existing OAuth token, not env vars)
+- [ ] T036 Configure n8n nightly sync workflow — create new n8n workflow (WF-011): HTTP Request node → POST http://fastapi:8000/api/v1/amazon/sync with X-N8N-Auth header, cron trigger at 22:00 daily
+- [ ] T037 End-to-end validation — trigger manual sync via WhatsApp ("sync my Amazon"), verify: (1) Gmail Amazon emails fetched and parsed, (2) YNAB transactions matched, (3) memos enriched, (4) classification working, (5) WhatsApp suggestion received, (6) approval flow works, (7) YNAB split applied correctly
 
 ---
 
@@ -172,7 +172,7 @@ Parallel:   T006 (ynab.py delete) || T007 (amazon_sync.py session)
 
 ```
 Parallel:   T029 (refund matching) || T030 (known charge patterns) || T031 (timeout sweep)
-Sequential: T033 → T034 → T035 → T036 → T037
+Sequential: T033 → T034 → T036 → T037
 ```
 
 ---
@@ -204,5 +204,6 @@ Sequential: T033 → T034 → T035 → T036 → T037
 - US2 depends on US1; US3 depends on US1; US4 depends on US1 — all user stories build on US1 as the core
 - JSON persistence in data/ follows existing discovery.py atomic write pattern
 - YNAB milliunits: multiply dollars by 1000, outflows are negative
-- Amazon scraping is slow (~1 req/order with full_details) — batch nightly, not real-time
+- Gmail API fetches Amazon emails then Claude parses HTML into structured order data — more reliable than scraping
+- `amazon-orders` scraping library was abandoned due to Amazon CAPTCHA/WAF blocking headless Docker login
 - Commit after each phase completion for clean rollback points
