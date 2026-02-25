@@ -291,6 +291,28 @@ async def email_sync_endpoint(background_tasks: BackgroundTasks):
     return {"status": "sent"}
 
 
+@app.post("/api/v1/budget/health-check", dependencies=[Depends(verify_n8n_auth)])
+async def budget_health_check_endpoint(background_tasks: BackgroundTasks):
+    """Monthly scheduled budget health check. Sends report directly to WhatsApp.
+
+    Called by n8n on the 1st of each month at 9am Pacific.
+    Computes health score, detects goal drift, stale categories, merge candidates.
+    Sends brief message when healthy, detailed report otherwise.
+    """
+    logger.info("Budget health check triggered")
+
+    async def _run():
+        try:
+            from src.tools import ynab
+            result = ynab.run_budget_health_check()
+            logger.info("Budget health check complete: %s", result)
+        except Exception:
+            logger.exception("Budget health check failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "sent"}
+
+
 @app.post("/api/v1/calendar/populate-week", dependencies=[Depends(verify_n8n_auth)])
 async def populate_week(req: PopulateWeekRequest):
     """Delete assistant-created events for the week and repopulate from routine templates.

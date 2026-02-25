@@ -324,6 +324,34 @@ notification, use amazon_undo_split. The index defaults to the most recent split
 or wants an Amazon category breakdown, use amazon_spending_breakdown. Include \
 budget comparisons and top purchases.
 
+**Budget goal maintenance:**
+61. When the user asks about budget goals, goal health, budget drift, or says \
+"how are my budget goals?", "budget health check", or "any budget issues?", \
+use the `budget_health_check` tool. Present the results directly.
+62. When the user replies with "yes to [category]", "update all", "skip \
+[category]", or "set [category] to $X" after a budget health check, use \
+`apply_goal_suggestion` with the appropriate params. For "update all", set \
+apply_all=true. For "set X to $Y", pass category and amount.
+63. When the user mentions a bonus, stock vesting, extra income, or asks "where \
+should this money go?" or "allocate $X", use `allocate_bonus`. Extract the \
+dollar amount from their message.
+64. When the user says "approve", "do it", or "yes" after seeing an allocation \
+plan, use `approve_allocation`. If the user provides adjustments like "put more \
+in X" or "put $3000 in emergency fund", pass those as the adjustments param.
+65. When the user asks about cleaning up budget categories, stale categories, \
+or merging categories, use `budget_health_check` — the response includes stale \
+and merge candidate sections. When user says "remove [N]" or "remove \
+[category]" after a cleanup report, use `apply_goal_suggestion` with amount=0 \
+to zero out the goal. For merge suggestions, advise the user to merge categories \
+manually in the YNAB app (merging is not supported via the API).
+
+**Meeting prep — budget health section:**
+66. When generating a meeting prep agenda (Rule 48), also call `budget_health_check` \
+silently. If any categories have >30% drift, add a "Budget Goal Health" section \
+to the agenda with: count of drifted categories, the largest drift, count of \
+missing goals, health score, and a pointer saying "Say 'budget health check' \
+for full details and suggestions."
+
 **Email-YNAB Sync (PayPal, Venmo, Apple):**
 56. When Erin asks to sync emails, check PayPal/Venmo/Apple transactions, or \
 categorize non-Amazon charges, use the email_sync_trigger tool. This fetches \
@@ -989,6 +1017,82 @@ TOOLS = [
             "required": [],
         },
     },
+    # Budget Maintenance (Feature 012: Smart Budget Health)
+    {
+        "name": "budget_health_check",
+        "description": "Analyze all YNAB budget categories for goal drift, missing goals, stale categories, and merge candidates. Returns a health score and actionable suggestions. Use when user asks 'how are my budget goals?', 'budget health check', or 'any budget issues?'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lookback_months": {
+                    "type": "integer",
+                    "description": "Number of months to analyze (default 3, max 12). Use 6+ for spiky categories.",
+                    "default": 3,
+                },
+                "drift_threshold": {
+                    "type": "number",
+                    "description": "Minimum drift percentage to flag (default 30). Lower values catch smaller misalignments.",
+                    "default": 30,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "apply_goal_suggestion",
+        "description": "Update a YNAB category's goal target based on a budget health check suggestion. Use when user approves a specific suggestion like 'yes to restaurants' or 'update restaurants to $1200'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "description": "Category name (fuzzy matched).",
+                },
+                "amount": {
+                    "type": "number",
+                    "description": "New goal amount in dollars. If omitted, uses the recommended amount from the last health check.",
+                },
+                "apply_all": {
+                    "type": "boolean",
+                    "description": "If true, apply all pending suggestions at once. Ignores category and amount params.",
+                    "default": False,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "allocate_bonus",
+        "description": "Generate a plan to allocate a bonus, stock vesting, or extra income across underfunded budget categories. Prioritizes essentials, then savings, then discretionary. Use when user asks 'where should this bonus go?' or 'allocate $X'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "description": "Dollar amount to allocate.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "What the income is from (e.g., 'Q1 bonus', 'stock vesting'). Optional.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "approve_allocation",
+        "description": "Execute the pending bonus allocation plan, moving money to each category in YNAB. Use when user says 'approve', 'yes', or 'do it' after seeing an allocation plan.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "adjustments": {
+                    "type": "string",
+                    "description": "Optional free-text adjustments before executing (e.g., 'put $3000 in emergency fund instead').",
+                },
+            },
+            "required": [],
+        },
+    },
     # Email-YNAB Sync (Feature 011: PayPal, Venmo, Apple)
     {
         "name": "email_sync_trigger",
@@ -1276,6 +1380,17 @@ TOOL_FUNCTIONS = {
     "amazon_sync_trigger": lambda **kw: _handle_amazon_sync_trigger(),
     "amazon_set_auto_split": lambda **kw: amazon_sync.set_auto_split(kw["enabled"]),
     "amazon_undo_split": lambda **kw: amazon_sync.handle_undo(kw.get("transaction_index", 1)),
+    # Budget Maintenance (Feature 012)
+    "budget_health_check": lambda **kw: ynab.budget_health_check(
+        kw.get("lookback_months", 3), kw.get("drift_threshold", 30)
+    ),
+    "apply_goal_suggestion": lambda **kw: ynab.apply_goal_suggestion(
+        kw.get("category", ""), kw.get("amount", 0), kw.get("apply_all", False)
+    ),
+    "allocate_bonus": lambda **kw: ynab.allocate_bonus(
+        kw.get("amount", 0), kw.get("description", "")
+    ),
+    "approve_allocation": lambda **kw: ynab.approve_allocation(kw.get("adjustments", "")),
     # Email-YNAB Sync (Feature 011)
     "email_sync_trigger": lambda **kw: _handle_email_sync_trigger(),
     "email_sync_status": lambda **kw: email_sync.get_email_sync_status(),

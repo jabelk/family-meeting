@@ -27,9 +27,9 @@ HELP_CATEGORIES = [
         "key": "budget",
         "icon": "\U0001f4b0",  # money bag
         "name": "Budget & Spending",
-        "capabilities": "Check your YNAB budget, search transactions, move money between categories, sync Amazon purchases, and auto-categorize PayPal/Venmo/Apple charges.",
+        "capabilities": "Check your YNAB budget, search transactions, move money between categories, check budget health, update drifted goals, allocate bonus income, sync Amazon purchases, and auto-categorize PayPal/Venmo/Apple charges.",
         "static_examples": [
-            "what did we spend at Costco?",
+            "how are my budget goals?",
             "sync my Amazon",
             "sync my emails",
         ],
@@ -122,6 +122,10 @@ TOOL_TO_CATEGORY: dict[str, str] = {
     "email_sync_status": "budget",
     "email_set_auto_categorize": "budget",
     "email_undo_categorize": "budget",
+    "budget_health_check": "budget",
+    "apply_goal_suggestion": "budget",
+    "allocate_bonus": "budget",
+    "approve_allocation": "budget",
     # calendar
     "get_calendar_events": "calendar",
     "get_outlook_events": "calendar",
@@ -269,6 +273,18 @@ TIP_DEFINITIONS: list[dict] = [
         "id": "tip_email_sync_status",
         "trigger_tools": ["email_sync_trigger", "email_sync_status"],
         "text": "Ask 'how is the email sync doing?' to see stats by provider and your acceptance rate.",
+        "related_category": "budget",
+    },
+    {
+        "id": "tip_budget_health",
+        "trigger_tools": ["get_budget_summary", "search_transactions"],
+        "text": "Say 'how are my budget goals?' to check for goal drift and get update suggestions.",
+        "related_category": "budget",
+    },
+    {
+        "id": "tip_bonus_allocate",
+        "trigger_tools": ["budget_health_check"],
+        "text": "Got a bonus? Say 'where should this $X go?' for a prioritized allocation plan.",
         "related_category": "budget",
     },
 ]
