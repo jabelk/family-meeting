@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-CONVERSATION_TIMEOUT = 1800  # 30 minutes of inactivity before conversation expires
+CONVERSATION_TIMEOUT = 86400  # 24 hours of inactivity before conversation expires
 MAX_CONVERSATION_TURNS = 10  # Max turns retained per conversation
 
 # ---------------------------------------------------------------------------
