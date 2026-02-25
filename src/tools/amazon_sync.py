@@ -138,6 +138,15 @@ def save_sync_record(record: SyncRecord) -> None:
     _save_json(_SYNC_RECORDS_FILE, records)
 
 
+def load_sync_record(ynab_transaction_id: str) -> SyncRecord | None:
+    """Load a single sync record by transaction ID."""
+    records = load_sync_records()
+    data = records.get(ynab_transaction_id)
+    if not data:
+        return None
+    return SyncRecord(**data)
+
+
 def is_transaction_processed(ynab_transaction_id: str) -> bool:
     """Check if a transaction has already been processed."""
     records = load_sync_records()
@@ -881,17 +890,50 @@ def format_suggestion_message(enriched_transactions: list[dict]) -> str:
 # T013: Handle Erin's reply to sync suggestions
 # ---------------------------------------------------------------------------
 
-# Module-level storage for pending suggestions (indexed by position)
-_pending_suggestions: list[dict] = []
+# Persistent storage for pending suggestions (survives container restarts)
+_PENDING_SUGGESTIONS_FILE = _DATA_DIR / "amazon_pending_suggestions.json"
 
 
 def set_pending_suggestions(enriched_transactions: list[dict]) -> None:
-    """Store pending suggestions so replies can reference them by index."""
-    global _pending_suggestions
-    _pending_suggestions = [
+    """Store pending suggestions to disk so replies can reference them by index."""
+    pending = [
         m for m in enriched_transactions
         if m.get("sync_record") and m["sync_record"].status == "split_pending"
     ]
+    # Serialize: convert MatchedItem dataclasses to dicts, store essentials
+    serialized = []
+    for m in pending:
+        serialized.append({
+            "ynab_transaction": m["ynab_transaction"],
+            "sync_record_id": m["sync_record"].ynab_transaction_id,
+            "classified_items": [asdict(ci) for ci in m.get("classified_items", [])],
+        })
+    _PENDING_SUGGESTIONS_FILE.write_text(json.dumps(serialized, indent=2))
+    logger.info("Saved %d pending suggestions to disk", len(serialized))
+
+
+def _load_pending_suggestions() -> list[dict]:
+    """Load pending suggestions from disk, reconstructing dataclass objects."""
+    if not _PENDING_SUGGESTIONS_FILE.exists():
+        return []
+    try:
+        data = json.loads(_PENDING_SUGGESTIONS_FILE.read_text())
+        result = []
+        for entry in data:
+            # Reconstruct MatchedItem objects
+            items = [MatchedItem(**ci) for ci in entry.get("classified_items", [])]
+            # Reconstruct SyncRecord from saved records
+            record = load_sync_record(entry["sync_record_id"])
+            if record and record.status == "split_pending":
+                result.append({
+                    "ynab_transaction": entry["ynab_transaction"],
+                    "sync_record": record,
+                    "classified_items": items,
+                })
+        return result
+    except Exception as e:
+        logger.warning("Failed to load pending suggestions: %s", e)
+        return []
 
 
 def handle_sync_reply(message_text: str) -> str:
@@ -904,6 +946,9 @@ def handle_sync_reply(message_text: str) -> str:
     text = message_text.strip().lower()
     config = load_sync_config()
 
+    # Load pending suggestions from disk
+    pending = _load_pending_suggestions()
+
     # Parse index and action
     parts = text.split(None, 1)
     if not parts:
@@ -915,13 +960,13 @@ def handle_sync_reply(message_text: str) -> str:
     if parts[0].isdigit():
         idx = int(parts[0])
         action = parts[1] if len(parts) > 1 else ""
-    elif len(_pending_suggestions) != 1:
+    elif len(pending) != 1:
         return ""  # Can't determine which transaction
 
-    if idx < 1 or idx > len(_pending_suggestions):
-        return f"Transaction #{idx} not found. Valid range: 1-{len(_pending_suggestions)}."
+    if idx < 1 or idx > len(pending):
+        return f"Transaction #{idx} not found. Valid range: 1-{len(pending)}."
 
-    match = _pending_suggestions[idx - 1]
+    match = pending[idx - 1]
     txn = match["ynab_transaction"]
     record = match.get("sync_record")
     items = match.get("classified_items", [])

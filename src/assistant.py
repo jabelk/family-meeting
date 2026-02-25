@@ -1,5 +1,6 @@
 """Claude AI assistant core — system prompt, tool definitions, and message handling."""
 
+import httpx
 import json
 import logging
 from anthropic import Anthropic
@@ -1039,29 +1040,73 @@ def _handle_extract_recipe(**kw) -> dict | str:
 
 
 def _handle_amazon_sync_trigger() -> str:
-    """Handle manual Amazon sync trigger from WhatsApp."""
-    try:
-        orders, auth_failed = amazon_sync.get_amazon_orders()
-        if auth_failed:
-            return "⚠️ Amazon sync paused — Gmail OAuth token expired. Ask Jason to re-run setup_calendar.py on the NUC."
-        if not orders:
-            return "No Amazon orders found in the last 30 days."
+    """Handle manual Amazon sync trigger from WhatsApp.
 
+    Sends the detailed suggestion message directly to Erin via WhatsApp
+    (bypassing Claude's summarization), then returns a short status to Claude.
+    """
+    try:
+        # Check YNAB first (fast) — skip email parsing if nothing to process
         txns = amazon_sync.find_amazon_transactions()
         if not txns:
-            return "No new Amazon transactions to process — all caught up! ✅"
+            return "No new Amazon transactions to process — all caught up!"
+
+        orders, auth_failed = amazon_sync.get_amazon_orders()
+        if auth_failed:
+            return "Amazon sync paused — Gmail OAuth token expired. Ask Jason to re-run setup_calendar.py on the NUC."
+        if not orders:
+            return "No Amazon orders found in the last 30 days."
 
         matched = amazon_sync.match_orders_to_transactions(txns, orders)
         enriched = amazon_sync.enrich_and_classify(matched)
         message = amazon_sync.format_suggestion_message(enriched)
         amazon_sync.set_pending_suggestions(enriched)
 
+        # Send detailed suggestion message directly to Erin (don't let Claude summarize)
         if message:
-            return message
-        return "Amazon sync complete — no new transactions needed categorization."
+            _send_sync_message_direct(message)
+
+        # Count results for short status
+        auto_count = sum(1 for m in enriched if m.get("sync_record") and m["sync_record"].status == "auto_split")
+        pending_count = sum(1 for m in enriched if m.get("sync_record") and m["sync_record"].status == "split_pending")
+        unmatched_count = sum(1 for m in enriched if m.get("matched_order") is None)
+
+        parts = [f"Amazon sync complete — processed {len(enriched)} transactions."]
+        if auto_count:
+            parts.append(f"{auto_count} auto-categorized.")
+        if pending_count:
+            parts.append(f"{pending_count} sent to Erin for review.")
+        if unmatched_count:
+            parts.append(f"{unmatched_count} unmatched (no email found).")
+        return " ".join(parts)
     except Exception as e:
         logger.error("Amazon sync trigger failed: %s", e)
         return f"Amazon sync encountered an error: {e}"
+
+
+def _send_sync_message_direct(message: str) -> None:
+    """Send a message directly to Erin via WhatsApp API (sync, bypasses Claude)."""
+    from src.config import ERIN_PHONE, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID
+    from src.whatsapp import _split_message
+
+    url = f"https://graph.facebook.com/v21.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    for chunk in _split_message(message):
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": ERIN_PHONE,
+            "type": "text",
+            "text": {"body": chunk},
+        }
+        try:
+            resp = httpx.post(url, json=payload, headers=headers, timeout=30)
+            if resp.status_code != 200:
+                logger.error("Direct WhatsApp send failed: %s %s", resp.status_code, resp.text)
+        except Exception as e:
+            logger.error("Direct WhatsApp send error: %s", e)
 
 
 # Map tool names to functions
