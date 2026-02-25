@@ -105,7 +105,7 @@
 - [X] T029 Add PayPal multi-item split support to enrich_and_classify_email() in src/tools/email_sync.py — when PayPal email contains multiple items, suggest YNAB transaction split across categories (same pattern as Amazon multi-item flow)
 - [X] T030 [P] Add Venmo business payment detection to \_parse_venmo_email() in src/tools/email_sync.py — detect when Venmo payment is to a business (not person-to-person) and treat merchant name as the business name
 - [X] T031 [P] Add email_sync_status tool implementation in src/tools/email_sync.py — `get_email_sync_status() -> str` returning last sync time, transactions processed by provider, acceptance rate, auto-categorize status
-- [ ] T032 End-to-end validation: deploy to NUC, trigger sync with real PayPal/Venmo/Apple transactions, verify memos enriched in YNAB and WhatsApp suggestions received by Erin
+- [X] T032 End-to-end validation: deploy to NUC, trigger sync with real PayPal/Venmo/Apple transactions, verify memos enriched in YNAB and WhatsApp suggestions received by Erin
 
 ---
 
