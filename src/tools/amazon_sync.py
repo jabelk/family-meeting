@@ -780,7 +780,7 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
         )
 
         # Single-item orders: auto-categorize directly (FR-006)
-        if len(classified_items) == 1 and classified_items[0].category_id:
+        if len(classified_items) == 1 and classified_items[0].classified_category_id:
             ci = classified_items[0]
             ynab.split_transaction(txn["id"], [{
                 "amount_milliunits": txn["amount"],  # Keep original sign
