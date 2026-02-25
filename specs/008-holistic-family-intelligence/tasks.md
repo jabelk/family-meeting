@@ -37,9 +37,9 @@
 - [x] T007 [US1] Append Rule 43 (Conflicting Priorities) to the system prompt in `src/assistant.py` — instructs Claude to present tradeoffs honestly with a recommendation when domains conflict
 - [x] T008 [US1] Append Rule 44 (Think Deeper, Not Just Wider) to the system prompt in `src/assistant.py` — instructs Claude to dig into root causes for "why" questions, check transaction patterns, and connect causes to effects. Include the DoorDash/late meetings example.
 - [x] T009 [US1] Append Rule 45 (Track Progress Over Time) to the system prompt in `src/assistant.py` — instructs Claude to look for trends when asked about goals/progress, compare current to historical data, and celebrate wins. Include the restaurant spending example.
-- [ ] T010 [US1] Test cross-domain question on NUC via quickstart.md Test 1 — ask "how's our week looking?" and verify response references 2+ domains with narrative advice
-- [ ] T011 [US1] Test cross-domain decision question on NUC via quickstart.md Test 2 — ask "can we afford to eat out this weekend?" and verify it checks budget + calendar + meal plan
-- [ ] T012 [US1] Test single-domain stays focused on NUC via quickstart.md Test 3 — ask "what did we spend at Costco this month?" and verify response stays focused without unnecessary cross-domain padding
+- [x] T010 [US1] Test cross-domain question on NUC via quickstart.md Test 1 — ask "how's our week looking?" and verify response references 2+ domains with narrative advice
+- [x] T011 [US1] Test cross-domain decision question on NUC via quickstart.md Test 2 — ask "can we afford to eat out this weekend?" and verify it checks budget + calendar + meal plan
+- [x] T012 [US1] Test single-domain stays focused on NUC via quickstart.md Test 3 — ask "what did we spend at Costco this month?" and verify response stays focused without unnecessary cross-domain padding
 
 **Checkpoint**: Cross-domain questions work with holistic reasoning. Single-domain questions stay focused. Validate with quickstart.md Tests 1-3.
 
@@ -56,8 +56,8 @@
 - [x] T013 [US2] Append Rule 46 (Daily Briefing Cross-Domain Synthesis) to the system prompt in `src/assistant.py` — instructs Claude to also check budget health, tonight's meal plan, overdue action items, and pending grocery orders when generating the daily plan, weaving insights in naturally
 - [x] T014 [US2] Append Rule 47 (Briefing Conversation Continuity) to the system prompt in `src/assistant.py` — instructs Claude to handle follow-up adjustments to the briefing using existing tools and conversation memory
 - [x] T015 [US2] Modify `generate_daily_plan()` in `src/assistant.py` — expand the prompt string to include cross-domain synthesis instructions: "Also check: budget health (any notable over/under?), tonight's meal plan (does complexity match schedule density?), and any overdue action items or pending grocery orders. Weave cross-domain insights into the briefing naturally — don't add separate sections."
-- [ ] T016 [US2] Test enhanced daily briefing on NUC via quickstart.md Test 4 — call `generate_daily_plan('erin')` and verify it includes traditional elements plus at least one cross-domain insight
-- [ ] T017 [US2] Test briefing conversation follow-up on NUC via quickstart.md Test 5 — send a briefing request via handle_message, then follow up with an adjustment request and verify it acts on it
+- [x] T016 [US2] Test enhanced daily briefing on NUC via quickstart.md Test 4 — call `generate_daily_plan('erin')` and verify it includes traditional elements plus at least one cross-domain insight
+- [x] T017 [US2] Test briefing conversation follow-up on NUC via quickstart.md Test 5 — send a briefing request via handle_message, then follow up with an adjustment request and verify it acts on it
 
 **Checkpoint**: Daily briefing includes cross-domain insights. Erin can reply to adjust. Validate with quickstart.md Tests 4-5.
 
@@ -75,8 +75,8 @@
 - [x] T019 [US3] Append Rule 49 (Meeting Prep Format) to the system prompt in `src/assistant.py` — defines the WhatsApp formatting with bold headline insights per section, bullet details, and synthesized discussion points at the end
 - [x] T020 [US3] Add `generate_meeting_prep()` function in `src/assistant.py` — lightweight trigger function (like `generate_daily_plan()`) that calls `handle_message("system", prompt)` with a prompt referencing Rules 48-49. Place it after `generate_daily_plan()`.
 - [x] T021 [P] [US3] Add `POST /api/v1/meetings/prep-agenda` endpoint in `src/app.py` — follows the same pattern as `/api/v1/briefing/daily`, calls `generate_meeting_prep()`, sends result to Erin's phone via `send_message()`, returns `{"status": "ok", "agenda": ...}`. Include n8n auth verification.
-- [ ] T022 [US3] Test meeting prep via WhatsApp on NUC via quickstart.md Test 6 — ask "prep me for our family meeting" and verify all 5 sections appear with headline insights
-- [ ] T023 [US3] Test meeting prep endpoint on NUC via quickstart.md Test 7 — call `generate_meeting_prep()` directly and verify it returns a complete agenda
+- [x] T022 [US3] Test meeting prep via WhatsApp on NUC via quickstart.md Test 6 — ask "prep me for our family meeting" and verify all 5 sections appear with headline insights
+- [x] T023 [US3] Test meeting prep endpoint on NUC via quickstart.md Test 7 — call `generate_meeting_prep()` directly and verify it returns a complete agenda
 
 **Checkpoint**: Meeting prep works both ad-hoc and via endpoint. All 5 sections present with insights. Validate with quickstart.md Tests 6-7.
 
@@ -87,7 +87,7 @@
 **Purpose**: Syntax check, deploy, and validate all scenarios
 
 - [x] T024 Python syntax check both `src/assistant.py` and `src/app.py` via `python3 -c "import py_compile; py_compile.compile('src/assistant.py', doraise=True); py_compile.compile('src/app.py', doraise=True)"`
-- [ ] T025 Deploy to NUC via `./scripts/nuc.sh deploy` and run full quickstart.md validation (all 7 test scenarios)
+- [x] T025 Deploy to NUC via `./scripts/nuc.sh deploy` and run full quickstart.md validation (all 7 test scenarios)
 - [x] T026 Verify that the system prompt size is reasonable — check the token count increase is ~1-1.5K tokens, not dramatically inflating the prompt
 
 ---
