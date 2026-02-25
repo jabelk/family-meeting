@@ -14,7 +14,7 @@ from src.config import (
     PHONE_TO_NAME, ERIN_PHONE, N8N_WEBHOOK_SECRET,
 )
 from src.whatsapp import extract_message, send_message, download_media
-from src.assistant import handle_message, generate_daily_plan
+from src.assistant import handle_message, generate_daily_plan, generate_meeting_prep
 from src.tools.calendar import delete_assistant_events, batch_create_events, get_events_for_date
 from src.tools.notion import get_routine_templates
 
@@ -217,6 +217,27 @@ async def daily_briefing(req: DailyBriefingRequest, background_tasks: Background
 
     background_tasks.add_task(_run)
     return {"status": "sent", "target": target}
+
+
+@app.post("/api/v1/meetings/prep-agenda", dependencies=[Depends(verify_n8n_auth)])
+async def meeting_prep_agenda(background_tasks: BackgroundTasks):
+    """Generate and send weekly meeting prep agenda via WhatsApp.
+
+    Called by n8n cron Saturday 5pm, or ad-hoc. Gathers cross-domain data
+    and synthesizes a scannable family meeting agenda.
+    """
+    logger.info("Meeting prep agenda triggered")
+
+    async def _run():
+        try:
+            agenda = generate_meeting_prep()
+            await send_message(ERIN_PHONE, agenda)
+            logger.info("Meeting prep sent (%d chars)", len(agenda))
+        except Exception:
+            logger.exception("Meeting prep failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "sent"}
 
 
 @app.post("/api/v1/calendar/populate-week", dependencies=[Depends(verify_n8n_auth)])
