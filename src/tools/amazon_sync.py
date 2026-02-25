@@ -1047,18 +1047,18 @@ def run_nightly_sync() -> str | None:
     Errors are logged but never returned as user-facing messages (US2-AS4).
     """
     try:
-        # Fetch Amazon orders
+        # Check YNAB first (fast) — skip email parsing if nothing to process
+        txns = find_amazon_transactions()
+        if not txns:
+            logger.info("Nightly sync: no new transactions to process")
+            return None
+
+        # Fetch Amazon orders (slow — parses emails via Gmail API + LLM)
         orders, auth_failed = get_amazon_orders()
         if auth_failed:
             return "⚠️ Amazon sync paused — Gmail OAuth token expired. Ask Jason to re-run setup_calendar.py on the NUC."
         if not orders:
             logger.info("Nightly sync: no Amazon orders found")
-            return None
-
-        # Find unprocessed YNAB transactions
-        txns = find_amazon_transactions()
-        if not txns:
-            logger.info("Nightly sync: no new transactions to process")
             return None
 
         # Match and enrich
