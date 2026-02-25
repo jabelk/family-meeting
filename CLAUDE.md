@@ -64,6 +64,10 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Notion (existing databases — no new databases needed), in-memory set for welcome tracking (006-feature-discovery)
 - Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), Pydantic (via anthropic SDK) (007-chat-memory)
 - JSON file in `data/` directory (same pattern as `data/usage_counters.json`), Docker volume mount already configured (007-chat-memory)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), existing 47 tools (008-holistic-family-intelligence)
+- N/A (no new storage — uses existing Notion, YNAB, Google Calendar via tools) (008-holistic-family-intelligence)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 for classification), httpx (YNAB API), amazon-orders>=4.0.18, existing WhatsApp/n8n infrastructure (010-amazon-ynab-sync)
+- JSON files in `data/` for sync records & category mappings; YNAB API for transaction writes (010-amazon-ynab-sync)
 
 ## Deployment (NUC)
 
@@ -101,6 +105,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 010-amazon-ynab-sync: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 for classification), httpx (YNAB API), amazon-orders>=4.0.18, existing WhatsApp/n8n infrastructure
+- 008-holistic-family-intelligence: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), existing 47 tools
 - 007-chat-memory: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), Pydantic (via anthropic SDK)
-- 006-feature-discovery: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), notion-client >=2.2.0,<2.3.0
-- 005-downshiftology-recipes: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), httpx (Downshiftology API calls), notion-client >=2.2.0,<2.3.0

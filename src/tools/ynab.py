@@ -590,6 +590,106 @@ def get_budget_summary(month: str = "", category: str = "") -> str:
 
 
 # ---------------------------------------------------------------------------
+# Transaction update helpers (Feature 010 — Amazon-YNAB sync)
+# ---------------------------------------------------------------------------
+
+
+def split_transaction(transaction_id: str, subtransactions: list[dict]) -> str:
+    """Split a YNAB transaction into sub-transactions by category.
+
+    Args:
+        transaction_id: YNAB transaction UUID.
+        subtransactions: List of dicts with keys:
+            - amount_milliunits (int): Amount in milliunits (negative for outflows).
+            - category_id (str): YNAB category UUID.
+            - memo (str): Item description for this sub-transaction.
+
+    Returns:
+        Confirmation string or error message.
+    """
+    if not subtransactions:
+        return "No subtransactions provided."
+
+    # Build YNAB subtransactions format
+    ynab_subs = []
+    for sub in subtransactions:
+        ynab_subs.append({
+            "amount": sub["amount_milliunits"],
+            "category_id": sub["category_id"],
+            "memo": sub.get("memo", ""),
+        })
+
+    url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{transaction_id}"
+    try:
+        resp = httpx.put(
+            url,
+            headers=HEADERS,
+            json={"transaction": {"subtransactions": ynab_subs}},
+        )
+        resp.raise_for_status()
+        return f"Transaction split into {len(ynab_subs)} sub-transactions."
+    except httpx.HTTPStatusError as e:
+        logger.error("YNAB split_transaction failed: %s — %s", e.response.status_code, e.response.text)
+        return f"Failed to split transaction: {e.response.status_code}"
+
+
+def update_transaction_memo(transaction_id: str, memo: str) -> str:
+    """Update the memo field on an existing YNAB transaction.
+
+    Appends to existing memo if present (separated by " | ").
+
+    Args:
+        transaction_id: YNAB transaction UUID.
+        memo: New memo text.
+
+    Returns:
+        Confirmation string or error message.
+    """
+    url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{transaction_id}"
+    try:
+        # Fetch current transaction to check existing memo
+        resp = httpx.get(url, headers=HEADERS)
+        resp.raise_for_status()
+        txn = resp.json()["data"]["transaction"]
+        existing_memo = txn.get("memo") or ""
+
+        new_memo = f"{existing_memo} | {memo}" if existing_memo else memo
+        # YNAB memo max is 200 chars
+        if len(new_memo) > 200:
+            new_memo = new_memo[:197] + "..."
+
+        put_resp = httpx.put(
+            url,
+            headers=HEADERS,
+            json={"transaction": {"memo": new_memo}},
+        )
+        put_resp.raise_for_status()
+        return f"Memo updated: {new_memo}"
+    except httpx.HTTPStatusError as e:
+        logger.error("YNAB update_memo failed: %s — %s", e.response.status_code, e.response.text)
+        return f"Failed to update memo: {e.response.status_code}"
+
+
+def delete_transaction(transaction_id: str) -> str:
+    """Delete a YNAB transaction (used for undo flow — reverting splits).
+
+    Args:
+        transaction_id: YNAB transaction UUID.
+
+    Returns:
+        Confirmation string or error message.
+    """
+    url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{transaction_id}"
+    try:
+        resp = httpx.delete(url, headers=HEADERS)
+        resp.raise_for_status()
+        return "Transaction deleted."
+    except httpx.HTTPStatusError as e:
+        logger.error("YNAB delete_transaction failed: %s — %s", e.response.status_code, e.response.text)
+        return f"Failed to delete transaction: {e.response.status_code}"
+
+
+# ---------------------------------------------------------------------------
 # Proactive insight functions (called by budget scan endpoint)
 # ---------------------------------------------------------------------------
 

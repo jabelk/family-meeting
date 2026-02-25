@@ -27,10 +27,10 @@ HELP_CATEGORIES = [
         "key": "budget",
         "icon": "\U0001f4b0",  # money bag
         "name": "Budget & Spending",
-        "capabilities": "Check your YNAB budget, search transactions, or move money between categories.",
+        "capabilities": "Check your YNAB budget, search transactions, move money between categories, and sync Amazon purchases with automatic categorization.",
         "static_examples": [
             "what did we spend at Costco?",
-            "how's our Groceries budget?",
+            "sync my Amazon",
         ],
         "personalize_from": "get_budget_summary",
     },
@@ -112,6 +112,11 @@ TOOL_TO_CATEGORY: dict[str, str] = {
     "create_transaction": "budget",
     "update_category_budget": "budget",
     "move_money": "budget",
+    "amazon_sync_status": "budget",
+    "amazon_sync_trigger": "budget",
+    "amazon_spending_breakdown": "budget",
+    "amazon_set_auto_split": "budget",
+    "amazon_undo_split": "budget",
     # calendar
     "get_calendar_events": "calendar",
     "get_outlook_events": "calendar",
@@ -236,6 +241,18 @@ TIP_DEFINITIONS: list[dict] = [
         "trigger_tools": ["search_transactions", "get_budget_summary"],
         "text": "Wondering about a purchase? Ask 'can we afford to eat out this weekend?' and I'll check budget, calendar, and meal plan together.",
         "related_category": "big_picture",
+    },
+    {
+        "id": "tip_amazon_sync",
+        "trigger_tools": ["get_budget_summary", "search_transactions", "recategorize_transaction"],
+        "text": "Say 'sync my Amazon' to automatically match Amazon orders to YNAB and categorize them!",
+        "related_category": "budget",
+    },
+    {
+        "id": "tip_amazon_spending",
+        "trigger_tools": ["amazon_sync_trigger", "amazon_sync_status"],
+        "text": "Ask 'how's our Amazon spending?' to see a breakdown by category with budget comparisons.",
+        "related_category": "budget",
     },
 ]
 

@@ -96,3 +96,8 @@ NOTION_CHORES_DB: str = os.environ.get("NOTION_CHORES_DB", "")
 
 # n8n webhook auth (shared secret for /api/v1/* endpoint protection)
 N8N_WEBHOOK_SECRET: str = os.environ.get("N8N_WEBHOOK_SECRET", "")
+
+# Amazon (optional — needed for Feature 010 Amazon-YNAB sync)
+AMAZON_USERNAME: str = os.environ.get("AMAZON_USERNAME", "")
+AMAZON_PASSWORD: str = os.environ.get("AMAZON_PASSWORD", "")
+AMAZON_OTP_SECRET_KEY: str = os.environ.get("AMAZON_OTP_SECRET_KEY", "")

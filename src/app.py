@@ -240,6 +240,32 @@ async def meeting_prep_agenda(background_tasks: BackgroundTasks):
     return {"status": "sent"}
 
 
+@app.post("/api/v1/amazon/sync", dependencies=[Depends(verify_n8n_auth)])
+async def amazon_sync_endpoint(background_tasks: BackgroundTasks):
+    """Trigger Amazon-YNAB sync via run_nightly_sync() orchestrator.
+
+    Called by n8n cron at 10pm daily. Matches Amazon orders to YNAB transactions,
+    enriches memos with item names, classifies items, and sends split suggestions
+    to Erin via WhatsApp.
+    """
+    logger.info("Amazon sync triggered")
+
+    async def _run():
+        try:
+            from src.tools import amazon_sync
+            message = amazon_sync.run_nightly_sync()
+            if message:
+                await send_message(ERIN_PHONE, message)
+                logger.info("Amazon sync sent (%d chars)", len(message))
+            else:
+                logger.info("Amazon sync complete — nothing to report")
+        except Exception:
+            logger.exception("Amazon sync failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "sent"}
+
+
 @app.post("/api/v1/calendar/populate-week", dependencies=[Depends(verify_n8n_auth)])
 async def populate_week(req: PopulateWeekRequest):
     """Delete assistant-created events for the week and repopulate from routine templates.

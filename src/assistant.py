@@ -4,7 +4,7 @@ import json
 import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery
+from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery, amazon_sync
 from src import conversation
 
 logger = logging.getLogger(__name__)
@@ -300,6 +300,28 @@ emojis from Rule 3. Each section gets a bold headline insight (one sentence) \
 followed by 2-4 bullet points with details. End with a "Discussion Points" \
 section that synthesizes the top 3 things Jason and Erin should decide on, \
 drawn from whichever domains need attention most.
+
+**Amazon-YNAB Sync:**
+50. When Erin asks to sync Amazon, check Amazon orders, or categorize Amazon \
+purchases, use the amazon_sync_trigger tool. This fetches recent Amazon orders, \
+matches them to YNAB transactions, enriches memos with item names, and sends \
+split suggestions.
+51. When Erin replies to an Amazon sync suggestion with "yes", "adjust", or \
+"skip" (possibly preceded by a number like "1 yes"), she is responding to a \
+pending Amazon split suggestion. Acknowledge her choice and confirm the action. \
+For adjustments, interpret her natural language correction (e.g., "put the \
+charger in Home instead") and apply the corrected split.
+52. Use amazon_sync_status when Erin asks "how is the Amazon sync doing?", \
+"what's my Amazon categorization rate?", or similar status questions.
+53. When the bot sends an auto-split graduation prompt ("Want me to start \
+auto-splitting?") and Erin replies "yes" or "sure", use amazon_set_auto_split \
+with enabled=true. If she says "no" or "not yet", acknowledge and continue \
+with the suggestion flow.
+54. When Erin says "undo", "undo 1", or "revert that split" after an auto-split \
+notification, use amazon_undo_split. The index defaults to the most recent split.
+55. When Erin asks "how's our Amazon spending?", "what are we buying on Amazon?", \
+or wants an Amazon category breakdown, use amazon_spending_breakdown. Include \
+budget comparisons and top purchases.
 """
 
 # ---------------------------------------------------------------------------
@@ -900,6 +922,54 @@ TOOLS = [
         "description": "Generate a personalized help menu showing all bot capabilities grouped by category with example phrases. Use when someone says 'help', 'what can you do?', 'what are your features?', or similar.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    # Amazon-YNAB Sync (Feature 010)
+    {
+        "name": "amazon_sync_status",
+        "description": "Get the current Amazon-YNAB sync status including: last sync time, transactions processed, match rate, acceptance rate, and whether auto-split mode is enabled. Use when Erin asks about Amazon sync, categorization stats, or 'how is the Amazon sync doing?'.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "amazon_sync_trigger",
+        "description": "Manually trigger an Amazon-YNAB sync to fetch recent Amazon orders, match them to YNAB transactions, enrich memos with item names, classify items into budget categories, and send split suggestions. Use when Erin says 'sync my Amazon', 'check Amazon orders', or 'categorize Amazon purchases'.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "amazon_spending_breakdown",
+        "description": "Get a breakdown of Amazon spending by YNAB category for a given month, with budget comparisons and top purchases. Use when Erin asks 'how are we doing on Amazon spending?', 'Amazon spending breakdown', or 'what are we buying on Amazon?'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "month": {"type": "string", "description": "Month in YYYY-MM format. Defaults to current month."},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "amazon_set_auto_split",
+        "description": "Enable or disable Amazon auto-split mode. When enabled, Amazon purchases are automatically split into YNAB categories without confirmation. Requires 80%+ acceptance rate over 10+ suggestions. Use when Erin says 'yes' to the auto-split graduation prompt, or 'turn off auto-split'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "enabled": {"type": "boolean", "description": "True to enable auto-split, False to disable."},
+            },
+            "required": ["enabled"],
+        },
+    },
+    {
+        "name": "amazon_undo_split",
+        "description": "Undo a recent Amazon auto-split transaction, reverting it to its original unsplit state. Use when Erin says 'undo' or 'undo 1' after an auto-split notification.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "transaction_index": {
+                    "type": "integer",
+                    "description": "Index of the auto-split to undo (1 = most recent). Default 1.",
+                    "default": 1,
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 # Color mapping for calendar blocks
@@ -966,6 +1036,32 @@ def _handle_extract_recipe(**kw) -> dict | str:
     _current_image_data = None
 
     return result
+
+
+def _handle_amazon_sync_trigger() -> str:
+    """Handle manual Amazon sync trigger from WhatsApp."""
+    try:
+        orders, auth_failed = amazon_sync.get_amazon_orders()
+        if auth_failed:
+            return "⚠️ Amazon sync needs re-authentication. Ask Jason to update the Amazon credentials."
+        if not orders:
+            return "No Amazon orders found in the last 30 days."
+
+        txns = amazon_sync.find_amazon_transactions()
+        if not txns:
+            return "No new Amazon transactions to process — all caught up! ✅"
+
+        matched = amazon_sync.match_orders_to_transactions(txns, orders)
+        enriched = amazon_sync.enrich_and_classify(matched)
+        message = amazon_sync.format_suggestion_message(enriched)
+        amazon_sync.set_pending_suggestions(enriched)
+
+        if message:
+            return message
+        return "Amazon sync complete — no new transactions needed categorization."
+    except Exception as e:
+        logger.error("Amazon sync trigger failed: %s", e)
+        return f"Amazon sync encountered an error: {e}"
 
 
 # Map tool names to functions
@@ -1058,6 +1154,12 @@ TOOL_FUNCTIONS = {
     ),
     # Feature discovery
     "get_help": lambda **kw: discovery.get_help(kw.get("_phone", "")),
+    # Amazon-YNAB Sync (Feature 010)
+    "amazon_spending_breakdown": lambda **kw: amazon_sync.get_amazon_spending_breakdown(kw.get("month", "")),
+    "amazon_sync_status": lambda **kw: amazon_sync.get_sync_status(),
+    "amazon_sync_trigger": lambda **kw: _handle_amazon_sync_trigger(),
+    "amazon_set_auto_split": lambda **kw: amazon_sync.set_auto_split(kw["enabled"]),
+    "amazon_undo_split": lambda **kw: amazon_sync.handle_undo(kw.get("transaction_index", 1)),
 }
 
 
