@@ -278,12 +278,13 @@ def _strip_html(html: str) -> str:
     return text
 
 
-def _parse_order_email(html_body: str) -> dict | None:
-    """Use Claude to parse Amazon order confirmation email text into structured data.
+def _parse_order_email(html_body: str, email_date: str = "") -> list[dict]:
+    """Use Claude to parse Amazon order confirmation email into structured data.
 
-    Strips HTML first to reduce noise, then sends clean text to Claude Haiku.
-    Returns dict with keys: order_number, order_date, grand_total, items, shipments.
-    Returns None if parsing fails.
+    Strips HTML first, then sends clean text to Claude Haiku.
+    One email may contain multiple orders — returns a list of order dicts.
+    Each dict has keys: order_number, order_date, grand_total, items.
+    Returns empty list if parsing fails.
     """
     from anthropic import Anthropic
     from src.config import ANTHROPIC_API_KEY
@@ -298,104 +299,103 @@ def _parse_order_email(html_body: str) -> dict | None:
     # Quick sanity check: does this look like an Amazon order email?
     if "order" not in clean_text.lower() or "$" not in clean_text:
         logger.debug("Email doesn't look like an Amazon order confirmation, skipping")
-        return None
+        return []
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
     prompt = (
-        "Extract order details from this Amazon order confirmation email.\n\n"
+        "Extract ALL order details from this Amazon order confirmation email.\n"
+        "IMPORTANT: One email may contain MULTIPLE separate orders, each with its own "
+        "order number and Grand Total. Extract each one.\n\n"
         "CRITICAL RULES:\n"
-        "- The order number is in format ###-#######-####### (e.g., 113-9360489-9235419). "
-        "Extract it EXACTLY as it appears — do NOT make up or guess order numbers.\n"
-        "- The order date is when the order was placed. Look for 'Order Placed:' or "
-        "'Placed on' or similar. Format as YYYY-MM-DD.\n"
-        "- grand_total is the 'Order Total' or 'Grand Total' INCLUDING tax and shipping. "
-        "This is the actual amount charged to the credit card.\n"
-        "- Item prices are the per-unit prices shown next to each item name.\n"
-        "- If you cannot find a specific field in the email text, set it to null — "
-        "do NOT invent placeholder values.\n\n"
-        "Return ONLY valid JSON:\n"
-        "{\n"
-        '  "order_number": "exact order number or null",\n'
-        '  "order_date": "YYYY-MM-DD or null",\n'
-        '  "grand_total": 87.42,\n'
-        '  "items": [\n'
-        '    {"title": "exact product name", "price": 25.00, "quantity": 1}\n'
-        "  ]\n"
-        "}\n\n"
+        "- Order numbers are in format ###-#######-####### (e.g., 112-1730641-1221858). "
+        "Extract EXACTLY as shown — do NOT invent numbers.\n"
+        "- grand_total is the 'Grand Total:' amount shown for EACH order. "
+        "This includes tax and shipping — it's what gets charged to the card.\n"
+        "- Item prices may appear as '$ 24 99' meaning $24.99. Convert to decimal.\n"
+        "- If you cannot find a field, set it to null — do NOT guess.\n\n"
+        "Return ONLY a valid JSON array of orders:\n"
+        "[\n"
+        "  {\n"
+        '    "order_number": "###-#######-#######",\n'
+        '    "grand_total": 41.08,\n'
+        '    "items": [\n'
+        '      {"title": "exact product name from email", "price": 24.99, "quantity": 1}\n'
+        "    ]\n"
+        "  }\n"
+        "]\n\n"
         f"Email text:\n{clean_text}"
     )
 
     try:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=1000,
+            max_tokens=2000,
             messages=[{"role": "user", "content": prompt}],
         )
 
         text = response.content[0].text.strip()
-        if "{" not in text:
-            return None
 
-        json_str = text[text.index("{"):text.rindex("}") + 1]
-        order = json.loads(json_str)
+        # Parse as JSON array or single object
+        if "[" in text:
+            json_str = text[text.index("["):text.rindex("]") + 1]
+            raw_orders = json.loads(json_str)
+        elif "{" in text:
+            json_str = text[text.index("{"):text.rindex("}") + 1]
+            raw_orders = [json.loads(json_str)]
+        else:
+            return []
 
-        # --- Validation: reject hallucinated data ---
+        if not isinstance(raw_orders, list):
+            raw_orders = [raw_orders]
 
-        # Validate order number format (###-#######-#######)
-        order_num = order.get("order_number")
-        if order_num and not re.match(r"^\d{3}-\d{7}-\d{7}$", str(order_num)):
-            logger.warning("Rejected invalid order number: %s", order_num)
-            order["order_number"] = None
+        # Validate and normalize each order
+        validated = []
+        for order in raw_orders:
+            if not isinstance(order, dict):
+                continue
 
-        # Validate date is reasonable (within last 60 days)
-        order_date = order.get("order_date")
-        if order_date:
-            try:
-                parsed_date = datetime.strptime(str(order_date), "%Y-%m-%d").date()
-                days_ago = (date.today() - parsed_date).days
-                if days_ago < -1 or days_ago > 60:
-                    logger.warning("Rejected out-of-range date: %s (%d days ago)", order_date, days_ago)
-                    order["order_date"] = None
-                else:
-                    order["order_date"] = parsed_date.isoformat()
-            except ValueError:
-                order["order_date"] = None
+            # Set order_date from email Date header (not in email body)
+            order["order_date"] = email_date or None
 
-        # Validate grand_total is a reasonable number
-        grand_total = order.get("grand_total")
-        if grand_total is not None:
-            try:
-                grand_total = float(grand_total)
-                if grand_total <= 0 or grand_total > 5000:
-                    logger.warning("Rejected unreasonable total: %s", grand_total)
+            # Validate order number format
+            order_num = order.get("order_number")
+            if order_num and not re.match(r"^\d{3}-\d{7}-\d{7}$", str(order_num)):
+                logger.warning("Rejected invalid order number: %s", order_num)
+                order["order_number"] = None
+
+            # Validate grand_total
+            grand_total = order.get("grand_total")
+            if grand_total is not None:
+                try:
+                    grand_total = float(grand_total)
+                    if grand_total <= 0 or grand_total > 5000:
+                        logger.warning("Rejected unreasonable total: %s", grand_total)
+                        order["grand_total"] = None
+                    else:
+                        order["grand_total"] = grand_total
+                except (ValueError, TypeError):
                     order["grand_total"] = None
-                else:
-                    order["grand_total"] = grand_total
-            except (ValueError, TypeError):
-                order["grand_total"] = None
 
-        # Must have at least order_number or (grand_total + items) to be useful
-        has_items = bool(order.get("items"))
-        has_total = order.get("grand_total") is not None
-        has_order_num = order.get("order_number") is not None
-        if not has_order_num and not (has_total and has_items):
-            logger.debug("Parsed email had insufficient data, skipping")
-            return None
+            # Must have grand_total to be useful for matching
+            if order.get("grand_total") is None:
+                continue
 
-        logger.info(
-            "Parsed order %s: date=%s total=%s items=%d",
-            order.get("order_number", "?"),
-            order.get("order_date", "?"),
-            order.get("grand_total", "?"),
-            len(order.get("items", [])),
-        )
-        return order
+            logger.info(
+                "Parsed order %s: date=%s total=%.2f items=%d",
+                order.get("order_number", "?"),
+                order.get("order_date", "?"),
+                order.get("grand_total", 0),
+                len(order.get("items", [])),
+            )
+            validated.append(order)
+
+        return validated
 
     except Exception as e:
         logger.warning("Claude email parsing failed: %s", e)
 
-    return None
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -444,8 +444,20 @@ def get_amazon_orders(days: int = 30) -> tuple[list[dict], bool]:
                 if not html_body:
                     continue
 
-                parsed = _parse_order_email(html_body)
-                if parsed:
+                # Extract email Date header as order date
+                headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+                email_date_str = headers.get("Date", "")
+                email_date = ""
+                if email_date_str:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        dt = parsedate_to_datetime(email_date_str)
+                        email_date = dt.date().isoformat()
+                    except Exception:
+                        pass
+
+                parsed_orders = _parse_order_email(html_body, email_date)
+                for parsed in parsed_orders:
                     # Deduplicate by order number
                     order_num = parsed.get("order_number", "")
                     if order_num and order_num in seen_order_numbers:
