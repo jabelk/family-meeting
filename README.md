@@ -29,7 +29,7 @@ Claude (Anthropic) — agentic tool loop
 You text the bot in WhatsApp. Claude reads your message, decides which tools to call (calendar, budget, recipes, etc.), executes them, and sends back a formatted response. It remembers conversation context for 24 hours.
 
 Scheduled workflows run via n8n (open-source automation):
-- **7:00am** — Daily briefing sent to Erin with calendar, chores, meals, and cross-domain insights
+- **7:00am** — Daily briefing with calendar, chores, meals, and cross-domain insights
 - **10:00pm** — Amazon order sync (matches orders to YNAB transactions)
 - **10:05pm** — Email sync (PayPal, Venmo, Apple charges matched to YNAB)
 - **Weekly** — Calendar population, budget scan, mid-week check-in
@@ -52,39 +52,40 @@ Scheduled workflows run via n8n (open-source automation):
 ## Example Conversations
 
 ```
-Erin: what's my day look like?
-Bot:  *Your Tuesday Plan* ☀️
-      7:00 — Morning routine + breakfast (Jason free until 8:30)
-      9:30 — Drop off Vienna at Roy Gomm
-      10:00-1:00 — Sandy has Zoey! 🎉
-        • Chore block: vacuum living room + start laundry
-        • Personal: knitting project (backlog item)
-      1:00 — Pick up Zoey from Sandy's
-      2:30 — Move laundry to dryer
-      3:15 — Pick up Vienna (early — Zoey's gymnastics)
-      ...
-      Budget note: Groceries at 78% with 6 days left — on track.
-      Tonight's dinner: Sheet pan chicken fajitas (30 min, kid-friendly)
+Sarah: what's my day look like?
+Bot:   *Your Tuesday Plan* ☀️
+       7:00 — Morning routine + breakfast (Mike free until 8:30)
+       9:30 — Drop off Lily at Maple Elementary
+       10:00-1:00 — Grandma has Emma! 🎉
+         • Chore block: vacuum living room + start laundry
+         • Personal: craft project (backlog item)
+       1:00 — Pick up Emma from Grandma's
+       2:30 — Move laundry to dryer
+       3:15 — Pick up Lily (early — Emma's swim class)
+       ...
+       Budget note: Groceries at 78% with 6 days left — on track.
+       Tonight's dinner: Sheet pan chicken fajitas (30 min, kid-friendly)
 ```
 
 ```
-Erin: sync my Amazon
-Bot:  [sends detailed message directly to Erin]
-      🛒 Amazon Sync — 3 new orders matched
-      1️⃣ $87.42 (Feb 23) — 3 items
-        • Nature Made Vitamin D3 → Healthcare ($24.99)
-        • LEGO Duplo Train → Kids Toys ($42.43)
-        • USB-C Cable → Jason Fun ($12.99)
-      Reply "1 yes" to split, "1 adjust" to modify
+Sarah: sync my Amazon
+Bot:   [sends detailed message directly]
+       🛒 Amazon Sync — 3 new orders matched
+       1️⃣ $87.42 (Feb 23) — 3 items
+         • Nature Made Vitamin D3 → Healthcare ($24.99)
+         • LEGO Duplo Train → Kids Toys ($42.43)
+         • USB-C Cable → Fun Money ($12.99)
+       Reply "1 yes" to split, "1 adjust" to modify
 ```
 
 ```
-Erin: can we afford to eat out this weekend?
-Bot:  Dining Out is at $890 of $1,200 this month with 5 days left —
-      you have about $310 of room. Saturday looks busy (ski lesson
-      8-11am, groceries after) so a quick lunch out makes sense.
-      Sunday you're free after church. I'd suggest keeping it under
-      $80 total to stay on track. Want me to find a restaurant?
+Sarah: can we afford to eat out this weekend?
+Bot:   Dining Out is at $340 of $500 this month with 5 days left —
+       you have about $160 of room. Saturday looks busy (soccer
+       practice 9-11am, errands after) so a quick lunch out makes
+       sense. Sunday you're free after the morning. I'd suggest
+       keeping it under $80 total to stay on track. Want me to
+       find a restaurant?
 ```
 
 ## Architecture
@@ -149,7 +150,7 @@ The production stack runs on a home server (Intel NUC, Ubuntu 24.04) via Docker 
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/jabelk/family-meeting.git
+git clone https://github.com/youruser/family-meeting.git
 cd family-meeting
 cp .env.example .env   # Then fill in all values
 ```
@@ -167,8 +168,8 @@ WHATSAPP_VERIFY_TOKEN=...             # You choose this (webhook verification)
 WHATSAPP_APP_SECRET=...               # For webhook signature verification
 
 # Family phones (with country code, no +)
-JASON_PHONE=1234567890
-ERIN_PHONE=0987654321
+PARTNER1_PHONE=15551234567
+PARTNER2_PHONE=15559876543
 
 # Notion
 NOTION_TOKEN=ntn_...                  # notion.so/my-integrations
@@ -184,8 +185,8 @@ NOTION_NUDGE_QUEUE_DB=...
 NOTION_CHORES_DB=...
 
 # Google Calendar (OAuth — run setup_calendar.py first)
-GOOGLE_CALENDAR_JASON_ID=...          # email or calendar ID
-GOOGLE_CALENDAR_ERIN_ID=...
+GOOGLE_CALENDAR_PARTNER1_ID=...       # email or calendar ID
+GOOGLE_CALENDAR_PARTNER2_ID=...
 GOOGLE_CALENDAR_FAMILY_ID=...
 
 # YNAB
@@ -278,7 +279,7 @@ This bot was built for a specific family — you'll need to customize it for you
 
 3. **Schedules**: Update n8n workflows for your timezone and preferred automation times.
 
-4. **Categories**: YNAB category mappings, recipe tags, chore lists — all configurable through the bot itself ("I like to vacuum on Wednesdays", "add to backlog: organize garage").
+4. **Categories**: YNAB category mappings, recipe tags, chore lists — all configurable through the bot itself via natural language ("I like to vacuum on Wednesdays", "add to backlog: organize garage").
 
 ## How This Was Built — Claude Code + Speckit
 
