@@ -3,6 +3,8 @@
 import httpx
 import json
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
 from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery, amazon_sync, email_sync
@@ -43,8 +45,9 @@ when chatting (friendly, organized, slightly playful).
 **Weekly Schedule:**
 - Mon: Erin drops off Vienna 9:30am, Sandy has Zoey 9-12. Pickup Vienna 3:30.
 - Tue: Erin drops off Vienna 9:30am, Sandy has Zoey 10-1. Pickup Vienna 3:15 \
-(early — Zoey's gymnastics class).
-- Wed: Erin drops off Vienna 9:30am, Zoey with Erin. Pickup Vienna 3:45 (not 3:30).
+(early — Zoey's gymnastics class 3:30-4:30).
+- Wed: Erin drops off Vienna 9:30am, Zoey with Erin. Pickup Vienna 2:45 \
+(early — Vienna's gymnastics class 3:30-4:30).
 - Thu: Jason does driving drop-off for Vienna (Jason needs to be at BSF at \
 Sparks Christian Fellowship by 10am). Zoey with Erin. Pickup Vienna 3:30.
 - Fri: Erin drops off Vienna 9:30am, Zoey with Erin. Nature class at Bartley \
@@ -105,7 +108,8 @@ by the morning briefing):
 Each day of the week has different commitments — use the day-specific schedule \
 above (not just "Zoey with Erin" vs "Zoey with grandma").
 10. Check who has Zoey today (Erin, Sandy, or grandparents) and what day-specific \
-activities apply (gymnastics Tue, nature class Fri, ski Sat, church Sun, etc.)
+activities apply (Zoey gymnastics Tue, Vienna gymnastics Wed, nature class Fri, \
+ski Sat, church Sun, etc.)
 11. Fetch Jason's work calendar (Outlook) to show his meeting windows so \
 Erin can plan breakfast timing. If he's free 7-7:30am, breakfast window is \
 then. If he has early meetings, note when he's free.
@@ -351,6 +355,12 @@ silently. If any categories have >30% drift, add a "Budget Goal Health" section 
 to the agenda with: count of drifted categories, the largest drift, count of \
 missing goals, health score, and a pointer saying "Say 'budget health check' \
 for full details and suggestions."
+
+**Budget quiet hours:**
+67. Erin does NOT want to hear about budget topics before 8pm Pacific. If it is \
+before 8pm, do NOT proactively mention budgets, spending, or financial topics. \
+Only discuss budgets before 8pm if Erin explicitly asks about them first. This \
+applies to daily plans, check-ins, and any proactive messages.
 
 **Email-YNAB Sync (PayPal, Venmo, Apple):**
 56. When Erin asks to sync emails, check PayPal/Venmo/Apple transactions, or \
@@ -1445,8 +1455,12 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     messages = history + [{"role": "user", "content": user_content}]
     history_len = len(history)
 
+    # Inject current date/time so Claude knows what day it is
+    now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
+    date_line = now.strftime("\n\n**Right now:** %A, %B %d, %Y at %I:%M %p Pacific.")
+    system = SYSTEM_PROMPT + date_line
+
     # First-time welcome: prepend instruction for new users
-    system = SYSTEM_PROMPT
     if sender_phone != "system" and sender_phone not in _welcomed_phones:
         _welcomed_phones.add(sender_phone)
         system += (
@@ -1533,10 +1547,11 @@ def generate_daily_plan(target: str = "erin") -> str:
         "work calendar for meeting windows, check today's Google Calendar events, "
         "pick a backlog item to suggest, and write the time blocks to Erin's "
         "Google Calendar. "
-        "Also check: budget health (any notable over/under?), tonight's meal plan "
+        "Also check: tonight's meal plan "
         "(does complexity match schedule density?), and any overdue action items "
         "or pending grocery orders. Weave cross-domain insights into the briefing "
-        "naturally — don't add separate sections. Format for WhatsApp."
+        "naturally — don't add separate sections. Format for WhatsApp. "
+        "Remember: do NOT include budget/financial info — Erin prefers that after 8pm only."
     )
     return handle_message("system", prompt)
 

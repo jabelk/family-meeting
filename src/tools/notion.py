@@ -41,27 +41,47 @@ def get_family_profile() -> str:
 def update_family_profile(section: str, content: str) -> str:
     """Append content to a section of the Family Profile page.
 
-    Finds the heading matching `section` and appends a bullet block after it.
+    Finds the heading matching `section` and inserts a bullet block after it
+    (using the `after` parameter so it lands right below the heading).
     If the section isn't found, appends at the end of the page.
     """
     blocks = notion.blocks.children.list(block_id=NOTION_FAMILY_PROFILE_PAGE)
-    target_id = NOTION_FAMILY_PROFILE_PAGE
-    for block in blocks["results"]:
+    after_id = None
+    results = blocks["results"]
+    for i, block in enumerate(results):
         block_text = _get_block_text(block)
         if block_text and section.lower() in block_text.lower():
-            target_id = block["id"]
+            # Walk forward to find the last block in this section
+            # (insert after the last bullet under this heading, not right after the heading)
+            last_in_section = block["id"]
+            for j in range(i + 1, len(results)):
+                next_block = results[j]
+                next_type = next_block.get("type", "")
+                if next_type.startswith("heading_"):
+                    break
+                last_in_section = next_block["id"]
+            after_id = last_in_section
             break
 
-    notion.blocks.children.append(
-        block_id=target_id,
-        children=[{
-            "object": "block",
-            "type": "bulleted_list_item",
-            "bulleted_list_item": {
-                "rich_text": [{"type": "text", "text": {"content": content}}]
-            },
-        }],
-    )
+    new_block = {
+        "object": "block",
+        "type": "bulleted_list_item",
+        "bulleted_list_item": {
+            "rich_text": [{"type": "text", "text": {"content": content}}]
+        },
+    }
+
+    if after_id:
+        notion.blocks.children.append(
+            block_id=NOTION_FAMILY_PROFILE_PAGE,
+            children=[new_block],
+            after=after_id,
+        )
+    else:
+        notion.blocks.children.append(
+            block_id=NOTION_FAMILY_PROFILE_PAGE,
+            children=[new_block],
+        )
     return f"Added to {section}: {content}"
 
 

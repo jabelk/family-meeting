@@ -7,7 +7,7 @@
           "interval": [
             {
               "triggerAtMinute": 0,
-              "triggerAtHour": 9,
+              "triggerAtHour": 20,
               "triggerAtDay": 1
             }
           ]
