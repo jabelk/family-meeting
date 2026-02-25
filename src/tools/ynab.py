@@ -562,10 +562,10 @@ def get_budget_summary(month: str = "", category: str = "") -> str:
         # Goals
         goals = []
         for cat in categories:
-            if cat.get("goal_type") and cat.get("goal_percentage_complete", 0) > 0:
+            if cat.get("goal_type") and (cat.get("goal_percentage_complete") or 0) > 0:
                 pct = cat["goal_percentage_complete"]
-                target = cat.get("goal_target", 0) / 1000
-                funded = cat.get("goal_overall_funded", 0) / 1000
+                target = (cat.get("goal_target") or 0) / 1000
+                funded = (cat.get("goal_overall_funded") or 0) / 1000
                 if target > 0:
                     goals.append(f"- {cat['name']}: {pct}% (${funded:,.0f} / ${target:,.0f})")
 
