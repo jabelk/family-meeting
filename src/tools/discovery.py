@@ -73,8 +73,19 @@ HELP_CATEGORIES = [
         "name": "Family Management",
         "capabilities": "Manage action items, backlog projects, meeting agendas, and family profile.",
         "static_examples": [
-            "what's my day look like?",
             "add to backlog: organize garage",
+            "what action items are overdue?",
+        ],
+        "personalize_from": None,
+    },
+    {
+        "key": "big_picture",
+        "icon": "\U0001f9e0",  # brain
+        "name": "Big Picture & Strategy",
+        "capabilities": "Ask broad questions and I'll connect the dots across budget, calendar, meals, and tasks to give you strategic advice.",
+        "static_examples": [
+            "how's our week looking?",
+            "prep me for our family meeting",
         ],
         "personalize_from": None,
     },
@@ -138,6 +149,9 @@ TOOL_TO_CATEGORY: dict[str, str] = {
     "add_backlog_item": "family_management",
     "complete_backlog_item": "family_management",
     "get_routine_templates": "family_management",
+    # big_picture — cross-domain questions use multiple tools; map the ones
+    # most associated with holistic queries so usage tracking picks them up.
+    "get_help": "big_picture",
 }
 
 # ---------------------------------------------------------------------------
@@ -204,6 +218,24 @@ TIP_DEFINITIONS: list[dict] = [
         "trigger_tools": ["complete_chore", "skip_chore", "start_laundry"],
         "text": "Need a break? Say 'quiet day' to pause all proactive reminders for today.",
         "related_category": "chores",
+    },
+    {
+        "id": "tip_big_picture",
+        "trigger_tools": ["get_budget_summary", "get_calendar_events", "get_action_items"],
+        "text": "Try asking 'how's our week looking?' and I'll connect budget, calendar, meals, and tasks into one big picture.",
+        "related_category": "big_picture",
+    },
+    {
+        "id": "tip_meeting_prep",
+        "trigger_tools": ["get_action_items", "rollover_incomplete_items", "create_meeting"],
+        "text": "Say 'prep me for our family meeting' and I'll build a full agenda with budget, calendar, action items, and priorities.",
+        "related_category": "big_picture",
+    },
+    {
+        "id": "tip_afford",
+        "trigger_tools": ["search_transactions", "get_budget_summary"],
+        "text": "Wondering about a purchase? Ask 'can we afford to eat out this weekend?' and I'll check budget, calendar, and meal plan together.",
+        "related_category": "big_picture",
     },
 ]
 
