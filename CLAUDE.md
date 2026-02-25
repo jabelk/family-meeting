@@ -60,6 +60,10 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - YNAB API (external, transactions + budgets), Notion Nudge Queue (budget insights as nudges) (004-ynab-smart-budget)
 - Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), httpx (Downshiftology API calls), notion-client >=2.2.0,<2.3.0 (005-downshiftology-recipes)
 - Downshiftology API (external, read-only), Notion Recipes + Cookbooks databases (read/write) (005-downshiftology-recipes)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), notion-client >=2.2.0,<2.3.0 (006-feature-discovery)
+- Notion (existing databases — no new databases needed), in-memory set for welcome tracking (006-feature-discovery)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), Pydantic (via anthropic SDK) (007-chat-memory)
+- JSON file in `data/` directory (same pattern as `data/usage_counters.json`), Docker volume mount already configured (007-chat-memory)
 
 ## Deployment (NUC)
 
@@ -97,6 +101,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 007-chat-memory: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), Pydantic (via anthropic SDK)
+- 006-feature-discovery: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), notion-client >=2.2.0,<2.3.0
 - 005-downshiftology-recipes: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), httpx (Downshiftology API calls), notion-client >=2.2.0,<2.3.0
-- 004-ynab-smart-budget: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), httpx (YNAB API calls), notion-client >=2.2.0,<2.3.0
-- 003-smart-nudges-chores: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Sonnet 4), notion-client >=2.2.0,<2.3.0, httpx, google-api-python-clien

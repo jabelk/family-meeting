@@ -5,6 +5,7 @@ import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
 from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery
+from src import conversation
 
 logger = logging.getLogger(__name__)
 
@@ -1028,7 +1029,10 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     else:
         user_content = f"[From {sender_name}]: {message_text}"
 
-    messages = [{"role": "user", "content": user_content}]
+    # Load conversation history for multi-turn context (skip for system/automated messages)
+    history = conversation.get_history(sender_phone) if sender_phone != "system" else []
+    messages = history + [{"role": "user", "content": user_content}]
+    history_len = len(history)
 
     # First-time welcome: prepend instruction for new users
     system = SYSTEM_PROMPT
@@ -1050,6 +1054,8 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
         iteration += 1
         if iteration > MAX_TOOL_ITERATIONS:
             logger.warning("Tool loop hit max iterations (%d) — stopping", MAX_TOOL_ITERATIONS)
+            if sender_phone != "system":
+                conversation.save_turn(sender_phone, messages[history_len:])
             return "I hit my processing limit for this request. Please try a simpler question or break it into parts."
 
         response = client.messages.create(
@@ -1098,6 +1104,9 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
             continue
 
         # No more tool calls — extract final text response
+        messages.append({"role": "assistant", "content": response.content})
+        if sender_phone != "system":
+            conversation.save_turn(sender_phone, messages[history_len:])
         text_parts = [block.text for block in response.content if hasattr(block, "text")]
         return "\n".join(text_parts) if text_parts else "I'm not sure how to help with that."
 
