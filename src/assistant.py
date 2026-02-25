@@ -5,7 +5,7 @@ import json
 import logging
 from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery, amazon_sync
+from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery, amazon_sync, email_sync
 from src import conversation
 
 logger = logging.getLogger(__name__)
@@ -323,6 +323,24 @@ notification, use amazon_undo_split. The index defaults to the most recent split
 55. When Erin asks "how's our Amazon spending?", "what are we buying on Amazon?", \
 or wants an Amazon category breakdown, use amazon_spending_breakdown. Include \
 budget comparisons and top purchases.
+
+**Email-YNAB Sync (PayPal, Venmo, Apple):**
+56. When Erin asks to sync emails, check PayPal/Venmo/Apple transactions, or \
+categorize non-Amazon charges, use the email_sync_trigger tool. This fetches \
+confirmation emails from PayPal, Venmo, and Apple, matches them to YNAB \
+transactions, enriches memos, and sends category suggestions.
+57. When Erin replies to an email sync suggestion with "yes", "adjust", or \
+"skip" (possibly preceded by a number like "1 yes"), she may be responding to \
+an email sync suggestion. Check email sync pending suggestions before Amazon sync ones.
+58. Use email_sync_status when Erin asks "how is the email sync doing?", \
+"PayPal sync status", or similar status questions about email-synced providers.
+59. When the bot sends an auto-categorize graduation prompt ("Want me to start \
+auto-categorizing?") and Erin replies "yes" or "sure", use \
+email_set_auto_categorize with enabled=true. If she says "no" or "not yet", \
+acknowledge and continue with the suggestion flow.
+60. When Erin says "undo", "undo 1", or "revert that categorization" after an \
+email sync auto-categorize notification, use email_undo_categorize. The index \
+defaults to the most recent categorization.
 """
 
 # ---------------------------------------------------------------------------
@@ -971,6 +989,43 @@ TOOLS = [
             "required": [],
         },
     },
+    # Email-YNAB Sync (Feature 011: PayPal, Venmo, Apple)
+    {
+        "name": "email_sync_trigger",
+        "description": "Manually trigger an email-YNAB sync to fetch recent PayPal, Venmo, and Apple confirmation emails, match them to YNAB transactions, enrich memos with actual merchant/service names, classify into budget categories, and send suggestions. Use when Erin says 'sync my emails', 'check PayPal', 'categorize Venmo', 'what was that Apple charge?', or similar.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "email_sync_status",
+        "description": "Get the current email-YNAB sync status including: last sync time, transactions processed by provider (PayPal/Venmo/Apple), acceptance rate, and whether auto-categorize mode is enabled. Use when Erin asks about email sync, PayPal/Venmo/Apple categorization stats.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "email_set_auto_categorize",
+        "description": "Enable or disable email sync auto-categorize mode. When enabled, PayPal/Venmo/Apple purchases are automatically categorized without confirmation. Requires 80%+ acceptance rate over 10+ suggestions and 2 weeks of use. Use when Erin says 'yes' to the auto-categorize graduation prompt, or 'turn off auto-categorize for emails'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "enabled": {"type": "boolean", "description": "True to enable auto-categorize, False to disable."},
+            },
+            "required": ["enabled"],
+        },
+    },
+    {
+        "name": "email_undo_categorize",
+        "description": "Undo a recent email sync auto-categorization, reverting the transaction to its original state. Use when Erin says 'undo' or 'undo 1' after an email sync auto-categorize notification.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "transaction_index": {
+                    "type": "integer",
+                    "description": "Index of the auto-categorization to undo (1 = most recent). Default 1.",
+                    "default": 1,
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 # Color mapping for calendar blocks
@@ -1064,7 +1119,7 @@ def _handle_amazon_sync_trigger() -> str:
 
         # Send detailed suggestion message directly to Erin (don't let Claude summarize)
         if message:
-            _send_sync_message_direct(message)
+            send_sync_message_direct(message)
 
         # Count results for short status
         auto_count = sum(1 for m in enriched if m.get("sync_record") and m["sync_record"].status == "auto_split")
@@ -1084,7 +1139,23 @@ def _handle_amazon_sync_trigger() -> str:
         return f"Amazon sync encountered an error: {e}"
 
 
-def _send_sync_message_direct(message: str) -> None:
+def _handle_email_sync_trigger() -> str:
+    """Handle manual email sync trigger from WhatsApp.
+
+    Sends the detailed suggestion message directly to Erin via WhatsApp
+    (bypassing Claude's summarization), then returns a short status to Claude.
+    """
+    try:
+        result = email_sync.run_email_sync()
+        if result is None:
+            return "No new PayPal, Venmo, or Apple transactions to process — all caught up!"
+        return result
+    except Exception as e:
+        logger.error("Email sync trigger failed: %s", e)
+        return f"Email sync encountered an error: {e}"
+
+
+def send_sync_message_direct(message: str) -> None:
     """Send a message directly to Erin via WhatsApp API (sync, bypasses Claude)."""
     from src.config import ERIN_PHONE, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID
     from src.whatsapp import _split_message
@@ -1205,6 +1276,11 @@ TOOL_FUNCTIONS = {
     "amazon_sync_trigger": lambda **kw: _handle_amazon_sync_trigger(),
     "amazon_set_auto_split": lambda **kw: amazon_sync.set_auto_split(kw["enabled"]),
     "amazon_undo_split": lambda **kw: amazon_sync.handle_undo(kw.get("transaction_index", 1)),
+    # Email-YNAB Sync (Feature 011)
+    "email_sync_trigger": lambda **kw: _handle_email_sync_trigger(),
+    "email_sync_status": lambda **kw: email_sync.get_email_sync_status(),
+    "email_set_auto_categorize": lambda **kw: email_sync.set_email_auto_categorize(kw["enabled"]),
+    "email_undo_categorize": lambda **kw: email_sync.handle_email_undo(kw.get("transaction_index", 1)),
 }
 
 

@@ -64,6 +64,7 @@ class SyncRecord:
     suggestion_message_id: str = ""
     original_memo: str = ""
     original_category_id: str = ""
+    provider: str = "amazon"  # amazon|paypal|venmo|apple
 
 
 @dataclass
@@ -97,6 +98,12 @@ class SyncConfig:
         "amazon fresh": "Groceries",
         "whole foods": "Groceries",
     })
+    # Email sync (Feature 011) fields
+    email_auto_categorize_enabled: bool = False
+    email_last_sync: str = ""
+    email_total_suggestions: int = 0
+    email_unmodified_accepts: int = 0
+    email_first_suggestion_date: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +207,11 @@ def load_sync_config() -> SyncConfig:
         skips=data.get("skips", 0),
         first_suggestion_date=data.get("first_suggestion_date", ""),
         known_charge_patterns=data.get("known_charge_patterns", SyncConfig().known_charge_patterns),
+        email_auto_categorize_enabled=data.get("email_auto_categorize_enabled", False),
+        email_last_sync=data.get("email_last_sync", ""),
+        email_total_suggestions=data.get("email_total_suggestions", 0),
+        email_unmodified_accepts=data.get("email_unmodified_accepts", 0),
+        email_first_suggestion_date=data.get("email_first_suggestion_date", ""),
     )
 
 

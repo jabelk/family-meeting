@@ -266,6 +266,31 @@ async def amazon_sync_endpoint(background_tasks: BackgroundTasks):
     return {"status": "sent"}
 
 
+@app.post("/api/v1/email/sync", dependencies=[Depends(verify_n8n_auth)])
+async def email_sync_endpoint(background_tasks: BackgroundTasks):
+    """Trigger email-YNAB sync for PayPal, Venmo, and Apple transactions.
+
+    Called by n8n cron at 10:05pm daily (5 min after Amazon sync). Parses
+    confirmation emails, matches to YNAB transactions, enriches memos,
+    classifies items, and sends suggestions to Erin via WhatsApp.
+    """
+    logger.info("Email sync triggered")
+
+    async def _run():
+        try:
+            from src.tools import email_sync
+            message = email_sync.run_email_sync()
+            if message:
+                logger.info("Email sync complete: %s", message[:200])
+            else:
+                logger.info("Email sync complete — nothing to report")
+        except Exception:
+            logger.exception("Email sync failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "sent"}
+
+
 @app.post("/api/v1/calendar/populate-week", dependencies=[Depends(verify_n8n_auth)])
 async def populate_week(req: PopulateWeekRequest):
     """Delete assistant-created events for the week and repopulate from routine templates.
