@@ -27,10 +27,11 @@ HELP_CATEGORIES = [
         "key": "budget",
         "icon": "\U0001f4b0",  # money bag
         "name": "Budget & Spending",
-        "capabilities": "Check your YNAB budget, search transactions, move money between categories, and sync Amazon purchases with automatic categorization.",
+        "capabilities": "Check your YNAB budget, search transactions, move money between categories, sync Amazon purchases, and auto-categorize PayPal/Venmo/Apple charges.",
         "static_examples": [
             "what did we spend at Costco?",
             "sync my Amazon",
+            "sync my emails",
         ],
         "personalize_from": "get_budget_summary",
     },
@@ -117,6 +118,10 @@ TOOL_TO_CATEGORY: dict[str, str] = {
     "amazon_spending_breakdown": "budget",
     "amazon_set_auto_split": "budget",
     "amazon_undo_split": "budget",
+    "email_sync_trigger": "budget",
+    "email_sync_status": "budget",
+    "email_set_auto_categorize": "budget",
+    "email_undo_categorize": "budget",
     # calendar
     "get_calendar_events": "calendar",
     "get_outlook_events": "calendar",
@@ -252,6 +257,18 @@ TIP_DEFINITIONS: list[dict] = [
         "id": "tip_amazon_spending",
         "trigger_tools": ["amazon_sync_trigger", "amazon_sync_status"],
         "text": "Ask 'how's our Amazon spending?' to see a breakdown by category with budget comparisons.",
+        "related_category": "budget",
+    },
+    {
+        "id": "tip_email_sync",
+        "trigger_tools": ["get_budget_summary", "search_transactions", "recategorize_transaction", "amazon_sync_trigger"],
+        "text": "Say 'sync my emails' to auto-categorize PayPal, Venmo, and Apple charges in YNAB!",
+        "related_category": "budget",
+    },
+    {
+        "id": "tip_email_sync_status",
+        "trigger_tools": ["email_sync_trigger", "email_sync_status"],
+        "text": "Ask 'how is the email sync doing?' to see stats by provider and your acceptance rate.",
         "related_category": "budget",
     },
 ]
