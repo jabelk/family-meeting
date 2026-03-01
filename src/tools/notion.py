@@ -1,6 +1,7 @@
 """Notion API wrapper — CRUD for action items, meals, meetings, and family profile."""
 
 import logging
+import re
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from notion_client import Client
@@ -26,6 +27,17 @@ notion = Client(auth=NOTION_TOKEN)
 MAX_ROLLOVER_ITEMS = 25          # refuse to roll over more than this
 MAX_TEMPLATE_BLOCK_DELETES = 50  # refuse to delete more template blocks than this
 MAX_PENDING_ORDER_CLEAR = 100    # refuse to clear more pending orders than this
+
+# UUID pattern for Notion page IDs (with or without hyphens)
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
+
+
+def _is_notion_uuid(value: str) -> bool:
+    """Check if a string looks like a Notion page UUID."""
+    return bool(_UUID_RE.match(value.strip()))
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +125,11 @@ def get_action_items(assignee: str = "", status: str = "") -> str:
         assignee_val = _get_select(props.get("Assignee", {}))
         status_val = _get_status(props.get("Status", {}))
         rolled = props.get("Rolled Over", {}).get("checkbox", False)
+        page_id = page["id"]
         items.append(
             f"- {'✅' if status_val == 'Done' else '⬜'} {assignee_val}: {desc}"
             + (" (rolled over)" if rolled else "")
+            + f"  [id:{page_id}]"
         )
     if not items:
         return "No action items found."
@@ -144,7 +158,38 @@ def add_action_item(
 
 
 def complete_action_item(page_id: str) -> str:
-    """Mark an action item as Done by its Notion page ID."""
+    """Mark an action item as Done by its Notion page ID or description text.
+
+    If page_id is not a UUID, fuzzy-matches against open action items by title.
+    """
+    if not _is_notion_uuid(page_id):
+        # Treat page_id as a description — search for a matching action item
+        results = notion.databases.query(
+            database_id=NOTION_ACTION_ITEMS_DB,
+            filter={
+                "property": "Status",
+                "status": {"does_not_equal": "Done"},
+            },
+        )
+        search_lower = page_id.lower().strip()
+        best_match = None
+        best_title = ""
+        for page in results.get("results", []):
+            title_parts = page["properties"].get("Description", {}).get("title", [])
+            title = "".join(t.get("plain_text", "") for t in title_parts)
+            title_lower = title.lower()
+            if search_lower in title_lower or title_lower in search_lower:
+                best_match = page["id"]
+                best_title = title
+                break
+        if not best_match:
+            return (
+                f"Could not find an action item matching '{page_id}'. "
+                "Use get_action_items to find the correct page ID."
+            )
+        logger.info("Fuzzy-matched action item '%s' → %s (%s)", page_id, best_match, best_title)
+        page_id = best_match
+
     notion.pages.update(
         page_id=page_id,
         properties={"Status": {"status": {"name": "Done"}}},
@@ -382,11 +427,13 @@ def get_backlog_items(assignee: str = "", status: str = "") -> str:
         category = _get_select(props.get("Category", {}))
         priority = _get_select(props.get("Priority", {}))
         status_val = _get_status(props.get("Status", {}))
+        page_id = page["id"]
         items.append(
             f"- {'✅' if status_val == 'Done' else '⬜'} {desc}"
             + (f" [{category}]" if category else "")
             + (f" — {priority}" if priority else "")
             + (f" (assigned: {assignee_val})" if assignee_val else "")
+            + f"  [id:{page_id}]"
         )
     if not items:
         return "No backlog items found."
@@ -416,7 +463,40 @@ def add_backlog_item(
 
 
 def complete_backlog_item(page_id: str) -> str:
-    """Mark a backlog item as Done by its Notion page ID."""
+    """Mark a backlog item as Done by its Notion page ID or description text.
+
+    If page_id is not a UUID, fuzzy-matches against open backlog items by title.
+    """
+    if not _is_notion_uuid(page_id):
+        if not NOTION_BACKLOG_DB:
+            return "Backlog database not configured."
+        # Treat page_id as a description — search for a matching backlog item
+        results = notion.databases.query(
+            database_id=NOTION_BACKLOG_DB,
+            filter={
+                "property": "Status",
+                "status": {"does_not_equal": "Done"},
+            },
+        )
+        search_lower = page_id.lower().strip()
+        best_match = None
+        best_title = ""
+        for page in results.get("results", []):
+            title_parts = page["properties"].get("Description", {}).get("title", [])
+            title = "".join(t.get("plain_text", "") for t in title_parts)
+            title_lower = title.lower()
+            if search_lower in title_lower or title_lower in search_lower:
+                best_match = page["id"]
+                best_title = title
+                break
+        if not best_match:
+            return (
+                f"Could not find a backlog item matching '{page_id}'. "
+                "Use get_backlog_items to find the correct page ID."
+            )
+        logger.info("Fuzzy-matched backlog item '%s' → %s (%s)", page_id, best_match, best_title)
+        page_id = best_match
+
     notion.pages.update(
         page_id=page_id,
         properties={"Status": {"status": {"name": "Done"}}},
