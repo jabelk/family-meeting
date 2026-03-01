@@ -9,6 +9,7 @@ from anthropic import Anthropic
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
 from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery, amazon_sync, email_sync
 from src import conversation
+from src import preferences
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +362,24 @@ for full details and suggestions."
 before 8pm, do NOT proactively mention budgets, spending, or financial topics. \
 Only discuss budgets before 8pm if Erin explicitly asks about them first. This \
 applies to daily plans, check-ins, and any proactive messages.
+
+**User preference persistence:**
+68. When a user expresses a LASTING preference — "don't remind me about X", \
+"stop sending X", "no more X", "check the time before Y", "I don't want to \
+hear about Z" — call save_preference with the appropriate category and a \
+clear human-readable description. Do NOT store one-time requests ("no tacos \
+tonight", "skip that for now") as preferences — those are conversational, \
+not lasting rules. If ambiguous ("leave me alone"), ask: "Do you want a quiet \
+day (just for today) or should I stop all proactive messages permanently?"
+69. When the user asks "what are my preferences?", "show my settings", or \
+"what have I set?", call list_preferences and return the result directly.
+70. When the user says "start X again", "remove the X preference", "undo my \
+X opt-out", or "clear all my preferences", call remove_preference with a \
+search_text that matches the preference to remove. Use "ALL" to clear all. \
+ALWAYS check the user preferences section in this prompt before making \
+proactive suggestions or including topics the user has opted out of. \
+Opt-outs only suppress PROACTIVE/unsolicited content — if the user \
+explicitly asks about an opted-out topic, answer normally.
 
 **Email-YNAB Sync (PayPal, Venmo, Apple):**
 56. When Erin asks to sync emails, check PayPal/Venmo/Apple transactions, or \
@@ -1140,6 +1159,53 @@ TOOLS = [
             "required": [],
         },
     },
+    # User Preference Persistence (Feature 013)
+    {
+        "name": "save_preference",
+        "description": "Save a user preference that persists across conversations. Use when the user expresses a lasting rule like 'don't remind me about X', 'stop sending X', 'no more X', or 'check the time before Y'. Do NOT use for one-time requests like 'no tacos tonight'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "description": "Preference category: 'notification_optout' (suppress proactive nudges), 'topic_filter' (exclude content from briefings), 'communication_style' (change how bot responds), or 'quiet_hours' (time-based suppression).",
+                    "enum": ["notification_optout", "topic_filter", "communication_style", "quiet_hours"],
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Human-readable summary of the preference (e.g., 'No grocery reminders unless asked').",
+                },
+                "raw_text": {
+                    "type": "string",
+                    "description": "The user's original words that expressed this preference.",
+                },
+            },
+            "required": ["category", "description", "raw_text"],
+        },
+    },
+    {
+        "name": "list_preferences",
+        "description": "List all stored preferences for the current user. Use when the user asks 'what are my preferences?', 'what have I set?', or 'show my preferences'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "remove_preference",
+        "description": "Remove a stored preference so the bot resumes default behavior. Use when the user says 'start reminding me about X again', 'remove the X preference', 'undo the X opt-out', or 'clear all my preferences'. Use search_text='ALL' to clear all preferences.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "search_text": {
+                    "type": "string",
+                    "description": "Text to match against stored preferences (fuzzy). Use 'ALL' to clear all preferences.",
+                },
+            },
+            "required": ["search_text"],
+        },
+    },
 ]
 
 # Color mapping for calendar blocks
@@ -1406,7 +1472,95 @@ TOOL_FUNCTIONS = {
     "email_sync_status": lambda **kw: email_sync.get_email_sync_status(),
     "email_set_auto_categorize": lambda **kw: email_sync.set_email_auto_categorize(kw["enabled"]),
     "email_undo_categorize": lambda **kw: email_sync.handle_email_undo(kw.get("transaction_index", 1)),
+    # User Preference Persistence (Feature 013)
+    "save_preference": lambda **kw: _handle_save_preference(**kw),
+    "list_preferences": lambda **kw: _handle_list_preferences(**kw),
+    "remove_preference": lambda **kw: _handle_remove_preference(**kw),
 }
+
+
+def _handle_save_preference(**kw) -> str:
+    """Handle save_preference tool — stores a lasting user preference."""
+    phone = kw.get("_phone", "")
+    category = kw.get("category", "notification_optout")
+    description = kw.get("description", "")
+    raw_text = kw.get("raw_text", "")
+
+    if not description:
+        return "Please provide a description of the preference to save."
+
+    try:
+        pref = preferences.add_preference(phone, category, description, raw_text)
+        return (
+            f"Saved preference: \"{pref['description']}\" ({category.replace('_', ' ')}). "
+            f"I'll honor this in all future interactions. "
+            f"You can remove it anytime by saying something like "
+            f"'remove the {description.lower().split()[0]} preference' or 'start {description.lower().split()[-1]} again'."
+        )
+    except ValueError as e:
+        return str(e)
+
+
+def _handle_list_preferences(**kw) -> str:
+    """Handle list_preferences tool — returns all stored preferences for the user."""
+    phone = kw.get("_phone", "")
+    prefs = preferences.get_preferences(phone)
+
+    if not prefs:
+        return (
+            "You don't have any stored preferences. "
+            "You can set them by telling me things like "
+            "'don't remind me about groceries unless I ask' or "
+            "'no Jason appointment reminders' or "
+            "'check the time before making recommendations'."
+        )
+
+    lines = []
+    for i, pref in enumerate(prefs, 1):
+        category_label = pref["category"].replace("_", " ")
+        created = pref.get("created", "")
+        date_str = ""
+        if created:
+            try:
+                dt = datetime.fromisoformat(created)
+                date_str = f", set {dt.strftime('%b %d')}"
+            except (ValueError, TypeError):
+                pass
+        lines.append(f"{i}. {pref['description']} ({category_label}{date_str})")
+
+    return "Your stored preferences:\n" + "\n".join(lines)
+
+
+def _handle_remove_preference(**kw) -> str:
+    """Handle remove_preference tool — removes a preference by fuzzy search or clears all."""
+    phone = kw.get("_phone", "")
+    search_text = kw.get("search_text", "")
+
+    if not search_text:
+        return "Please describe which preference to remove."
+
+    # Handle "ALL" / "clear all"
+    if search_text.upper() == "ALL":
+        count = preferences.clear_preferences(phone)
+        if count == 0:
+            return "You don't have any preferences to clear."
+        return (
+            f"Done — I've cleared all {count} of your preferences. "
+            "I'll go back to default behavior for everything."
+        )
+
+    # Fuzzy match removal
+    removed = preferences.remove_preference_by_description(phone, search_text)
+    if removed:
+        return (
+            f"Done — I've removed the preference matching '{search_text}'. "
+            "I'll resume default behavior for that topic."
+        )
+    else:
+        return (
+            f"I couldn't find a preference matching '{search_text}'. "
+            "Try 'what are my preferences?' to see your current list."
+        )
 
 
 def handle_message(sender_phone: str, message_text: str, image_data: dict | None = None) -> str:
@@ -1462,6 +1616,20 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     date_line = now.strftime("**Right now:** %A, %B %d, %Y at %I:%M %p Pacific.")
     system = date_line + "\n\n" + SYSTEM_PROMPT + "\n\n" + date_line
 
+    # Inject user preferences into system prompt so Claude naturally honors them
+    user_prefs = preferences.get_preferences(sender_phone)
+    if user_prefs:
+        pref_lines = []
+        for p in user_prefs:
+            cat_label = p["category"].replace("_", " ")
+            pref_lines.append(f"- [{cat_label}] {p['description']}")
+        system += (
+            "\n\n**User preferences (MUST honor these — they are lasting rules set by this user):**\n"
+            + "\n".join(pref_lines)
+            + "\n\nRemember: these opt-outs only suppress PROACTIVE/unsolicited content. "
+            "If the user explicitly asks about an opted-out topic, answer normally."
+        )
+
     # First-time welcome: prepend instruction for new users
     if sender_phone != "system" and sender_phone not in _welcomed_phones:
         _welcomed_phones.add(sender_phone)
@@ -1506,8 +1674,8 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                     try:
                         func = TOOL_FUNCTIONS.get(tool_name)
                         if func:
-                            # Inject phone for discovery tools
-                            if tool_name == "get_help":
+                            # Inject phone for tools that need sender context
+                            if tool_name in ("get_help", "save_preference", "list_preferences", "remove_preference"):
                                 tool_input["_phone"] = sender_phone
                             result = func(**tool_input)
                             # Track usage for feature discovery suggestions
