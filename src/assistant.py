@@ -216,8 +216,8 @@ create_quick_event to add it to the shared family calendar. Format the \
 summary as "Sender → Assignee: task" (e.g., "Erin → Jason: pick up dog"). \
 If it's a self-reminder, use just "Erin: dentist appointment". Include the \
 original message as the event description for context. The event goes on the \
-shared family calendar so both partners can see it. Infer today's date and \
-Pacific time if not specified. Default to a 15-minute popup reminder.
+shared family calendar so both partners can see it. Use the date and time \
+shown at the top of this prompt if not specified. Default to a 15-minute popup reminder.
 
 **Feature discovery & help:**
 37. When someone says "help", "what can you do?", "what are your features?", \
@@ -457,11 +457,11 @@ TOOLS = [
     },
     {
         "name": "complete_action_item",
-        "description": "Mark an action item as done. First call get_action_items to find the page_id of the item to complete, then pass that page_id here.",
+        "description": "Mark an action item as Done. Accepts either a Notion page UUID or the task description text (will fuzzy-match against open items). Prefer using the page_id from get_action_items when available.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "page_id": {"type": "string", "description": "The Notion page ID of the action item to mark as done."},
+                "page_id": {"type": "string", "description": "The Notion page UUID of the action item, or its description text (e.g., 'Call preschool'). UUIDs are preferred — use get_action_items to find them."},
             },
             "required": ["page_id"],
         },
@@ -650,11 +650,11 @@ TOOLS = [
     },
     {
         "name": "complete_backlog_item",
-        "description": "Mark a backlog item as done by its Notion page ID.",
+        "description": "Mark a backlog item as Done. Accepts either a Notion page UUID or the task description text (will fuzzy-match against open items). Prefer using the page_id from get_backlog_items when available.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "page_id": {"type": "string", "description": "The Notion page ID of the backlog item to mark done."},
+                "page_id": {"type": "string", "description": "The Notion page UUID of the backlog item, or its description text. UUIDs are preferred — use get_backlog_items to find them."},
             },
             "required": ["page_id"],
         },
@@ -701,7 +701,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "summary": {"type": "string", "description": "Event title. Format as 'Sender → Assignee: task' (e.g., 'Erin → Jason: pick up dog'). If self-reminder, use 'Erin: dentist appointment'."},
-                "start_time": {"type": "string", "description": "ISO datetime (e.g., '2026-02-24T12:30:00-08:00'). Infer today's date if not specified."},
+                "start_time": {"type": "string", "description": "ISO datetime (e.g., '2026-02-24T12:30:00-08:00'). Use the date shown at the top of the system prompt if not specified."},
                 "end_time": {"type": "string", "description": "ISO datetime. Defaults to start + 30 min if omitted."},
                 "description": {"type": "string", "description": "Original message text for context (e.g., 'Erin said: remind Jason to pick up the dog at 12:30')."},
                 "reminder_minutes": {"type": "number", "description": "Minutes before event to send popup reminder. Default 15.", "default": 15},
@@ -1456,9 +1456,11 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     history_len = len(history)
 
     # Inject current date/time so Claude knows what day it is
+    # P1 fix: place date at BOTH the top and bottom of the system prompt
+    # so the model reliably attends to it (GitHub issue #2)
     now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
-    date_line = now.strftime("\n\n**Right now:** %A, %B %d, %Y at %I:%M %p Pacific.")
-    system = SYSTEM_PROMPT + date_line
+    date_line = now.strftime("**Right now:** %A, %B %d, %Y at %I:%M %p Pacific.")
+    system = date_line + "\n\n" + SYSTEM_PROMPT + "\n\n" + date_line
 
     # First-time welcome: prepend instruction for new users
     if sender_phone != "system" and sender_phone not in _welcomed_phones:
