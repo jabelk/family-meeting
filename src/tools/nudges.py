@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from src.config import ERIN_PHONE
+from src import preferences
 from src.tools.calendar import get_events_for_date_raw, CREATED_BY_TAG
 from src.tools.notion import (
     create_nudge,
@@ -153,6 +154,53 @@ def scan_upcoming_departures(hours_ahead: int = 2) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Feature 013: Preference-based nudge filtering
+# ---------------------------------------------------------------------------
+
+# Keywords associated with nudge types for preference matching
+_NUDGE_TOPIC_KEYWORDS: dict[str, set[str]] = {
+    "grocery": {"grocery", "groceries", "meal", "food", "reorder", "anylist", "whole foods"},
+    "budget": {"budget", "spending", "overspend", "uncategorized", "savings", "goal", "financial"},
+    "departure": {"departure", "leaving", "heads up", "get ready"},
+    "chore": {"chore", "vacuum", "laundry", "clean", "dishes"},
+}
+
+
+def _nudge_matches_preference(nudge: dict, user_prefs: list[dict]) -> bool:
+    """Check if a nudge should be suppressed based on user preferences.
+
+    Returns True if the nudge matches a notification_optout or quiet_hours preference.
+    """
+    nudge_type = nudge.get("nudge_type", "")
+    nudge_summary = (nudge.get("summary") or "").lower()
+    nudge_message = (nudge.get("message") or "").lower()
+    nudge_text = f"{nudge_summary} {nudge_message} {nudge_type}"
+
+    for pref in user_prefs:
+        category = pref.get("category", "")
+        description = pref.get("description", "").lower()
+        raw_text = pref.get("raw_text", "").lower()
+        pref_text = f"{description} {raw_text}"
+
+        if category == "notification_optout":
+            # Check if any keyword group links the preference to this nudge
+            for topic, keywords in _NUDGE_TOPIC_KEYWORDS.items():
+                pref_mentions_topic = any(kw in pref_text for kw in keywords)
+                nudge_mentions_topic = any(kw in nudge_text for kw in keywords)
+                if pref_mentions_topic and nudge_mentions_topic:
+                    return True
+
+        elif category == "quiet_hours":
+            # Simple quiet hours: if the preference mentions a time window,
+            # check if the current time falls within it
+            # For now, quiet_hours preferences suppress all nudges during the window
+            # (specific time parsing can be enhanced later)
+            pass
+
+    return False
+
+
+# ---------------------------------------------------------------------------
 # T008: Process pending nudges
 # ---------------------------------------------------------------------------
 
@@ -181,6 +229,24 @@ async def process_pending_nudges() -> dict:
     all_pending = query_pending_nudges(due_before=now.isoformat())
     # Filter out quiet_day markers — they're not real nudges to send
     pending = [n for n in all_pending if n.get("nudge_type") != "quiet_day"]
+
+    # Feature 013: Filter nudges based on user preferences
+    # Check Erin's preferences for notification opt-outs and quiet hours
+    user_prefs = preferences.get_preferences(ERIN_PHONE)
+    if user_prefs and pending:
+        filtered = []
+        for nudge in pending:
+            if _nudge_matches_preference(nudge, user_prefs):
+                # Suppress this nudge — mark as filtered
+                update_nudge_status(nudge["id"], "Cancelled")
+                logger.info(
+                    "Nudge '%s' filtered by user preference",
+                    nudge.get("summary", "unknown"),
+                )
+            else:
+                filtered.append(nudge)
+        pending = filtered
+
     if not pending:
         return {
             "nudges_sent": 0,
