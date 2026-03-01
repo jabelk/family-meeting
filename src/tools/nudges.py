@@ -7,6 +7,10 @@ from zoneinfo import ZoneInfo
 
 from src.config import ERIN_PHONE
 from src import preferences
+try:
+    from src.context import get_communication_mode
+except ImportError:
+    get_communication_mode = None  # fallback to QUIET_HOURS constants
 from src.tools.calendar import get_events_for_date_raw, CREATED_BY_TAG
 from src.tools.notion import (
     create_nudge,
@@ -32,6 +36,12 @@ QUIET_HOURS_END_MINUTE = 30
 VIRTUAL_KEYWORDS = {
     "call", "virtual", "remote", "online", "zoom", "meet", "teams", "webinar",
 }
+
+
+def _outside_static_quiet_hours(now: datetime) -> bool:
+    """Fallback: check if current time is outside static quiet hours (7:00 AM - 8:30 PM)."""
+    h, m = now.hour, now.minute
+    return h < QUIET_HOURS_START or h > QUIET_HOURS_END or (h == QUIET_HOURS_END and m >= QUIET_HOURS_END_MINUTE)
 
 
 # ---------------------------------------------------------------------------
@@ -211,14 +221,20 @@ async def process_pending_nudges() -> dict:
     """
     now = datetime.now(tz=PACIFIC)
 
-    # Enforce quiet hours (7:00 AM - 8:30 PM Pacific)
-    current_hour = now.hour
-    current_minute = now.minute
-    if current_hour < QUIET_HOURS_START or (
-        current_hour > QUIET_HOURS_END
-        or (current_hour == QUIET_HOURS_END and current_minute >= QUIET_HOURS_END_MINUTE)
-    ):
-        logger.info("Outside quiet hours (%02d:%02d) — skipping nudge delivery", current_hour, current_minute)
+    # Enforce quiet hours via communication mode (Feature 014) with fallback
+    is_late_night = False
+    if get_communication_mode is not None:
+        try:
+            mode, _ = get_communication_mode(ERIN_PHONE)
+            is_late_night = mode == "late_night"
+        except Exception:
+            # Fallback to static quiet hours on any error
+            is_late_night = _outside_static_quiet_hours(now)
+    else:
+        is_late_night = _outside_static_quiet_hours(now)
+
+    if is_late_night:
+        logger.info("Late night mode (%02d:%02d) — skipping nudge delivery", now.hour, now.minute)
         return {
             "nudges_sent": 0,
             "nudges_batched": 0,
