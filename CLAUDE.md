@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Specify template project** — a spec-driven development framework. There is no application source code yet; the repository contains workflow scaffolding for structured feature development using AI agents.
+Family meeting assistant for Jason & Erin (+ Vienna 5, Zoey 3) in Reno, NV. WhatsApp group chat → FastAPI webhook → Claude agentic tool loop with 30+ tools. Integrates Notion, Google Calendar, YNAB, AnyList, Gmail. Also uses Specify spec-driven development framework for feature planning.
 
 ## Development Workflow
 
@@ -70,6 +70,8 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - JSON files in `data/` for sync records & category mappings; YNAB API for transaction writes (010-amazon-ynab-sync)
 - Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 for email parsing/classification), httpx (YNAB API), google-api-python-client (Gmail API), existing WhatsApp/n8n infrastructure (011-email-ynab-sync)
 - JSON files in `data/` directory (extends existing `category_mappings.json`, `amazon_sync_records.json` pattern) + YNAB API for transaction writes (011-email-ynab-sync)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus for tool loop), httpx (YNAB API), existing WhatsApp/n8n infrastructure (012-smart-budget-maintenance)
+- In-memory computation from YNAB API data; pending suggestions stored in `data/budget_pending_suggestions.json` (same pattern as Amazon/email sync) (012-smart-budget-maintenance)
 
 ## Deployment (NUC)
 
@@ -107,6 +109,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 012-smart-budget-maintenance: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus for tool loop), httpx (YNAB API), existing WhatsApp/n8n infrastructure
 - 011-email-ynab-sync: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 for email parsing/classification), httpx (YNAB API), google-api-python-client (Gmail API), existing WhatsApp/n8n infrastructure
 - 010-amazon-ynab-sync: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 for classification), httpx (YNAB API), amazon-orders>=4.0.18, existing WhatsApp/n8n infrastructure
-- 008-holistic-family-intelligence: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), existing 47 tools
