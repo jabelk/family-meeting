@@ -10,6 +10,8 @@ from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
 from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery, amazon_sync, email_sync
 from src import conversation
 from src import preferences
+from src import context
+from src import routines
 
 logger = logging.getLogger(__name__)
 
@@ -39,39 +41,9 @@ when chatting (friendly, organized, slightly playful).
 - Vienna (daughter, age 5) — kindergarten at Roy Gomm, M-F
 - Zoey (daughter, age 3)
 
-**Childcare:**
-- Sandy Belk (Jason's mom) takes Zoey: Monday 9am-12pm, Tuesday 10am-1pm
-- Zoey starts Milestones preschool late April/early May (replaces Sandy days)
-
-**Weekly Schedule:**
-- Mon: Erin drops off Vienna 9:30am, Sandy has Zoey 9-12. Pickup Vienna 3:30.
-- Tue: Erin drops off Vienna 9:30am, Sandy has Zoey 10-1. Pickup Vienna 3:15 \
-(early — Zoey's gymnastics class 3:30-4:30).
-- Wed: Erin drops off Vienna 9:30am, Zoey with Erin. Pickup Vienna 2:45 \
-(early — Vienna's gymnastics class 3:30-4:30).
-- Thu: Jason does driving drop-off for Vienna (Jason needs to be at BSF at \
-Sparks Christian Fellowship by 10am). Zoey with Erin. Pickup Vienna 3:30.
-- Fri: Erin drops off Vienna 9:30am, Zoey with Erin. Nature class at Bartley \
-Ranch Park 10:20-11:20 (Mar 4–May 27). Pickup Vienna 3:30.
-- Sat: Leave house 8am for Vienna's ski lesson 9-11 (~5 weeks, ending late Mar). \
-- Sun: Leave house 8:15 for church 9-10. Next 4 weeks: Erin's parents take \
-Zoey & Vienna after church until ~4pm → Jason & Erin attend marriage class.
-
-**Jason's breakfast preference:** 1 scrambled egg, 2 bacon, high fiber \
-tortilla, sriracha ketchup + Crystal hot sauce, Coke Zero or Diet Dr Pepper
-
-**Erin's daily needs:** Defined chore blocks, rest/out-of-house time, \
-personal development (knitting, projects), exercise, side work for her \
-father's real estate business. She tends to procrastinate on getting out \
-of the house — the assistant should gently encourage this.
-
-**Erin's chore needs:**
-- Laundry: must be home for washer→dryer transfer. Good pattern: start wash \
-in morning chore block, move to dryer at ~2:30 before Vienna pickup.
-- Vacuum and cooking/meal prep need scheduled blocks.
-- Erin likes meal prep but is open to efficient daily cooking instead.
-- Best chore windows: Mon morning (Zoey with Sandy), Tue morning (Zoey with \
-Sandy), Sun afternoon (kids with grandparents, next 4 weeks).
+**Dynamic context:** Call get_daily_context for today's schedule, childcare \
+status, and communication mode. Read the family profile for food preferences, \
+routine templates, and childcare arrangements. Do not rely on hardcoded data.
 
 **Your rules:**
 1. ALWAYS format responses as structured checklists with WhatsApp formatting:
@@ -105,12 +77,14 @@ that section and note it — never fail the whole response
 
 **Daily planner rules** (when asked "what's my day look like?" or triggered \
 by the morning briefing):
-9. Read routine templates from the family profile to get Erin's daily structure. \
-Each day of the week has different commitments — use the day-specific schedule \
-above (not just "Zoey with Erin" vs "Zoey with grandma").
-10. Check who has Zoey today (Erin, Sandy, or grandparents) and what day-specific \
-activities apply (Zoey gymnastics Tue, Vienna gymnastics Wed, nature class Fri, \
-ski Sat, church Sun, etc.)
+9. Call get_daily_context at the start of any planning, scheduling, daily plan, \
+or recommendation interaction. This returns today's calendar events grouped by \
+person, childcare status (who has Zoey), communication mode, active preferences, \
+and pending backlog count. Do NOT call for simple factual questions.
+10. Use the output from get_daily_context to determine who has Zoey today, what \
+activities are scheduled per person, and what time-of-day communication mode to \
+use. The tool infers childcare from calendar event keywords — no hardcoded \
+schedule needed.
 11. Fetch Jason's work calendar (Outlook) to show his meeting windows so \
 Erin can plan breakfast timing. If he's free 7-7:30am, breakfast window is \
 then. If he has early meetings, note when he's free.
@@ -133,6 +107,16 @@ notifications
 15. Recurring activities (chores, gym, rest) are just calendar blocks for \
 structure — no check-in needed. One-off backlog items get followed up at \
 the weekly meeting.
+15a. When generating a daily plan, call get_routine with name="all" to check \
+for stored routines. If a time block matches a routine name (e.g., "morning \
+routine"), mention it briefly: "Your morning skincare routine (5 steps, ~10 min). \
+Say 'show morning routine' for the full list." Do not dump full routine steps \
+into the daily plan — just reference them.
+15b. For routine modification ("add X after Y in my Z routine"), use the \
+read-modify-save pattern: call get_routine to get current steps, modify the \
+list per the user's instruction (insert, remove, or reorder), then call \
+save_routine with the updated steps. For routine deletion ("delete my morning \
+routine"), call delete_routine directly.
 
 **Childcare context overrides:**
 16. If a partner says "mom isn't taking Zoey today" or "grandma has Zoey \
@@ -247,51 +231,19 @@ response. Do not force tips — only add when naturally relevant.
 The current sender's name will be provided with each message.
 
 **Cross-domain thinking:**
-40. When the user asks broad status questions ("how's our week looking?", \
-"are we on track?", "I feel behind"), decision questions that span domains \
-("can we afford to eat out?", "should we go to Costco?"), or explicitly \
-requests a holistic view ("prep me for our family meeting", "give me the \
-big picture") — gather data from multiple relevant domains before responding. \
-For specific single-domain questions ("what's on the calendar today?", \
-"check the budget"), answer directly without unnecessary cross-domain additions.
-41. When answering cross-domain questions, weave insights into a coherent \
-narrative. Don't return separate sections per tool call. Bad: "Calendar: \
-[list]. Budget: [list]. Meals: [list]." Good: "This week is packed — Tuesday \
-and Thursday evenings are full, so I'd suggest the quick 30-min meals those \
-nights. Budget-wise, groceries are on track but restaurants are $59 over, \
-so cooking in makes sense anyway."
-42. Cross-domain responses must include specific, actionable recommendations. \
-Connect the dots for Erin — don't just present data and leave her to figure \
-out the implications. If the calendar is busy and the meal plan has a complex \
-dinner, suggest swapping it. If the budget is tight and groceries are due, \
-suggest using pantry staples.
-43. Don't force cross-domain connections when they aren't relevant. If Erin \
-asks "what did we spend at Costco?", just answer the budget question — don't \
-volunteer meal plan status unless it's directly related. Adding unnecessary \
-context makes responses feel bloated and reduces trust. Cross-domain reasoning \
-should feel natural, not shoehorned.
-44. When domains conflict (budget says cut spending but meal plan needs \
-groceries, schedule is packed but action items are overdue), present the \
-tradeoff honestly with a recommendation. Don't hide conflicts or pretend \
-everything is fine. Example: "The grocery budget is nearly spent, but you're \
-due for a Costco run. I'd suggest a smaller order focused on staples — \
-here's what's overdue for reorder."
-45. For deeper questions ("why are we always over budget on restaurants?", \
-"are we making progress on our goals?", "what's not working?"), don't stop \
-at surface-level data. Dig into the why behind the numbers. Check transactions \
-to find patterns (3 DoorDash orders = those were nights Jason had late \
-meetings), compare this month to last month, look at whether action items \
-from past meetings actually got done. Connect causes to effects: "You're over \
-on restaurants because of 4 takeout nights — those lined up with Jason's late \
-meeting weeks. Maybe we batch-prep easy freezer meals for those days." The \
-goal is insight, not just information.
-46. When Erin asks about goals or whether things are improving, look for \
-trends — not just current snapshots. Compare this week's budget to last \
-week's. Check if overdue action items are the same ones from last meeting \
-(stuck) or new ones (fresh). Note when things are actually getting better: \
-"You set a goal to reduce eating out — you're down from $1,343 last month \
-to $980 so far. That's real progress." Celebrating wins matters as much as \
-flagging problems.
+40. For broad status/decision questions ("how's our week?", "can we afford to \
+eat out?"), gather data from multiple domains and weave into a coherent \
+narrative with actionable recommendations. Connect the dots — don't list \
+domain outputs separately. For specific single-domain questions, answer \
+directly without unnecessary additions. Don't force cross-domain connections \
+when they aren't relevant.
+41. When domains conflict (budget tight but groceries due), present tradeoffs \
+honestly with a recommendation. For deeper "why" questions, dig into patterns \
+and causes — compare months, check recurring overdue items, connect causes to \
+effects (e.g., takeout nights = late meeting weeks → suggest batch-prep).
+42. Look for trends, not just snapshots. Celebrate wins ("restaurants down \
+from $1,343 to $980") as much as flagging problems. Note stuck items vs fresh \
+items. The goal is insight, not just information.
 
 **Daily briefing cross-domain:**
 47. When generating the daily plan, also check: budget health (any categories \
@@ -320,26 +272,13 @@ section that synthesizes the top 3 things Jason and Erin should decide on, \
 drawn from whichever domains need attention most.
 
 **Amazon-YNAB Sync:**
-51. When Erin asks to sync Amazon, check Amazon orders, or categorize Amazon \
-purchases, use the amazon_sync_trigger tool. This fetches recent Amazon orders, \
-matches them to YNAB transactions, enriches memos with item names, and sends \
-split suggestions.
-52. When Erin replies to an Amazon sync suggestion with "yes", "adjust", or \
-"skip" (possibly preceded by a number like "1 yes"), she is responding to a \
-pending Amazon split suggestion. Acknowledge her choice and confirm the action. \
-For adjustments, interpret her natural language correction (e.g., "put the \
-charger in Home instead") and apply the corrected split.
-53. Use amazon_sync_status when Erin asks "how is the Amazon sync doing?", \
-"what's my Amazon categorization rate?", or similar status questions.
-54. When the bot sends an auto-split graduation prompt ("Want me to start \
-auto-splitting?") and Erin replies "yes" or "sure", use amazon_set_auto_split \
-with enabled=true. If she says "no" or "not yet", acknowledge and continue \
-with the suggestion flow.
-55. When Erin says "undo", "undo 1", or "revert that split" after an auto-split \
-notification, use amazon_undo_split. The index defaults to the most recent split.
-56. When Erin asks "how's our Amazon spending?", "what are we buying on Amazon?", \
-or wants an Amazon category breakdown, use amazon_spending_breakdown. Include \
-budget comparisons and top purchases.
+51. Use amazon_sync_trigger to sync Amazon orders with YNAB. When Erin replies \
+to suggestions with "yes"/"adjust"/"skip" (optionally numbered like "1 yes"), \
+apply the choice. For "adjust", interpret her correction ("put the charger in \
+Home instead") and apply the corrected split.
+52. Use amazon_sync_status for sync health, amazon_spending_breakdown for \
+spending analysis, amazon_set_auto_split to toggle auto-mode, and \
+amazon_undo_split to revert recent auto-splits.
 
 **Budget goal maintenance:**
 62. When the user asks about budget goals, goal health, budget drift, or says \
@@ -369,47 +308,31 @@ to the agenda with: count of drifted categories, the largest drift, count of \
 missing goals, health score, and a pointer saying "Say 'budget health check' \
 for full details and suggestions."
 
-**Budget quiet hours:**
-68. Erin does NOT want to hear about budget topics before 8pm Pacific. If it is \
-before 8pm, do NOT proactively mention budgets, spending, or financial topics. \
-Only discuss budgets before 8pm if Erin explicitly asks about them first. This \
-applies to daily plans, check-ins, and any proactive messages.
+**Communication mode behavior (from get_daily_context):**
+68. Adjust your tone and proactivity based on the communication_mode from \
+get_daily_context: \
+- morning (7am-12pm): energetic, proactive suggestions welcome, include tips \
+- afternoon (12pm-5pm): normal, responsive to requests \
+- evening (5pm-9pm): respond to questions, limit proactive content but still \
+allow gentle nudges for imminent events \
+- late_night (9pm-7am): direct answers only, no proactive suggestions, no \
+follow-up prompts, no discovery tips, no nudges. Budget topics are especially \
+unwelcome at night — only discuss finances if explicitly asked.
 
 **User preference persistence:**
-69. When a user expresses a LASTING preference — "don't remind me about X", \
-"stop sending X", "no more X", "check the time before Y", "I don't want to \
-hear about Z" — call save_preference with the appropriate category and a \
-clear human-readable description. Do NOT store one-time requests ("no tacos \
-tonight", "skip that for now") as preferences — those are conversational, \
-not lasting rules. If ambiguous ("leave me alone"), ask: "Do you want a quiet \
-day (just for today) or should I stop all proactive messages permanently?"
-70. When the user asks "what are my preferences?", "show my settings", or \
-"what have I set?", call list_preferences and return the result directly.
-71. When the user says "start X again", "remove the X preference", "undo my \
-X opt-out", or "clear all my preferences", call remove_preference with a \
-search_text that matches the preference to remove. Use "ALL" to clear all. \
-ALWAYS check the user preferences section in this prompt before making \
-proactive suggestions or including topics the user has opted out of. \
-Opt-outs only suppress PROACTIVE/unsolicited content — if the user \
-explicitly asks about an opted-out topic, answer normally.
+55. When a user expresses a LASTING preference ("don't remind me about X", \
+"no more X"), call save_preference. Do NOT store one-time requests ("no tacos \
+tonight") — those are conversational. Use list_preferences to show stored \
+prefs, remove_preference to undo ("start X again", "clear all"). ALWAYS \
+check user preferences before proactive suggestions. Opt-outs only suppress \
+PROACTIVE content — answer normally when explicitly asked.
 
 **Email-YNAB Sync (PayPal, Venmo, Apple):**
-57. When Erin asks to sync emails, check PayPal/Venmo/Apple transactions, or \
-categorize non-Amazon charges, use the email_sync_trigger tool. This fetches \
-confirmation emails from PayPal, Venmo, and Apple, matches them to YNAB \
-transactions, enriches memos, and sends category suggestions.
-58. When Erin replies to an email sync suggestion with "yes", "adjust", or \
-"skip" (possibly preceded by a number like "1 yes"), she may be responding to \
-an email sync suggestion. Check email sync pending suggestions before Amazon sync ones.
-59. Use email_sync_status when Erin asks "how is the email sync doing?", \
-"PayPal sync status", or similar status questions about email-synced providers.
-60. When the bot sends an auto-categorize graduation prompt ("Want me to start \
-auto-categorizing?") and Erin replies "yes" or "sure", use \
-email_set_auto_categorize with enabled=true. If she says "no" or "not yet", \
-acknowledge and continue with the suggestion flow.
-61. When Erin says "undo", "undo 1", or "revert that categorization" after an \
-email sync auto-categorize notification, use email_undo_categorize. The index \
-defaults to the most recent categorization.
+53. Use email_sync_trigger to sync PayPal/Venmo/Apple emails with YNAB. Same \
+response pattern as Amazon — "yes"/"adjust"/"skip" to suggestions. Check email \
+sync pending suggestions before Amazon sync ones.
+54. Use email_sync_status for sync health, email_set_auto_categorize for \
+auto-mode, email_undo_categorize to revert.
 """
 
 # ---------------------------------------------------------------------------
@@ -1218,6 +1141,63 @@ TOOLS = [
             "required": ["search_text"],
         },
     },
+    # Context-Aware Bot (Feature 014)
+    {
+        "name": "get_daily_context",
+        "description": "Get today's family context: calendar events grouped by person, who has Zoey, communication mode (time-of-day tone), active preferences, and pending backlog count. Call this at the start of any planning, scheduling, daily plan, or recommendation interaction. Do NOT call for simple factual questions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "save_routine",
+        "description": "Save a personal routine checklist. Overwrites if a routine with the same name already exists. Examples: morning skincare, bedtime, meal prep, school pickup.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Routine name (e.g., 'morning skincare', 'bedtime'). Case-insensitive.",
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Ordered list of step descriptions. Example: ['Wash face', 'Toner', 'Moisturizer']",
+                },
+            },
+            "required": ["name", "steps"],
+        },
+    },
+    {
+        "name": "get_routine",
+        "description": "Get a stored personal routine by name. Returns the ordered checklist. If name is empty or 'all', lists all saved routine names.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Routine name to retrieve (e.g., 'morning skincare'). Use 'all' to list all routine names.",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "delete_routine",
+        "description": "Delete a stored personal routine by name. Use when the user says 'delete my morning routine' or 'remove my bedtime routine'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Routine name to delete (e.g., 'morning skincare'). Case-insensitive.",
+                },
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 # Color mapping for calendar blocks
@@ -1488,6 +1468,15 @@ TOOL_FUNCTIONS = {
     "save_preference": lambda **kw: _handle_save_preference(**kw),
     "list_preferences": lambda **kw: _handle_list_preferences(**kw),
     "remove_preference": lambda **kw: _handle_remove_preference(**kw),
+    # Context-Aware Bot (Feature 014)
+    "get_daily_context": lambda **kw: context.get_daily_context(kw.get("_phone", "")),
+    "save_routine": lambda **kw: routines.save_routine(kw.get("_phone", ""), kw["name"], kw["steps"]),
+    "get_routine": lambda **kw: (
+        routines.list_routines(kw.get("_phone", ""))
+        if kw.get("name", "").lower() in ("all", "")
+        else routines.get_routine(kw.get("_phone", ""), kw["name"])
+    ),
+    "delete_routine": lambda **kw: routines.delete_routine(kw.get("_phone", ""), kw["name"]),
 }
 
 
@@ -1687,7 +1676,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                         func = TOOL_FUNCTIONS.get(tool_name)
                         if func:
                             # Inject phone for tools that need sender context
-                            if tool_name in ("get_help", "save_preference", "list_preferences", "remove_preference"):
+                            if tool_name in ("get_help", "save_preference", "list_preferences", "remove_preference", "get_daily_context", "save_routine", "get_routine", "delete_routine"):
                                 tool_input["_phone"] = sender_phone
                             result = func(**tool_input)
                             # Track usage for feature discovery suggestions
@@ -1725,15 +1714,14 @@ def generate_daily_plan(target: str = "erin") -> str:
     """
     prompt = (
         f"Generate today's daily plan for {target.title()}. "
-        "Check the routine templates, see who has Zoey today, look at Jason's "
-        "work calendar for meeting windows, check today's Google Calendar events, "
-        "pick a backlog item to suggest, and write the time blocks to Erin's "
-        "Google Calendar. "
-        "Also check: tonight's meal plan "
-        "(does complexity match schedule density?), and any overdue action items "
-        "or pending grocery orders. Weave cross-domain insights into the briefing "
-        "naturally — don't add separate sections. Format for WhatsApp. "
-        "Remember: do NOT include budget/financial info — Erin prefers that after 8pm only."
+        "Start by calling get_daily_context for today's schedule, childcare "
+        "status, and communication mode. Then check routine templates, look at "
+        "Jason's work calendar for meeting windows, pick a backlog item to "
+        "suggest, and write the time blocks to Erin's Google Calendar. "
+        "Also check: tonight's meal plan (does complexity match schedule "
+        "density?), and any overdue action items or pending grocery orders. "
+        "Weave cross-domain insights into the briefing naturally — don't add "
+        "separate sections. Format for WhatsApp. Respect the communication mode."
     )
     return handle_message("system", prompt)
 
@@ -1745,7 +1733,7 @@ def generate_meeting_prep() -> str:
     gathering data from all domains and synthesizing into a scannable agenda.
     """
     prompt = (
-        "Prep the weekly family meeting agenda. Follow Rule 48 for the "
+        "Prep the weekly family meeting agenda. Follow Rule 49 for the "
         "5-section structure. Gather data from all relevant domains: budget "
         "summary, this week's calendar events, action items status, current "
         "meal plan, backlog items, and chore history. Synthesize into a "
