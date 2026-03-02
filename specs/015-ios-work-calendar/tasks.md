@@ -85,7 +85,7 @@
 
 **Purpose**: Deploy, validate end-to-end, and set up the actual automation.
 
-- [ ] T009 Commit all changes, push to branch, deploy to NUC via `./scripts/nuc.sh deploy`
+- [x] T009 Commit all changes, push to branch, deploy to NUC via `./scripts/nuc.sh deploy`
 - [ ] T010 Run quickstart.md Scenario 6 (full weekly push) against production endpoint on NUC. Verify `get_outlook_events` returns pushed data. Verify module imports work on NUC.
 - [ ] T011 Set up iOS Shortcut on Jason's iPhone following docs/ios-shortcut-setup.md. Run manual test push. Verify events appear in daily plan generation.
 
