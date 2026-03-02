@@ -93,6 +93,14 @@ class PopulateWeekRequest(BaseModel):
 class GrandmaPromptRequest(BaseModel):
     pass
 
+class WorkEventInput(BaseModel):
+    title: str
+    start: str  # ISO 8601 datetime
+    end: str    # ISO 8601 datetime
+
+class WorkEventsRequest(BaseModel):
+    events: list[WorkEventInput]
+
 
 # ---------------------------------------------------------------------------
 # WhatsApp webhook
@@ -347,6 +355,48 @@ async def populate_week(req: PopulateWeekRequest):
     logger.info("Week population complete: %s", reply[:200])
 
     return {"status": "populated", "deleted": deleted, "message": reply[:500]}
+
+
+# ---------------------------------------------------------------------------
+# Feature 015: iOS Work Calendar Push
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/calendar/work-events", dependencies=[Depends(verify_n8n_auth)])
+async def receive_work_events(req: WorkEventsRequest):
+    """Receive Jason's work calendar events from iOS Shortcut.
+
+    Called weekly by iOS Shortcut automation (Sunday evening).
+    Stores events keyed by date for use in daily plan generation.
+    """
+    from src.tools.outlook import save_work_calendar
+
+    logger.info("Work calendar push: %d events received", len(req.events))
+
+    # Group events by date (extracted from start field)
+    events_by_date: dict[str, list[dict]] = {}
+    for event in req.events:
+        try:
+            dt = datetime.fromisoformat(event.start)
+            date_key = dt.strftime("%Y-%m-%d")
+        except ValueError:
+            logger.warning("Invalid start datetime: %s", event.start)
+            continue
+        events_by_date.setdefault(date_key, []).append({
+            "title": event.title,
+            "start": event.start,
+            "end": event.end,
+        })
+
+    if events_by_date:
+        save_work_calendar(events_by_date)
+
+    dates_covered = sorted(events_by_date.keys())
+    return {
+        "status": "ok",
+        "events_received": len(req.events),
+        "dates_covered": dates_covered,
+        "message": f"Stored {len(req.events)} events covering {len(dates_covered)} days",
+    }
 
 
 @app.post("/api/v1/prompt/grandma-schedule", dependencies=[Depends(verify_n8n_auth)])
