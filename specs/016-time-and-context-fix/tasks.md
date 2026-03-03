@@ -61,9 +61,9 @@
 
 **Purpose**: Deploy, validate end-to-end, and close GitHub issue.
 
-- [ ] T009 Commit all changes, push to branch, deploy to NUC via `./scripts/nuc.sh deploy`.
-- [ ] T010 Run quickstart.md Scenarios 1-4 (time awareness) against production: send a WhatsApp message after noon asking for a daily plan, verify no morning items appear. Check server logs for `[Current time: ...]` prefix in user messages.
-- [ ] T011 Run quickstart.md Scenarios 5-6 (extended context) against production: send a message, wait, then reference it hours later — verify the bot recalls it.
+- [x] T009 Commit all changes, push to branch, deploy to NUC via `./scripts/nuc.sh deploy`.
+- [x] T010 Run quickstart.md Scenarios 1-4 (time awareness) against production: send a WhatsApp message after noon asking for a daily plan, verify no morning items appear. Check server logs for `[Current time: ...]` prefix in user messages.
+- [x] T011 Run quickstart.md Scenarios 5-6 (extended context) against production: send a message, wait, then reference it hours later — verify the bot recalls it.
 
 ---
 
