@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-CONVERSATION_TIMEOUT = 86400  # 24 hours of inactivity before conversation expires
-MAX_CONVERSATION_TURNS = 25  # Max turns retained per conversation
+CONVERSATION_TIMEOUT = 604800  # 7 days before conversation turns expire (Feature 016)
+MAX_CONVERSATION_TURNS = 100  # Max turns retained per conversation (Feature 016)
 
 # ---------------------------------------------------------------------------
 # File paths (Docker vs local dev)
@@ -134,19 +134,27 @@ def get_history(phone: str) -> list[dict]:
     if not conv:
         return []
 
-    # Check expiry
-    try:
-        last_active = datetime.fromisoformat(conv["last_active"])
-        if datetime.now() - last_active > timedelta(seconds=CONVERSATION_TIMEOUT):
-            logger.info("Conversation expired for %s (last active: %s)", phone, conv["last_active"])
-            del _conversations[phone]
-            _save_conversations()
-            return []
-    except (KeyError, ValueError):
-        # Malformed entry — clear it
+    # Prune individual turns older than CONVERSATION_TIMEOUT (7 days)
+    # Turns without a timestamp (old data) are kept until the turn limit trims them
+    now = datetime.now()
+    cutoff = timedelta(seconds=CONVERSATION_TIMEOUT)
+    original_count = len(conv.get("turns", []))
+    conv["turns"] = [
+        turn for turn in conv.get("turns", [])
+        if not turn.get("timestamp") or (now - datetime.fromisoformat(turn["timestamp"])) <= cutoff
+    ]
+    pruned = original_count - len(conv["turns"])
+    if pruned > 0:
+        logger.info("Pruned %d expired turns for %s (%d remaining)", pruned, phone, len(conv["turns"]))
+
+    # If all turns pruned, remove the conversation entry
+    if not conv["turns"]:
         del _conversations[phone]
         _save_conversations()
         return []
+
+    if pruned > 0:
+        _save_conversations()
 
     # Flatten all turns into a single messages list
     messages = []
@@ -173,7 +181,7 @@ def save_turn(phone: str, turn_messages: list[dict]) -> None:
 
     conv = _conversations[phone]
     conv["last_active"] = datetime.now().isoformat()
-    conv["turns"].append({"messages": serialized})
+    conv["turns"].append({"messages": serialized, "timestamp": datetime.now().isoformat()})
 
     # Trim oldest turns if over limit
     while len(conv["turns"]) > MAX_CONVERSATION_TURNS:
