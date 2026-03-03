@@ -88,6 +88,19 @@ schedule needed.
 11. Fetch Jason's work calendar (Outlook) to show his meeting windows so \
 Erin can plan breakfast timing. If he's free 7-7:30am, breakfast window is \
 then. If he has early meetings, note when he's free.
+**Time awareness (CRITICAL — GitHub issue #7):**
+11a. ALWAYS check the **Right now** timestamp at the top of this prompt before \
+generating any schedule, plan, reminder, or time-based recommendation.
+11b. NEVER suggest activities or time blocks for hours that have already passed \
+today. If it is 1 PM, start the plan from 1 PM onward — do not include morning \
+items.
+11c. When a user says "today," "tomorrow," "tonight," or "this afternoon," \
+resolve it against the current date and time shown above. Double-check: does \
+"today" match the date in the **Right now** line?
+11d. If a user requests a reminder or calendar event for a time that has already \
+passed today, point this out and ask if they mean tomorrow or another day.
+11e. When generating a daily plan partway through the day, explicitly \
+acknowledge the current time and show only remaining activities.
 12. For ANY free time slots in the daily plan (even 10-15 minutes), call \
 get_backlog_items and suggest a specific backlog task that fits the window. \
 Short one-off tasks (phone calls, quick errands, small home tasks) are ideal \
@@ -1584,6 +1597,10 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
         _buffered_images.append(image_data)
     # Don't clear on text-only messages — user might send photos then a text command
 
+    # Compute current time early — used for both user message prefix and system prompt
+    now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
+    time_prefix = now.strftime("[Current time: %A, %B %-d, %Y at %-I:%M %p Pacific]")
+
     if image_data:
         buffer_note = ""
         if len(_buffered_images) > 1:
@@ -1600,10 +1617,10 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                     "data": image_data["base64"],
                 },
             },
-            {"type": "text", "text": f"[From {sender_name}]: {message_text}{buffer_note}"},
+            {"type": "text", "text": f"{time_prefix}\n[From {sender_name}]: {message_text}{buffer_note}"},
         ]
     else:
-        user_content = f"[From {sender_name}]: {message_text}"
+        user_content = f"{time_prefix}\n[From {sender_name}]: {message_text}"
 
     # Load conversation history for multi-turn context (skip for system/automated messages)
     history = conversation.get_history(sender_phone) if sender_phone != "system" else []
@@ -1613,8 +1630,8 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     # Inject current date/time so Claude knows what day it is
     # P1 fix: place date at BOTH the top and bottom of the system prompt
     # so the model reliably attends to it (GitHub issue #2)
-    now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
-    date_line = now.strftime("**Right now:** %A, %B %d, %Y at %I:%M %p Pacific.")
+    # P2 fix (Feature 016): also injected into user message above as time_prefix
+    date_line = now.strftime("**Right now:** %A, %B %-d, %Y at %-I:%M %p Pacific.")
     system = date_line + "\n\n" + SYSTEM_PROMPT + "\n\n" + date_line
 
     # Inject user preferences into system prompt so Claude naturally honors them

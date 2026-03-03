@@ -74,6 +74,8 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - In-memory computation from YNAB API data; pending suggestions stored in `data/budget_pending_suggestions.json` (same pattern as Amazon/email sync) (012-smart-budget-maintenance)
 - Python 3.12 (existing codebase) + FastAPI, Pydantic (request model validation), json (stdlib for atomic JSON writes) (015-ios-work-calendar)
 - Atomic JSON file at `data/work_calendar.json` (same pattern as `preferences.py`, `conversation.py`, `routines.py`) (015-ios-work-calendar)
+- Python 3.12 (existing codebase) + anthropic SDK (system prompt construction), datetime/zoneinfo (time injection) (016-time-and-context-fix)
+- Existing `data/conversations.json` (atomic JSON file pattern) (016-time-and-context-fix)
 
 ## Deployment (NUC)
 
@@ -111,6 +113,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 016-time-and-context-fix: Added Python 3.12 (existing codebase) + anthropic SDK (system prompt construction), datetime/zoneinfo (time injection)
 - 015-ios-work-calendar: Added Python 3.12 (existing codebase) + FastAPI, Pydantic (request model validation), json (stdlib for atomic JSON writes)
 - 012-smart-budget-maintenance: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus for tool loop), httpx (YNAB API), existing WhatsApp/n8n infrastructure
-- 011-email-ynab-sync: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 for email parsing/classification), httpx (YNAB API), google-api-python-client (Gmail API), existing WhatsApp/n8n infrastructure
