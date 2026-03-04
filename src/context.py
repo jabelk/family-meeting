@@ -223,6 +223,14 @@ def get_daily_context(phone: str) -> str:
     pref_line = _format_preferences(phone)
     lines.append(f"\u2699\ufe0f {pref_line}")
 
+    # --- Drive times ---
+    try:
+        from src import drive_times as _dt
+        dt_text = _dt.get_drive_times()
+        lines.append(f"\U0001f697 {dt_text}")
+    except Exception as e:
+        logger.warning("Could not load drive times: %s", e)
+
     # --- Calendar status ---
     cal_status = "available" if calendar_available else "unavailable"
     lines.append(f"\U0001f4c5 Calendar: {cal_status}")

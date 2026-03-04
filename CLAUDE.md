@@ -76,6 +76,8 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Atomic JSON file at `data/work_calendar.json` (same pattern as `preferences.py`, `conversation.py`, `routines.py`) (015-ios-work-calendar)
 - Python 3.12 (existing codebase) + anthropic SDK (system prompt construction), datetime/zoneinfo (time injection) (016-time-and-context-fix)
 - Existing `data/conversations.json` (atomic JSON file pattern) (016-time-and-context-fix)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5), existing tool functions (017-smart-daily-planner)
+- JSON file at `data/drive_times.json` (same atomic write pattern as `preferences.py`, `routines.py`, `conversation.py`) (017-smart-daily-planner)
 
 ## Deployment (NUC)
 
@@ -113,6 +115,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 017-smart-daily-planner: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5), existing tool functions
 - 016-time-and-context-fix: Added Python 3.12 (existing codebase) + anthropic SDK (system prompt construction), datetime/zoneinfo (time injection)
 - 015-ios-work-calendar: Added Python 3.12 (existing codebase) + FastAPI, Pydantic (request model validation), json (stdlib for atomic JSON writes)
-- 012-smart-budget-maintenance: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus for tool loop), httpx (YNAB API), existing WhatsApp/n8n infrastructure
