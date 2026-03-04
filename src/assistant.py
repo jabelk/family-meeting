@@ -12,6 +12,7 @@ from src import conversation
 from src import preferences
 from src import context
 from src import routines
+from src import drive_times
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,18 @@ by the morning briefing):
 or recommendation interaction. This returns today's calendar events grouped by \
 person, childcare status (who has Zoey), communication mode, active preferences, \
 and pending backlog count. Do NOT call for simple factual questions.
+**Calendar-aware planning (CRITICAL — GitHub issue #21):**
+9a. When generating a daily plan, the calendar events returned by get_daily_context \
+are **FIXED, IMMOVABLE blocks**. NEVER omit them, move them, or schedule activities \
+that overlap with them. These include recurring events (school drop-off, swim lessons, \
+appointments) — they appear automatically from the calendar.
+9b. Build the plan AROUND existing calendar events. First lay out all fixed blocks \
+from the calendar, then fill remaining open time slots with planned activities, \
+backlog items, and routines.
+9c. If existing calendar events overlap with each other, flag the conflict to Erin \
+and ask how she wants to handle it.
+9d. If the calendar is unreachable, generate the plan from backlog and routines, \
+noting that calendar events could not be loaded.
 10. Use the output from get_daily_context to determine who has Zoey today, what \
 activities are scheduled per person, and what time-of-day communication mode to \
 use. The tool infers childcare from calendar event keywords — no hardcoded \
@@ -114,9 +127,21 @@ work on?", ALWAYS call get_backlog_items first and suggest the best-fit item \
 for the available time. Prioritize: (a) time-sensitive items first (calls to \
 make, appointments to schedule), (b) quick one-off tasks, (c) recurring/ongoing \
 projects. Never give vague suggestions when the backlog has real items.
-14. After generating the plan, write time blocks to Erin's Google Calendar \
-using write_calendar_blocks so they appear in her Apple Calendar with push \
-notifications
+**Confirm before writing (CRITICAL — GitHub issue #21):**
+14. After generating the daily plan, present it as a **DRAFT** for review. Say \
+something like "Here's your plan — want me to add it to your calendar?" or \
+"Ready to write this to your calendar?"
+14a. Do NOT call write_calendar_blocks until Erin explicitly confirms (e.g., \
+"yes," "looks good," "add it," "write it").
+14b. If Erin requests changes ("move gym to 10 AM," "add a walk at 2," "remove \
+the laundry block"), adjust the plan and re-present the updated draft. Ask for \
+confirmation again.
+14c. If Erin declines ("never mind," "skip the calendar," "no"), do NOT write \
+to calendar. She still has the plan in chat.
+14d. When triggered by the automated morning briefing (7 AM n8n), ALWAYS present \
+the plan as a draft — never auto-write. Wait for Erin's WhatsApp reply to confirm.
+14e. When writing to calendar after confirmation, report the number of blocks \
+written (e.g., "Done! Wrote 6 blocks to your calendar.").
 15. Recurring activities (chores, gym, rest) are just calendar blocks for \
 structure — no check-in needed. One-off backlog items get followed up at \
 the weekly meeting.
@@ -130,6 +155,18 @@ read-modify-save pattern: call get_routine to get current steps, modify the \
 list per the user's instruction (insert, remove, or reorder), then call \
 save_routine with the updated steps. For routine deletion ("delete my morning \
 routine"), call delete_routine directly.
+**Drive time buffers (GitHub issue #21):**
+15c. When generating a daily plan, call get_drive_times to check for stored \
+travel times. If the plan includes activities at different locations, \
+automatically insert travel buffer blocks (e.g., "🚗 Drive to gym — 5 min") \
+between activities at different locations.
+15d. If two consecutive activities are at the same location (e.g., both at \
+home), do NOT add a drive buffer between them.
+15e. If no drive time is stored for a location, generate the plan without a \
+buffer for that location — do not ask.
+15f. When a user mentions a drive time in conversation (e.g., "the park is \
+15 minutes away," "gym is actually 10 minutes now"), call save_drive_time \
+to store or update it. Confirm what was saved.
 
 **Childcare context overrides:**
 16. If a partner says "mom isn't taking Zoey today" or "grandma has Zoey \
@@ -1211,6 +1248,47 @@ TOOLS = [
             "required": ["name"],
         },
     },
+    # Drive Time Tools (Feature 017)
+    {
+        "name": "get_drive_times",
+        "description": "Get all stored drive times for common locations. Returns a list of locations and their drive times from home in minutes. Call this during daily plan generation to insert travel buffers.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "save_drive_time",
+        "description": "Save or update a drive time for a location. Use when the user says something like 'the gym is 5 minutes away' or 'school is 10 minutes from home'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "Location name (e.g., 'gym', 'school', 'grandma'). Articles like 'the' are stripped automatically.",
+                },
+                "minutes": {
+                    "type": "integer",
+                    "description": "One-way drive time from home in minutes (1-120).",
+                },
+            },
+            "required": ["location", "minutes"],
+        },
+    },
+    {
+        "name": "delete_drive_time",
+        "description": "Remove a stored drive time for a location.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "Location name to remove (e.g., 'gym'). Case-insensitive.",
+                },
+            },
+            "required": ["location"],
+        },
+    },
 ]
 
 # Color mapping for calendar blocks
@@ -1490,6 +1568,10 @@ TOOL_FUNCTIONS = {
         else routines.get_routine(kw.get("_phone", ""), kw["name"])
     ),
     "delete_routine": lambda **kw: routines.delete_routine(kw.get("_phone", ""), kw["name"]),
+    # Drive Time Tools (Feature 017)
+    "get_drive_times": lambda **kw: drive_times.get_drive_times(),
+    "save_drive_time": lambda **kw: drive_times.save_drive_time(kw["location"], kw["minutes"]),
+    "delete_drive_time": lambda **kw: drive_times.delete_drive_time(kw["location"]),
 }
 
 
