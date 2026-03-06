@@ -78,6 +78,8 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Existing `data/conversations.json` (atomic JSON file pattern) (016-time-and-context-fix)
 - Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5), existing tool functions (017-smart-daily-planner)
 - JSON file at `data/drive_times.json` (same atomic write pattern as `preferences.py`, `routines.py`, `conversation.py`) (017-smart-daily-planner)
+- Bash (shell script on NUC) — no Python changes needed + cron (already on NUC Ubuntu 24.04), scp/ssh (already configured) (018-conversation-log-backup)
+- Flat JSON files in `data/conversation_archives/` on NUC (same Docker volume mount) (018-conversation-log-backup)
 
 ## Deployment (NUC)
 
@@ -93,6 +95,9 @@ The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.15
 ./scripts/nuc.sh env                 # Push .env from laptop to NUC + restart fastapi
 ./scripts/nuc.sh ssh                 # Open SSH session
 ./scripts/nuc.sh shell [service]     # Shell into container
+./scripts/nuc.sh chat-logs           # List archived conversation dates
+./scripts/nuc.sh chat-logs <date>    # Pull archive for YYYY-MM-DD
+./scripts/nuc.sh chat-logs latest    # Pull most recent archive
 ```
 
 **Services**: fastapi (port 8000), anylist-sidecar (port 3000), cloudflared (tunnel). n8n runs separately on the NUC (port 5678).
@@ -115,6 +120,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 018-conversation-log-backup: Added Bash (shell script on NUC) — no Python changes needed + cron (already on NUC Ubuntu 24.04), scp/ssh (already configured)
 - 017-smart-daily-planner: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5), existing tool functions
 - 016-time-and-context-fix: Added Python 3.12 (existing codebase) + anthropic SDK (system prompt construction), datetime/zoneinfo (time injection)
-- 015-ios-work-calendar: Added Python 3.12 (existing codebase) + FastAPI, Pydantic (request model validation), json (stdlib for atomic JSON writes)
