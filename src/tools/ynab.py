@@ -1279,12 +1279,29 @@ def budget_health_check(
     return report
 
 
+# Categories that should never be auto-adjusted by "update all" — require
+# explicit per-category approval because they are savings targets, not spending.
+PROTECTED_CATEGORIES = {
+    "emergency fund",
+    "mortgage",
+    "home insurance",
+    "car insurance",
+    "life insurance",
+}
+
+# Maximum percentage reduction allowed in a single auto-update.  Changes larger
+# than this are flagged for manual review instead of applied blindly.
+MAX_AUTO_REDUCTION_PCT = 75
+
+
 def apply_goal_suggestion(
     category: str = "", amount: float = 0, apply_all: bool = False
 ) -> str:
     """Apply a goal suggestion from a budget health check.
 
     Can apply a single suggestion by category name, or all pending suggestions at once.
+    Protected categories (Emergency Fund, Mortgage, Insurance) and large reductions
+    (>75%) are skipped during apply_all and require explicit per-category approval.
     """
     suggestions = _load_pending_suggestions()
     if not suggestions:
@@ -1294,6 +1311,8 @@ def apply_goal_suggestion(
         results = []
         updated = 0
         skipped = 0
+        protected = []
+        large_change = []
         for s in suggestions:
             if s["status"] != "pending":
                 continue
@@ -1301,6 +1320,27 @@ def apply_goal_suggestion(
                 skipped += 1
                 s["status"] = "skipped"
                 continue
+
+            # Guard: skip protected categories
+            if s["category_name"].lower() in PROTECTED_CATEGORIES:
+                protected.append(
+                    f"🛡️ {s['category_name']}: ${s['current_goal']:,.0f} (protected — update individually)"
+                )
+                continue
+
+            # Guard: skip large reductions (>75% decrease)
+            if (
+                s["current_goal"] > 0
+                and s["recommended_goal"] < s["current_goal"]
+                and (s["current_goal"] - s["recommended_goal"]) / s["current_goal"] * 100
+                > MAX_AUTO_REDUCTION_PCT
+            ):
+                large_change.append(
+                    f"⚠️ {s['category_name']}: ${s['current_goal']:,.0f} → ${s['recommended_goal']:,.0f} "
+                    f"({(s['current_goal'] - s['recommended_goal']) / s['current_goal'] * 100:.0f}% cut — review individually)"
+                )
+                continue
+
             target_milli = int(s["recommended_goal"] * 1000)
             result = _update_goal_target(s["category_id"], target_milli)
             if result == "success":
@@ -1316,6 +1356,10 @@ def apply_goal_suggestion(
         msg = f"Updated {updated} goal{'s' if updated != 1 else ''}."
         if skipped:
             msg += f" {skipped} skipped (no goal set in YNAB — create goals in the app first)."
+        if protected:
+            msg += "\n" + "\n".join(protected)
+        if large_change:
+            msg += "\n" + "\n".join(large_change)
         if results:
             msg += "\n" + "\n".join(results)
         return msg

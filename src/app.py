@@ -151,7 +151,15 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
         logger.warning("Rate limit exceeded for %s (%s)", PHONE_TO_NAME[phone], phone)
         return {"status": "ok"}  # Silently drop — don't waste API calls replying
 
-    if parsed["type"] == "image":
+    if parsed["type"] == "unsupported":
+        friendly_type = parsed.get("original_type", "that type of message")
+        logger.info("Unsupported %s from %s", friendly_type, PHONE_TO_NAME[phone])
+        background_tasks.add_task(
+            send_message,
+            phone,
+            f"I can't read {friendly_type} messages yet — could you send that as text instead?",
+        )
+    elif parsed["type"] == "image":
         logger.info("Image from %s (caption: %s)", PHONE_TO_NAME[phone], parsed["text"][:100])
         background_tasks.add_task(_process_image_and_reply, phone, parsed)
     else:

@@ -115,6 +115,13 @@ resolve it against the current date and time shown above. Double-check: does \
 passed today, point this out and ask if they mean tomorrow or another day.
 11e. When generating a daily plan partway through the day, explicitly \
 acknowledge the current time and show only remaining activities.
+11f. **ISO datetime format (CRITICAL):** When creating calendar events, ALL \
+start_time and end_time values MUST use 24-hour format with timezone offset. \
+Convert PM times correctly: 1 PM = 13:00, 2 PM = 14:00, ... 11 PM = 23:00. \
+12 PM (noon) = 12:00. 12 AM (midnight) = 00:00. \
+Always include the Pacific offset: -08:00 (Nov–Mar) or -07:00 (Mar–Nov). \
+Example: 2:30 PM on March 5 = 2026-03-05T14:30:00-08:00. \
+NEVER output T01:30 when you mean 1:30 PM — that is 1:30 AM.
 12. For ANY free time slots in the daily plan (even 10-15 minutes), call \
 get_backlog_items and suggest a specific backlog task that fits the window. \
 Short one-off tasks (phone calls, quick errands, small home tasks) are ideal \
@@ -683,8 +690,8 @@ TOOLS = [
                         "type": "object",
                         "properties": {
                             "summary": {"type": "string", "description": "Event title (e.g., 'Chore block', 'Rest time')"},
-                            "start_time": {"type": "string", "description": "ISO datetime (e.g., '2026-02-23T09:30:00-08:00')"},
-                            "end_time": {"type": "string", "description": "ISO datetime"},
+                            "start_time": {"type": "string", "description": "ISO datetime in 24-hour format with TZ offset. 1 PM=13, 2 PM=14, etc. Example: '2026-02-23T14:30:00-08:00' for 2:30 PM PT."},
+                            "end_time": {"type": "string", "description": "ISO datetime in 24-hour format with TZ offset (same rules as start_time)."},
                             "color_category": {
                                 "type": "string",
                                 "description": "Category for color coding: 'chores', 'rest', 'development', 'exercise', 'side_work', or 'backlog'.",
@@ -706,8 +713,8 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "summary": {"type": "string", "description": "Event title. Format as 'Sender → Assignee: task' (e.g., 'Erin → Jason: pick up dog'). If self-reminder, use 'Erin: dentist appointment'."},
-                "start_time": {"type": "string", "description": "ISO datetime (e.g., '2026-02-24T12:30:00-08:00'). Use the date shown at the top of the system prompt if not specified."},
-                "end_time": {"type": "string", "description": "ISO datetime. Defaults to start + 30 min if omitted."},
+                "start_time": {"type": "string", "description": "ISO datetime in 24-hour format with TZ offset. 1 PM=13, 2 PM=14. Example: '2026-02-24T14:30:00-08:00' for 2:30 PM PT. Use the date shown at the top of the system prompt if not specified."},
+                "end_time": {"type": "string", "description": "ISO datetime in 24-hour format with TZ offset. Defaults to start + 30 min if omitted."},
                 "description": {"type": "string", "description": "Original message text for context (e.g., 'Erin said: remind Jason to pick up the dog at 12:30')."},
                 "reminder_minutes": {"type": "number", "description": "Minutes before event to send popup reminder. Default 15.", "default": 15},
             },

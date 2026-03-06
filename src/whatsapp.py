@@ -212,7 +212,9 @@ def extract_message(payload: dict) -> dict | None:
         - media_id: WhatsApp media ID (for image messages only)
         - mime_type: image MIME type (for image messages only)
 
-    Returns None if the payload doesn't contain a supported message.
+    Returns None if the payload doesn't contain a processable message.
+    For unsupported types (voice, video, sticker, etc.), returns a dict with
+    type='unsupported' so the caller can reply with a helpful message.
     """
     try:
         entry = payload["entry"][0]
@@ -243,9 +245,17 @@ def extract_message(payload: dict) -> dict | None:
                 "media_id": msg["image"]["id"],
                 "mime_type": msg["image"].get("mime_type", "image/jpeg"),
             }
-        else:
-            logger.info("Unsupported message type: %s", msg_type)
+        elif msg_type == "reaction":
+            # Reactions are not actionable — silently ignore
             return None
+        else:
+            logger.info("Unsupported message type: %s from %s", msg_type, phone)
+            return {
+                "phone": phone,
+                "name": name,
+                "type": "unsupported",
+                "original_type": msg_type,
+            }
     except (KeyError, IndexError):
         logger.warning("Could not parse WhatsApp webhook payload")
         return None

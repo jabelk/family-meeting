@@ -77,10 +77,10 @@
 
 **Purpose**: Deploy, validate end-to-end, and close GitHub issue.
 
-- [ ] T010 Commit all changes, push to branch `017-smart-daily-planner`, create PR, and deploy to NUC via `./scripts/nuc.sh deploy`.
-- [ ] T011 Run quickstart.md Scenarios 1-2 (calendar-aware planning) against production: send "plan my day" on a weekday with school events on the calendar, verify drop-off and pickup appear as fixed blocks.
-- [ ] T012 Run quickstart.md Scenarios 3-5 (confirm-before-write) against production: send "plan my day," verify draft is presented, request a change, approve, verify calendar blocks written only once.
-- [ ] T013 Run quickstart.md Scenarios 7-10 (drive times) against production: store a drive time via conversation, request a plan with that location, verify buffer appears.
+- [x] T010 Commit all changes, push to branch `017-smart-daily-planner`, create PR, and deploy to NUC via `./scripts/nuc.sh deploy`.
+- [x] T011 Run quickstart.md Scenarios 1-2 (calendar-aware planning) against production: send "plan my day" on a weekday with school events on the calendar, verify drop-off and pickup appear as fixed blocks.
+- [x] T012 Run quickstart.md Scenarios 3-5 (confirm-before-write) against production: send "plan my day," verify draft is presented, request a change, approve, verify calendar blocks written only once.
+- [x] T013 Run quickstart.md Scenarios 7-10 (drive times) against production: store a drive time via conversation, request a plan with that location, verify buffer appears.
 
 ---
 
