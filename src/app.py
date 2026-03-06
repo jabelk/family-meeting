@@ -15,6 +15,7 @@ from src.config import (
 )
 from src.whatsapp import extract_message, send_message, download_media
 from src.assistant import handle_message, generate_daily_plan, generate_meeting_prep
+from src.transcribe import transcribe_voice_note, get_audio_duration, MAX_DURATION_SECONDS
 from src.tools.calendar import delete_assistant_events, batch_create_events, get_events_for_date
 from src.tools.notion import get_routine_templates
 
@@ -159,6 +160,9 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
             phone,
             f"I can't read {friendly_type} messages yet — could you send that as text instead?",
         )
+    elif parsed["type"] == "audio":
+        logger.info("Voice note from %s", PHONE_TO_NAME[phone])
+        background_tasks.add_task(_process_voice_and_reply, phone, parsed)
     elif parsed["type"] == "image":
         logger.info("Image from %s (caption: %s)", PHONE_TO_NAME[phone], parsed["text"][:100])
         background_tasks.add_task(_process_image_and_reply, phone, parsed)
@@ -167,6 +171,40 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
         background_tasks.add_task(_process_and_reply, phone, parsed["text"])
 
     return {"status": "ok"}
+
+
+async def _process_voice_and_reply(phone: str, parsed: dict):
+    """Download, transcribe, and process a voice note through Claude."""
+    start = time.time()
+    try:
+        audio_bytes, _ = await download_media(parsed["media_id"])
+
+        duration = get_audio_duration(audio_bytes)
+        if duration > MAX_DURATION_SECONDS:
+            await send_message(
+                phone,
+                f"That voice note is a bit long for me ({MAX_DURATION_SECONDS // 60} min max). "
+                "Could you send a shorter one or type it out?",
+            )
+            return
+
+        transcribed = await transcribe_voice_note(audio_bytes)
+        if not transcribed:
+            await send_message(
+                phone,
+                "I couldn't quite understand that voice note — could you try again or type it instead?",
+            )
+            return
+
+        logger.info("Transcribed voice note from %s: %s", PHONE_TO_NAME[phone], transcribed[:100])
+        text = f'[Voice: "{transcribed}"] {transcribed}'
+        reply = handle_message(phone, text)
+        elapsed = time.time() - start
+        logger.info("Voice note response in %.1fs (%d chars)", elapsed, len(reply))
+        await send_message(phone, reply)
+    except Exception:
+        logger.exception("Error processing voice note from %s", phone)
+        await send_message(phone, "Sorry, I had trouble with that voice note. Could you type it instead?")
 
 
 async def _process_and_reply(phone: str, text: str):

@@ -207,10 +207,10 @@ def extract_message(payload: dict) -> dict | None:
     Returns a dict with keys:
         - phone: sender phone number
         - name: sender display name
-        - type: 'text' or 'image'
+        - type: 'text', 'image', or 'audio'
         - text: message text (for text messages) or caption (for images)
-        - media_id: WhatsApp media ID (for image messages only)
-        - mime_type: image MIME type (for image messages only)
+        - media_id: WhatsApp media ID (for image and audio messages)
+        - mime_type: MIME type (for image and audio messages)
 
     Returns None if the payload doesn't contain a processable message.
     For unsupported types (voice, video, sticker, etc.), returns a dict with
@@ -244,6 +244,14 @@ def extract_message(payload: dict) -> dict | None:
                 "text": msg.get("image", {}).get("caption", ""),
                 "media_id": msg["image"]["id"],
                 "mime_type": msg["image"].get("mime_type", "image/jpeg"),
+            }
+        elif msg_type == "audio":
+            return {
+                "phone": phone,
+                "name": name,
+                "type": "audio",
+                "media_id": msg["audio"]["id"],
+                "mime_type": msg["audio"].get("mime_type", "audio/ogg"),
             }
         elif msg_type == "reaction":
             # Reactions are not actionable — silently ignore

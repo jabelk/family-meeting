@@ -80,6 +80,8 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - JSON file at `data/drive_times.json` (same atomic write pattern as `preferences.py`, `routines.py`, `conversation.py`) (017-smart-daily-planner)
 - Bash (shell script on NUC) — no Python changes needed + cron (already on NUC Ubuntu 24.04), scp/ssh (already configured) (018-conversation-log-backup)
 - Flat JSON files in `data/conversation_archives/` on NUC (same Docker volume mount) (018-conversation-log-backup)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (existing), openai SDK (new — for Whisper transcription only), ffmpeg (new — apt package in Docker) (019-whatsapp-voice-messages)
+- N/A — transcribed text flows through existing conversation pipeline (019-whatsapp-voice-messages)
 
 ## Deployment (NUC)
 
@@ -120,6 +122,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 019-whatsapp-voice-messages: Added openai SDK (GPT-4o Mini Transcribe for voice notes), ffmpeg (OGG→MP3 conversion in Docker). Voice notes transcribed and fed to existing Claude tool loop.
 - 018-conversation-log-backup: Added Bash (shell script on NUC) — no Python changes needed + cron (already on NUC Ubuntu 24.04), scp/ssh (already configured)
 - 017-smart-daily-planner: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5), existing tool functions
-- 016-time-and-context-fix: Added Python 3.12 (existing codebase) + anthropic SDK (system prompt construction), datetime/zoneinfo (time injection)

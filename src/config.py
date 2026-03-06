@@ -99,3 +99,6 @@ N8N_WEBHOOK_SECRET: str = os.environ.get("N8N_WEBHOOK_SECRET", "")
 
 # Gmail API is used for Feature 010 Amazon-YNAB sync (reads Amazon order emails).
 # Auth handled via token.json (shared with Google Calendar OAuth).
+
+# OpenAI (optional — used for voice note transcription, Feature 019)
+OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
