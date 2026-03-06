@@ -59,8 +59,8 @@
 
 **Purpose**: Deploy, validate, and document
 
-- [ ] T008 Push `.env` with `OPENAI_API_KEY` to NUC via `./scripts/nuc.sh env`
-- [ ] T009 Deploy to NUC via `./scripts/nuc.sh deploy` and verify Docker build succeeds (ffmpeg installed, openai imported)
+- [x] T008 Push `.env` with `OPENAI_API_KEY` to NUC via `./scripts/nuc.sh env`
+- [x] T009 Deploy to NUC via `./scripts/nuc.sh deploy` and verify Docker build succeeds (ffmpeg installed, openai imported)
 - [ ] T010 Run quickstart.md Scenario 1 (basic voice note) and Scenario 2 (actionable command) against production
 - [x] T011 Update `CLAUDE.md` Active Technologies section to mention openai SDK and ffmpeg for voice transcription
 
