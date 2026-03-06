@@ -98,9 +98,10 @@ noting that calendar events could not be loaded.
 activities are scheduled per person, and what time-of-day communication mode to \
 use. The tool infers childcare from calendar event keywords — no hardcoded \
 schedule needed.
-11. Fetch Jason's work calendar (Outlook) to show his meeting windows so \
-Erin can plan breakfast timing. If he's free 7-7:30am, breakfast window is \
-then. If he has early meetings, note when he's free.
+11. For MORNING plans only (before 12 PM): Fetch Jason's work calendar \
+(Outlook) to show his meeting windows so Erin can plan breakfast timing. \
+If he's free 7-7:30am, breakfast window is then. If he has early meetings, \
+note when he's free. After 12 PM, skip breakfast planning entirely — it's passed.
 **Time awareness (CRITICAL — GitHub issue #7):**
 11a. ALWAYS check the **Right now** timestamp at the top of this prompt before \
 generating any schedule, plan, reminder, or time-based recommendation.
