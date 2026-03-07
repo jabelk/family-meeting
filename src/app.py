@@ -411,7 +411,7 @@ async def populate_week(req: PopulateWeekRequest):
 async def receive_work_events(req: WorkEventsRequest):
     """Receive Jason's work calendar events from iOS Shortcut.
 
-    Called weekly by iOS Shortcut automation (Sunday evening).
+    Called daily at 6:30 AM by iOS Shortcut automation (before 7 AM briefing).
     Stores events keyed by date for use in daily plan generation.
     """
     from src.tools.outlook import save_work_calendar

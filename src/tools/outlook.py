@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 _DATA_DIR = Path("/app/data") if Path("/app/data").exists() else Path("data")
 _WORK_CALENDAR_FILE = _DATA_DIR / "work_calendar.json"
-_EXPIRY_DAYS = 7
+_EXPIRY_DAYS = 3
 
 
 def _load_work_calendar_file() -> dict:
@@ -136,14 +136,19 @@ def get_outlook_events(target_date: str = "") -> str:
         target_date: ISO date string (e.g., "2026-02-23"). Defaults to today.
 
     Returns formatted text list of work meetings with times.
-    Priority: ICS URL (if configured) → pushed data (iOS Shortcut) → "unavailable".
+    Priority: pushed data (iOS Shortcut) → ICS URL (if configured) → "unavailable".
     """
     if target_date:
         dt = datetime.strptime(target_date, "%Y-%m-%d").date()
     else:
         dt = date.today()
 
-    # Try ICS feed first (if configured)
+    # Try pushed data first (iOS Shortcut — most authoritative)
+    pushed = _load_work_calendar(dt.isoformat())
+    if pushed is not None:
+        return _format_pushed_events(dt, pushed)
+
+    # Fall back to ICS feed (if configured)
     if OUTLOOK_CALENDAR_ICS_URL:
         try:
             response = httpx.get(OUTLOOK_CALENDAR_ICS_URL, timeout=10.0)
@@ -179,11 +184,6 @@ def get_outlook_events(target_date: str = "") -> str:
         except Exception as e:
             logger.warning("Failed to fetch/parse Outlook ICS feed: %s", e)
 
-    # Fall back to pushed data from iOS Shortcut
-    pushed = _load_work_calendar(dt.isoformat())
-    if pushed is not None:
-        return _format_pushed_events(dt, pushed)
-
     return "Jason's work calendar is not available — you may want to ask him about his meetings."
 
 
@@ -191,14 +191,32 @@ def get_outlook_busy_windows(target_date: str = "") -> list[tuple[str, str, str]
     """Get Jason's busy windows as structured data for daily plan generation.
 
     Returns list of (summary, start_time, end_time) tuples.
-    Priority: ICS URL (if configured) → pushed data (iOS Shortcut) → empty list.
+    Priority: pushed data (iOS Shortcut) → ICS URL (if configured) → empty list.
     """
     if target_date:
         dt = datetime.strptime(target_date, "%Y-%m-%d").date()
     else:
         dt = date.today()
 
-    # Try ICS feed first (if configured)
+    # Try pushed data first (iOS Shortcut — most authoritative)
+    pushed = _load_work_calendar(dt.isoformat())
+    if pushed is not None:
+        windows = []
+        for event in pushed:
+            title = event.get("title", "Work meeting")
+            try:
+                start_dt = datetime.fromisoformat(event.get("start", ""))
+                end_dt = datetime.fromisoformat(event.get("end", ""))
+                windows.append((
+                    title,
+                    start_dt.strftime("%-I:%M %p"),
+                    end_dt.strftime("%-I:%M %p"),
+                ))
+            except (ValueError, TypeError):
+                continue
+        return windows
+
+    # Fall back to ICS feed (if configured)
     if OUTLOOK_CALENDAR_ICS_URL:
         try:
             response = httpx.get(OUTLOOK_CALENDAR_ICS_URL, timeout=10.0)
@@ -224,23 +242,5 @@ def get_outlook_busy_windows(target_date: str = "") -> list[tuple[str, str, str]
             return windows
         except Exception as e:
             logger.warning("Failed to get Outlook busy windows via ICS: %s", e)
-
-    # Fall back to pushed data from iOS Shortcut
-    pushed = _load_work_calendar(dt.isoformat())
-    if pushed is not None:
-        windows = []
-        for event in pushed:
-            title = event.get("title", "Work meeting")
-            try:
-                start_dt = datetime.fromisoformat(event.get("start", ""))
-                end_dt = datetime.fromisoformat(event.get("end", ""))
-                windows.append((
-                    title,
-                    start_dt.strftime("%-I:%M %p"),
-                    end_dt.strftime("%-I:%M %p"),
-                ))
-            except (ValueError, TypeError):
-                continue
-        return windows
 
     return []
