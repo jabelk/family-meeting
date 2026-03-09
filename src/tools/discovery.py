@@ -5,7 +5,15 @@ import logging
 import random
 from pathlib import Path
 
+from src.family_config import load_family_config
+
 logger = logging.getLogger(__name__)
+
+
+def _partner1_name() -> str:
+    """Get Partner 1's name for dynamic examples."""
+    return load_family_config().get("partner1_name", "Partner1")
+
 
 # ---------------------------------------------------------------------------
 # Help categories — 6 groups matching data-model.md
@@ -46,7 +54,7 @@ HELP_CATEGORIES = [
         "capabilities": "View upcoming events, create shared reminders, or generate your daily plan.",
         "static_examples": [
             "what's on our calendar this week?",
-            "remind Jason to pick up dog at 12:30",
+            "remind {partner1} to pick up dog at 12:30",  # {partner1} replaced at runtime
         ],
         "personalize_from": None,
     },
@@ -201,7 +209,7 @@ TIP_DEFINITIONS: list[dict] = [
     {
         "id": "tip_reminder",
         "trigger_tools": ["get_calendar_events"],
-        "text": "You can say 'remind Jason to pick up dog at 12:30' to create a shared calendar reminder.",
+        "text": "You can say 'remind {partner1} to pick up dog at 12:30' to create a shared calendar reminder.",
         "related_category": "calendar",
     },
     {
@@ -395,6 +403,7 @@ def get_help(phone: str = "") -> str:
         lines.append(f"{cat['icon']} *{cat['name']}*")
         lines.append(cat["capabilities"])
         for ex in examples[:2]:
+            ex = ex.replace("{partner1}", _partner1_name()) if ex else ""
             lines.append(f'\u2022 "{ex}"')
         lines.append("")
 
@@ -407,6 +416,7 @@ def get_help(phone: str = "") -> str:
                 lines.append("\u2728 *Haven't tried yet:*")
                 for cat in unused_cats:
                     ex = cat["static_examples"][0] if cat["static_examples"] else ""
+                    ex = ex.replace("{partner1}", _partner1_name()) if ex else ""
                     lines.append(f'{cat["icon"]} {cat["name"]} \u2014 try: "{ex}"')
                 lines.append("")
 
@@ -491,7 +501,10 @@ def get_contextual_tip(tools_used: list[str], phone: str = "") -> str | None:
         entry["_last_tip"] = tip["id"]
         _save_counters()
 
-    return tip["text"]
+    text = tip["text"]
+    if text:
+        text = text.replace("{partner1}", _partner1_name())
+    return text
 
 
 # Load counters on module import

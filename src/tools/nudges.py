@@ -94,7 +94,7 @@ def is_virtual_event(event: dict) -> bool:
 
 
 def scan_upcoming_departures(hours_ahead: int = 2) -> int:
-    """Scan Erin's and family calendars for upcoming events needing departure.
+    """Scan Partner 2's and family calendars for upcoming events needing departure.
 
     Creates departure nudge records in the Nudge Queue for events that:
     - Are within the next `hours_ahead` hours
@@ -258,7 +258,7 @@ async def process_pending_nudges() -> dict:
     pending = [n for n in all_pending if n.get("nudge_type") != "quiet_day"]
 
     # Feature 013: Filter nudges based on user preferences
-    # Check Erin's preferences for notification opt-outs and quiet hours
+    # Check Partner 2's preferences for notification opt-outs and quiet hours
     user_prefs = preferences.get_preferences(PRIMARY_PHONE)
     if user_prefs and pending:
         filtered = []

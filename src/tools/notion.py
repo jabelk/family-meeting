@@ -20,6 +20,7 @@ from src.config import (
     NOTION_TOKEN,
     TIMEZONE,
 )
+from src.family_config import load_family_config
 
 logger = logging.getLogger(__name__)
 
@@ -455,10 +456,12 @@ def get_backlog_items(assignee: str = "", status: str = "") -> str:
 def add_backlog_item(
     description: str,
     category: str = "Other",
-    assignee: str = "Erin",
+    assignee: str = "",
     priority: str = "Medium",
 ) -> str:
     """Add a new item to the Backlog database."""
+    if not assignee:
+        assignee = load_family_config()["partner2_name"]
     if not NOTION_BACKLOG_DB:
         return "Backlog database not configured."
 
@@ -552,12 +555,14 @@ def get_next_backlog_suggestion() -> str:
     return f"{desc}{label}"
 
 
-def get_backlog_for_nudge(assignee: str = "Erin") -> dict | None:
+def get_backlog_for_nudge(assignee: str = "") -> dict | None:
     """Get the highest-priority incomplete backlog item for nudge suggestions.
 
     Returns dict with id, description, category, priority, or None if empty.
     Updates Last Surfaced so the same item isn't re-suggested immediately.
     """
+    if not assignee:
+        assignee = load_family_config()["partner2_name"]
     if not NOTION_BACKLOG_DB:
         return None
 

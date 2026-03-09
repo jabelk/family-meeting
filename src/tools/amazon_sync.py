@@ -33,12 +33,12 @@ _SYNC_CONFIG_FILE = _DATA_DIR / "amazon_sync_config.json"
 
 @dataclass
 class Correction:
-    """A record of Erin correcting a category assignment."""
+    """A record of Partner 2 correcting a category assignment."""
 
     timestamp: str  # ISO datetime
     from_category: str
     to_category: str
-    context: str = ""  # Erin's adjustment message
+    context: str = ""  # Partner 2's adjustment message
 
 
 @dataclass
@@ -920,7 +920,7 @@ def format_suggestion_message(enriched_transactions: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# T013: Handle Erin's reply to sync suggestions
+# T013: Handle Partner 2's reply to sync suggestions
 # ---------------------------------------------------------------------------
 
 # Persistent storage for pending suggestions (survives container restarts)
@@ -971,7 +971,7 @@ def _load_pending_suggestions() -> list[dict]:
 
 
 def handle_sync_reply(message_text: str) -> str:
-    """Parse Erin's reply to a sync suggestion and apply the action.
+    """Parse Partner 2's reply to a sync suggestion and apply the action.
 
     Supports: "N yes", "N adjust — [correction]", "N skip", "yes" (if only one pending).
     """
@@ -1141,7 +1141,7 @@ def run_nightly_sync() -> str | None:
         # Fetch Amazon orders (slow — parses emails via Gmail API + LLM)
         orders, auth_failed = get_amazon_orders()
         if auth_failed:
-            return "⚠️ Amazon sync paused — Gmail OAuth token expired. Ask Jason to re-run setup_calendar.py on the NUC."
+            return "⚠️ Amazon sync paused — Gmail OAuth token expired. Ask the operator to re-run setup_calendar.py."
         if not orders:
             logger.info("Nightly sync: no Amazon orders found")
             return None
@@ -1499,7 +1499,7 @@ def match_refund(txn: dict) -> str | None:
                     f"{item.get('classified_category', 'original category')}."
                 )
 
-    return None  # Unmatched refund — caller asks Erin
+    return None  # Unmatched refund — caller asks Partner 2
 
 
 # ---------------------------------------------------------------------------
@@ -1567,7 +1567,7 @@ def handle_known_charge_patterns(txn: dict) -> str | None:
             original_memo=txn.get("memo") or "",
         )
     )
-    return None  # Truly unmatched — suggestion message will ask Erin
+    return None  # Truly unmatched — suggestion message will ask Partner 2
 
 
 # ---------------------------------------------------------------------------

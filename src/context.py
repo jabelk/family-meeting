@@ -268,19 +268,19 @@ def _format_event(event: dict) -> str:
 
 
 def _infer_childcare(events: list[dict], now: datetime) -> str:
-    """Infer who has Zoey based on event keywords and current time.
+    """Infer childcare status based on event keywords and current time.
 
     Scans all events for childcare-related keywords. If a matching event's
-    time window overlaps with ``now``, reports who has Zoey and until when.
+    time window overlaps with ``now``, reports who has the child and until when.
 
-    Falls back to "With Erin (no childcare event detected)" if no match.
+    Falls back to "With Partner 2 (no childcare event detected)" if no match.
     """
     for event in events:
         summary = (event.get("summary") or "").lower()
         matched_keywords = CHILDCARE_KEYWORDS & set(summary.split())
 
         if not matched_keywords:
-            # Also check for substring matches (e.g., "Sandy's house")
+            # Also check for substring matches (e.g., "grandma's house")
             if not any(kw in summary for kw in CHILDCARE_KEYWORDS):
                 continue
 

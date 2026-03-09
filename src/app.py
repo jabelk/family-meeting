@@ -499,7 +499,7 @@ async def amazon_sync_endpoint(background_tasks: BackgroundTasks):
 
     Called by n8n cron at 10pm daily. Matches Amazon orders to YNAB transactions,
     enriches memos with item names, classifies items, and sends split suggestions
-    to Erin via WhatsApp.
+    to Partner 2 via WhatsApp.
     """
     logger.info("Amazon sync triggered")
 
@@ -526,7 +526,7 @@ async def email_sync_endpoint(background_tasks: BackgroundTasks):
 
     Called by n8n cron at 10:05pm daily (5 min after Amazon sync). Parses
     confirmation emails, matches to YNAB transactions, enriches memos,
-    classifies items, and sends suggestions to Erin via WhatsApp.
+    classifies items, and sends suggestions to Partner 2 via WhatsApp.
     """
     logger.info("Email sync triggered")
 
@@ -612,7 +612,7 @@ async def populate_week(req: PopulateWeekRequest):
 
 @app.post("/api/v1/calendar/work-events", dependencies=[Depends(verify_n8n_auth)])
 async def receive_work_events(req: WorkEventsRequest):
-    """Receive Jason's work calendar events from iOS Shortcut.
+    """Receive Partner 1's work calendar events from iOS Shortcut.
 
     Called daily at 6:30 AM by iOS Shortcut automation (before 7 AM briefing).
     Stores events keyed by date for use in daily plan generation.
