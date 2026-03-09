@@ -1,6 +1,7 @@
 """Prompt loader — reads system prompt sections, tool descriptions, and templates from external files."""
 
 import logging
+from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 
@@ -97,6 +98,31 @@ def load_template(name: str) -> str:
     if not content:
         raise ValueError(f"Prompt template is empty: {path}")
     return content
+
+
+class _PassthroughDict(defaultdict):
+    """Dict that returns '{key}' for missing keys — prevents KeyError during format_map."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
+def render_system_prompt(family_config: dict) -> str:
+    """Load system prompt template and substitute family config placeholders.
+
+    Uses format_map with a passthrough dict so unknown {placeholders} (e.g., from
+    template files) pass through unchanged.
+    """
+    template = load_system_prompt()
+    mapping = _PassthroughDict(str, family_config)
+    return template.format_map(mapping)
+
+
+def render_tool_descriptions(family_config: dict) -> dict[str, str]:
+    """Load tool descriptions and substitute family config placeholders in each."""
+    raw = load_tool_descriptions()
+    mapping = _PassthroughDict(str, family_config)
+    return {name: desc.format_map(mapping) for name, desc in raw.items()}
 
 
 def render_template(name: str, **kwargs: object) -> str:

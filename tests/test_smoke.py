@@ -15,5 +15,8 @@ def test_health_endpoint_exists():
 
     client = TestClient(app)
     response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    data = response.json()
+    assert response.status_code in (200, 503)
+    assert data["status"] in ("healthy", "degraded", "unhealthy")
+    assert "integrations" in data
+    assert "uptime_seconds" in data

@@ -40,11 +40,11 @@ Get the current or most recent meal plan from Notion.
 
 ## get_backlog_items
 
-Query Erin's personal backlog of one-off tasks (home improvement, personal growth, side work). These are not weekly action items — they persist until done.
+Query {partner2_name}'s personal backlog of one-off tasks (home improvement, personal growth, side work). These are not weekly action items — they persist until done.
 
 ## add_backlog_item
 
-Add a one-off task to the backlog (e.g., 'reorganize tupperware', 'clean garage', 'knitting project'). These are personal growth / home improvement tasks worked through at Erin's pace.
+Add a one-off task to the backlog (e.g., 'reorganize tupperware', 'clean garage', 'knitting project'). These are personal growth / home improvement tasks worked through at {partner2_name}'s pace.
 
 ## complete_backlog_item
 
@@ -52,4 +52,4 @@ Mark a backlog item as Done. Accepts either a Notion page UUID or the task descr
 
 ## get_routine_templates
 
-Read Erin's daily routine templates from the family profile. Templates define time blocks for different scenarios (e.g., 'Weekday with Zoey', 'Weekday with Grandma'). Used for daily plan generation.
+Read {partner2_name}'s daily routine templates from the family profile. Templates define time blocks for different scenarios (e.g., 'Weekday with {child2_name}', 'Weekday with Grandma'). Used for daily plan generation.

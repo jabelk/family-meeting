@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from src.config import ANYLIST_SIDECAR_URL
+from src.config import ANYLIST_SIDECAR_URL, FAMILY_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,8 @@ def push_grocery_list(items: list[str], list_name: str = "Grocery") -> str:
     added = resp.json().get("count", 0)
     logger.info("Added %d items to AnyList", added)
 
-    return f"Pushed {added} items to AnyList. Open the app → 'Order Pickup or Delivery' → Whole Foods."
+    store = FAMILY_CONFIG.get("grocery_store", "grocery store")
+    return f"Pushed {added} items to AnyList. Open the app → 'Order Pickup or Delivery' → {store}."
 
 
 def clear_grocery_list(list_name: str = "Grocery") -> str:

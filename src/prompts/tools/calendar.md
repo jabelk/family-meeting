@@ -1,18 +1,18 @@
 ## get_calendar_events
 
-Fetch upcoming events from Google Calendars for the next N days. Reads from Jason's personal, Erin's personal, and the shared family calendar. Events are labeled by source.
+Fetch upcoming events from Google Calendars for the next N days. Reads from {partner1_name}'s personal, {partner2_name}'s personal, and the shared family calendar. Events are labeled by source.
 
 ## get_outlook_events
 
-Fetch Jason's work calendar events (Outlook/Cisco) for a specific date. Shows meeting times so Erin can plan around his schedule. Use for daily plan generation and breakfast timing.
+Fetch {partner1_name}'s work calendar events for a specific date. Shows meeting times so {partner2_name} can plan around his schedule. Use for daily plan generation and breakfast timing.
 
 ## write_calendar_blocks
 
-Write time blocks to Erin's Google Calendar. Use after generating a daily plan to create events that appear in her Apple Calendar with push notifications. Each block needs: summary, start_time (ISO), end_time (ISO), and color_category.
+Write time blocks to {partner2_name}'s Google Calendar. Use after generating a daily plan to create events that appear in her Apple Calendar with push notifications. Each block needs: summary, start_time (ISO), end_time (ISO), and color_category.
 
 ## create_quick_event
 
-Create a one-time or recurring event on a Google Calendar. Defaults to the family calendar (both Jason and Erin see it). Use when someone says 'remind me to...', 'pick up X at Y time', or any time-specific task. Includes a 15-minute popup reminder by default.
+Create a one-time or recurring event on a Google Calendar. Defaults to the family calendar (both {partner1_name} and {partner2_name} see it). Use when someone says 'remind me to...', 'pick up X at Y time', or any time-specific task. Includes a 15-minute popup reminder by default.
 
 For recurring events, generate an RRULE from the user's natural language and pass it in the `recurrence` parameter:
 - "every Tuesday" → `["RRULE:FREQ=WEEKLY;BYDAY=TU"]`
@@ -22,7 +22,7 @@ For recurring events, generate an RRULE from the user's natural language and pas
 - "Tuesdays and Thursdays" → `["RRULE:FREQ=WEEKLY;BYDAY=TU,TH"]`
 - "every day until June 1" → `["RRULE:FREQ=DAILY;UNTIL=20260601T235959Z"]`
 
-Omit `recurrence` entirely for one-time events. Use `calendar_name` to target a specific calendar (family, jason, erin). After creating a recurring event, confirm the pattern and list the next 3-4 upcoming dates so the user can verify.
+Omit `recurrence` entirely for one-time events. Use `calendar_name` to target a specific calendar (family, {partner1_name_lower}, {partner2_name_lower}). After creating a recurring event, confirm the pattern and list the next 3-4 upcoming dates so the user can verify.
 
 Use `location` for events with a physical address (doctor offices, schools, restaurants, service appointments). The location appears in the calendar event details and enables map links on mobile devices.
 

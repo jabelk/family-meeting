@@ -13,6 +13,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from src import preferences
+from src.config import FAMILY_CONFIG
 from src.tools import notion
 from src.tools.calendar import get_events_for_date
 
@@ -24,17 +25,8 @@ logger = logging.getLogger(__name__)
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 
-# Keywords that indicate someone other than Erin has Zoey
-CHILDCARE_KEYWORDS: set[str] = {
-    "zoey",
-    "sandy",
-    "preschool",
-    "childcare",
-    "babysit",
-    "milestones",
-    "daycare",
-    "nanny",
-}
+# Keywords that indicate someone other than the primary caregiver has the child
+CHILDCARE_KEYWORDS: set[str] = set(FAMILY_CONFIG.get("_childcare_keywords", []))
 
 # Communication mode time boundaries (hour in Pacific time)
 # morning: 7-12, afternoon: 12-17, evening: 17-21, late_night: 21-7
@@ -186,8 +178,8 @@ def get_daily_context(phone: str) -> str:
         )
         lines.append("")
     else:
-        # Jason's events
-        lines.append("\U0001f464 Jason's events today:")
+        # Partner 1's events
+        lines.append(f"\U0001f464 {FAMILY_CONFIG.get('partner1_name', 'Partner1')}'s events today:")
         if jason_events:
             for event in jason_events:
                 lines.append(f"- {_format_event(event)}")
@@ -195,8 +187,8 @@ def get_daily_context(phone: str) -> str:
             lines.append("- No events")
         lines.append("")
 
-        # Erin's events
-        lines.append("\U0001f464 Erin's events today:")
+        # Partner 2's events
+        lines.append(f"\U0001f464 {FAMILY_CONFIG.get('partner2_name', 'Partner2')}'s events today:")
         if erin_events:
             for event in erin_events:
                 lines.append(f"- {_format_event(event)}")
@@ -215,7 +207,7 @@ def get_daily_context(phone: str) -> str:
 
         # Childcare inference
         childcare_status = _infer_childcare(jason_events + erin_events + family_events, now)
-        lines.append(f"\U0001f476 Zoey: {childcare_status}")
+        lines.append(f"\U0001f476 {FAMILY_CONFIG.get('child2_name', 'Child')}: {childcare_status}")
         lines.append("")
 
     # --- Backlog count ---
@@ -312,33 +304,30 @@ def _infer_childcare(events: list[dict], now: datetime) -> str:
                 start_time = start_dt.strftime("%-I:%M %p")
                 end_time = end_dt.strftime("%-I:%M %p")
                 caregiver = _extract_caregiver(summary)
-                return f"With Erin now; {caregiver} from {start_time}\u2013{end_time}"
+                primary = FAMILY_CONFIG.get("partner2_name", "Partner2")
+                return f"With {primary} now; {caregiver} from {start_time}\u2013{end_time}"
         elif start_raw.get("date"):
             # All-day childcare event — assume active all day
             caregiver = _extract_caregiver(summary)
             return f"With {caregiver} (all day)"
 
-    return "With Erin (no childcare event detected)"
+    return f"With {FAMILY_CONFIG.get('partner2_name', 'Partner2')} (no childcare event detected)"
+
+
+_CAREGIVER_MAPPINGS: dict[str, str] = FAMILY_CONFIG.get("_caregiver_mappings", {})
 
 
 def _extract_caregiver(summary: str) -> str:
     """Extract a human-readable caregiver name from an event summary.
 
-    Maps keywords to friendly names. Falls back to the raw summary if
-    no specific caregiver keyword is found.
+    Maps keywords to friendly names using family config caregiver mappings.
+    Falls back to the raw summary if no specific caregiver keyword is found.
     """
     summary_lower = summary.lower()
 
-    if "sandy" in summary_lower:
-        return "Sandy"
-    if "preschool" in summary_lower or "milestones" in summary_lower:
-        return "preschool"
-    if "daycare" in summary_lower:
-        return "daycare"
-    if "nanny" in summary_lower:
-        return "nanny"
-    if "babysit" in summary_lower:
-        return "babysitter"
+    for keyword, label in _CAREGIVER_MAPPINGS.items():
+        if keyword in summary_lower:
+            return label
 
     # Generic fallback — use the event summary itself
     return summary.strip().title()

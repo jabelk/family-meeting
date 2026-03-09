@@ -14,12 +14,22 @@ from pydantic import BaseModel
 
 from src.assistant import generate_daily_plan, generate_meeting_prep, handle_message
 from src.config import (
+    ANTHROPIC_API_KEY,
+    ANYLIST_SIDECAR_URL,
     ERIN_PHONE,
+    FAMILY_CONFIG,
+    GOOGLE_CREDENTIALS_JSON,
+    GOOGLE_TOKEN_JSON,
     N8N_WEBHOOK_SECRET,
+    NOTION_TOKEN,
+    OUTLOOK_CALENDAR_ICS_URL,
     PHONE_TO_NAME,
     SCHEDULER_ENABLED,
+    WHATSAPP_ACCESS_TOKEN,
     WHATSAPP_APP_SECRET,
+    WHATSAPP_PHONE_NUMBER_ID,
     WHATSAPP_VERIFY_TOKEN,
+    YNAB_ACCESS_TOKEN,
 )
 from src.tools.calendar import delete_assistant_events
 from src.transcribe import MAX_DURATION_SECONDS, get_audio_duration, transcribe_voice_note
@@ -30,6 +40,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+_APP_START_TIME = time.time()
 
 
 @asynccontextmanager
@@ -290,8 +302,145 @@ async def _process_image_and_reply(phone: str, parsed: dict):
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
-    return {"status": "ok"}
+    """Enhanced health check — reports per-integration status."""
+    import httpx
+
+    integrations: dict[str, dict] = {}
+
+    # --- Required integrations ---
+    # WhatsApp
+    wa_configured = bool(WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID)
+    integrations["whatsapp"] = {
+        "required": True,
+        "configured": wa_configured,
+        "connected": wa_configured,
+        "error": None if wa_configured else "WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set",
+    }
+
+    # AI API
+    ai_configured = bool(ANTHROPIC_API_KEY)
+    integrations["ai_api"] = {
+        "required": True,
+        "configured": ai_configured,
+        "connected": ai_configured,
+        "error": None if ai_configured else "ANTHROPIC_API_KEY not set",
+    }
+
+    # --- Optional integrations ---
+    # Notion
+    if NOTION_TOKEN:
+        try:
+            from notion_client import Client as NotionClient
+
+            notion = NotionClient(auth=NOTION_TOKEN)
+            notion.users.me()
+            integrations["notion"] = {"required": False, "configured": True, "connected": True, "error": None}
+        except Exception as e:
+            integrations["notion"] = {"required": False, "configured": True, "connected": False, "error": str(e)}
+    else:
+        integrations["notion"] = {"required": False, "configured": False, "connected": False, "error": None}
+
+    # Google Calendar
+    gcal_configured = bool(GOOGLE_TOKEN_JSON or GOOGLE_CREDENTIALS_JSON)
+    if gcal_configured:
+        try:
+            from src.tools.calendar import _get_service
+
+            service = _get_service()
+            service.calendarList().list(maxResults=1).execute()
+            integrations["google_calendar"] = {
+                "required": False,
+                "configured": True,
+                "connected": True,
+                "error": None,
+            }
+        except Exception as e:
+            integrations["google_calendar"] = {
+                "required": False,
+                "configured": True,
+                "connected": False,
+                "error": str(e),
+            }
+    else:
+        integrations["google_calendar"] = {
+            "required": False,
+            "configured": False,
+            "connected": False,
+            "error": None,
+        }
+
+    # YNAB
+    if YNAB_ACCESS_TOKEN:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    "https://api.ynab.com/v1/budgets",
+                    headers={"Authorization": f"Bearer {YNAB_ACCESS_TOKEN}"},
+                )
+                connected = resp.status_code == 200
+            integrations["ynab"] = {
+                "required": False,
+                "configured": True,
+                "connected": connected,
+                "error": None if connected else f"YNAB API returned {resp.status_code}",
+            }
+        except Exception as e:
+            integrations["ynab"] = {"required": False, "configured": True, "connected": False, "error": str(e)}
+    else:
+        integrations["ynab"] = {"required": False, "configured": False, "connected": False, "error": None}
+
+    # AnyList sidecar
+    if ANYLIST_SIDECAR_URL:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{ANYLIST_SIDECAR_URL}/health")
+                connected = resp.status_code == 200
+            integrations["anylist"] = {
+                "required": False,
+                "configured": True,
+                "connected": connected,
+                "error": None if connected else f"Sidecar returned {resp.status_code}",
+            }
+        except Exception as e:
+            integrations["anylist"] = {"required": False, "configured": True, "connected": False, "error": str(e)}
+    else:
+        integrations["anylist"] = {"required": False, "configured": False, "connected": False, "error": None}
+
+    # Outlook (no live check — just env var)
+    outlook_configured = bool(OUTLOOK_CALENDAR_ICS_URL)
+    integrations["outlook"] = {
+        "required": False,
+        "configured": outlook_configured,
+        "connected": outlook_configured,
+        "error": None,
+    }
+
+    # --- Determine overall status ---
+    required_ok = all(i["connected"] for i in integrations.values() if i["required"])
+    optional_ok = all(i["connected"] for i in integrations.values() if not i["required"] and i["configured"])
+
+    if not required_ok:
+        status = "unhealthy"
+    elif not optional_ok:
+        status = "degraded"
+    else:
+        status = "healthy"
+
+    response = {
+        "status": status,
+        "family": FAMILY_CONFIG.get("family_name", ""),
+        "bot_name": FAMILY_CONFIG.get("bot_name", ""),
+        "uptime_seconds": int(time.time() - _APP_START_TIME),
+        "integrations": integrations,
+    }
+
+    if status == "unhealthy":
+        return Response(
+            content=__import__("json").dumps(response),
+            status_code=503,
+            media_type="application/json",
+        )
+    return response
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from src.config import FAMILY_CONFIG
+
 logger = logging.getLogger(__name__)
 
 _DATA_DIR = Path("/app/data") if Path("/app/data").exists() else Path("data")
@@ -321,8 +323,8 @@ async def _run_populate_week():
     prompt = (
         f"Generate calendar blocks for the week of {week_start} (Monday through Friday). "
         "Read the routine templates and existing calendar events for each day. "
-        "For each day, adapt the appropriate template (check who has Zoey) and "
-        "write the time blocks to Erin's Google Calendar. "
+        f"For each day, adapt the appropriate template (check who has {FAMILY_CONFIG.get('child2_name', 'Child')}) and "
+        f"write the time blocks to {FAMILY_CONFIG.get('partner2_name', 'Partner2')}'s Google Calendar. "
         "Don't send a WhatsApp message — just create the calendar events."
     )
     handle_message("system", prompt)
@@ -388,8 +390,9 @@ async def _run_grandma_prompt():
     from src.config import ERIN_PHONE
     from src.whatsapp import send_message
 
+    child2 = FAMILY_CONFIG.get("child2_name", "Child")
     message = (
-        "Hi! Quick question for the week \u2014 what days is grandma taking Zoey? "
+        f"Hi! Quick question for the week \u2014 what days is grandma taking {child2}? "
         "Just let me know and I'll update the daily plans. \U0001f5d3\ufe0f"
     )
     await send_message(ERIN_PHONE, message)

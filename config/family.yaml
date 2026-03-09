@@ -1,0 +1,49 @@
+bot:
+  name: "Mom Bot"
+  welcome_message: "Welcome to Mom Bot! I can help with recipes, budgets, calendars, groceries, chores, and reminders. Say \"help\" anytime to see everything I can do."
+
+family:
+  name: "The Belk Family"
+  timezone: "America/Los_Angeles"
+  location: "Reno, NV"
+
+  partners:
+    - name: "Jason"
+      role: "partner"
+      work: "works from home at Cisco"
+      has_work_calendar: true
+    - name: "Erin"
+      role: "partner"
+      work: "stays at home with the kids"
+      has_work_calendar: false
+
+  children:
+    - name: "Vienna"
+      age: 5
+      details: "kindergarten at Roy Gomm, M-F"
+    - name: "Zoey"
+      age: 3
+      details: ""
+
+  caregivers:
+    - name: "Sandy"
+      role: "grandma"
+      keywords: ["sandy", "grandma"]
+
+preferences:
+  grocery_store: "Whole Foods"
+  recipe_source: "Downshiftology"
+  dietary_restrictions: []
+
+calendar:
+  event_mappings:
+    "BSF": "Erin"
+    "Gymnastics": "Vienna"
+    "Church": "Family"
+    "Nature class": "Vienna"
+
+childcare:
+  keywords: ["zoey", "sandy", "preschool", "milestones", "grandma"]
+  caregiver_mappings:
+    "sandy": "Sandy"
+    "milestones": "preschool"

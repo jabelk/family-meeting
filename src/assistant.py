@@ -9,8 +9,8 @@ import httpx
 from anthropic import Anthropic
 
 from src import context, conversation, drive_times, preferences, routines
-from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.prompts import load_system_prompt, load_tool_descriptions
+from src.config import ANTHROPIC_API_KEY, FAMILY_CONFIG, PHONE_TO_NAME
+from src.prompts import render_system_prompt, render_tool_descriptions
 from src.tools import (
     amazon_sync,
     calendar,
@@ -47,7 +47,7 @@ _welcomed_phones: set[str] = set()
 # Tool definitions for Claude
 # ---------------------------------------------------------------------------
 
-_tool_descs = load_tool_descriptions()
+_tool_descs = render_tool_descriptions(FAMILY_CONFIG) if FAMILY_CONFIG else {}
 
 TOOLS = [
     {
@@ -92,7 +92,11 @@ TOOLS = [
             "properties": {
                 "assignee": {
                     "type": "string",
-                    "description": "Filter by assignee name (e.g., 'Jason', 'Erin'). Empty for all.",
+                    "description": (
+                        f"Filter by assignee name (e.g., "
+                        f"'{FAMILY_CONFIG.get('partner1_name', 'Partner1')}', "
+                        f"'{FAMILY_CONFIG.get('partner2_name', 'Partner2')}'). Empty for all."
+                    ),
                 },
                 "status": {
                     "type": "string",
@@ -348,8 +352,8 @@ TOOLS = [
                 },
                 "assignee": {
                     "type": "string",
-                    "description": "Who this is for. Default 'Erin'.",
-                    "default": "Erin",
+                    "description": f"Who this is for. Default '{FAMILY_CONFIG.get('partner2_name', 'Partner2')}'.",
+                    "default": FAMILY_CONFIG.get("partner2_name", "Partner2"),
                 },
                 "priority": {
                     "type": "string",
@@ -1458,7 +1462,10 @@ TOOL_FUNCTIONS = {
     # Backlog
     "get_backlog_items": lambda **kw: notion.get_backlog_items(kw.get("assignee", ""), kw.get("status", "")),
     "add_backlog_item": lambda **kw: notion.add_backlog_item(
-        kw["description"], kw.get("category", "Other"), kw.get("assignee", "Erin"), kw.get("priority", "Medium")
+        kw["description"],
+        kw.get("category", "Other"),
+        kw.get("assignee", FAMILY_CONFIG.get("partner2_name", "Partner2")),
+        kw.get("priority", "Medium"),
     ),
     "complete_backlog_item": lambda **kw: notion.complete_backlog_item(kw["page_id"]),
     # Routine templates
@@ -1716,7 +1723,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     # so the model reliably attends to it (GitHub issue #2)
     # P2 fix (Feature 016): also injected into user message above as time_prefix
     date_line = now.strftime("**Right now:** %A, %B %-d, %Y at %-I:%M %p Pacific.")
-    system = date_line + "\n\n" + load_system_prompt() + "\n\n" + date_line
+    system = date_line + "\n\n" + render_system_prompt(FAMILY_CONFIG) + "\n\n" + date_line
 
     # Inject user preferences into system prompt so Claude naturally honors them
     user_prefs = preferences.get_preferences(sender_phone)
@@ -1735,11 +1742,10 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     # First-time welcome: prepend instruction for new users
     if sender_phone != "system" and sender_phone not in _welcomed_phones:
         _welcomed_phones.add(sender_phone)
+        _welcome = FAMILY_CONFIG.get("welcome_message", 'Welcome! Say "help" to see what I can do.')
         system += (
             "\n\n[SYSTEM: This is the user's FIRST message. Before your normal "
-            "response, prepend a brief one-line welcome: 'Welcome to Mom Bot! "
-            "I can help with recipes, budgets, calendars, groceries, chores, "
-            'and reminders. Say "help" anytime to see everything I can do.\' '
+            f"response, prepend a brief one-line welcome: '{_welcome}' "
             "Then answer their actual request.]"
         )
 
