@@ -11,6 +11,7 @@ from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+from src.prompts import render_template
 from src.tools.amazon_sync import (
     _DATA_DIR,
     CategoryMapping,
@@ -267,25 +268,7 @@ def _parse_paypal_email(stripped_text: str, email_date: str) -> list[dict]:
         return []
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
-    prompt = (
-        "Extract transaction details from this PayPal confirmation email.\n\n"
-        "Return ONLY valid JSON — an array of transaction objects:\n"
-        "[\n"
-        "  {\n"
-        '    "merchant_name": "actual merchant/store name (e.g., DoorDash, eBay seller name)",\n'
-        '    "amount": 45.00,\n'
-        '    "items": [{"title": "item name", "price": 45.00, "quantity": 1}],\n'
-        '    "is_refund": false\n'
-        "  }\n"
-        "]\n\n"
-        "RULES:\n"
-        "- merchant_name is the ACTUAL business/merchant, not 'PayPal'\n"
-        "- For refunds, set is_refund=true and amount as positive number\n"
-        "- For multi-item purchases, list each item separately\n"
-        "- amount is the total charged amount in dollars\n"
-        "- If you can't extract details, return an empty array []\n\n"
-        f"Email text:\n{stripped_text}"
-    )
+    prompt = render_template("paypal_parsing", stripped_text=stripped_text)
 
     try:
         response = client.messages.create(
@@ -320,27 +303,7 @@ def _parse_venmo_email(stripped_text: str, email_date: str) -> list[dict]:
         return []
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
-    prompt = (
-        "Extract transaction details from this Venmo notification email.\n\n"
-        "Return ONLY valid JSON — an array of transaction objects:\n"
-        "[\n"
-        "  {\n"
-        '    "merchant_name": "recipient or sender name (e.g., Sarah M., Pizza Palace)",\n'
-        '    "amount": 30.00,\n'
-        '    "payment_note": "the payment note/description (e.g., dinner split, rent)",\n'
-        '    "direction": "sent or received",\n'
-        '    "is_refund": false\n'
-        "  }\n"
-        "]\n\n"
-        "RULES:\n"
-        "- merchant_name is the person or business name, not 'Venmo'\n"
-        "- payment_note is the note the sender included with the payment\n"
-        "- direction: 'sent' if user paid someone, 'received' if user got paid\n"
-        "- For business payments, use the business name as merchant_name\n"
-        "- amount is always positive (in dollars)\n"
-        "- If you can't extract details, return an empty array []\n\n"
-        f"Email text:\n{stripped_text}"
-    )
+    prompt = render_template("venmo_parsing", stripped_text=stripped_text)
 
     try:
         response = client.messages.create(
@@ -394,26 +357,7 @@ def _parse_apple_email(stripped_text: str, email_date: str) -> list[dict]:
         return []
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
-    prompt = (
-        "Extract transaction details from this Apple receipt/billing email.\n\n"
-        "Return ONLY valid JSON — an array of transaction objects:\n"
-        "[\n"
-        "  {\n"
-        '    "merchant_name": "actual service/app name (e.g., iCloud+ 200GB, Apple Music, Clash of Clans)",\n'
-        '    "amount": 12.99,\n'
-        '    "is_refund": false\n'
-        "  }\n"
-        "]\n\n"
-        "RULES:\n"
-        "- merchant_name is the ACTUAL subscription/app name, not 'Apple' or 'APPLE.COM/BILL'\n"
-        "- For iCloud, include the storage tier (e.g., 'iCloud+ 200GB')\n"
-        "- For App Store purchases, include the app name\n"
-        "- For refunds, set is_refund=true and amount as positive number\n"
-        "- One receipt may contain multiple subscriptions or purchases\n"
-        "- amount is in dollars\n"
-        "- If you can't extract details, return an empty array []\n\n"
-        f"Email text:\n{stripped_text}"
-    )
+    prompt = render_template("apple_parsing", stripped_text=stripped_text)
 
     try:
         response = client.messages.create(

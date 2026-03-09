@@ -38,6 +38,21 @@ Features are developed through a phased pipeline using slash commands, executed 
 
 All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git and non-git repositories.
 
+## Prompt Architecture
+
+All LLM prompts live in `src/prompts/` as external Markdown files, loaded at startup via `@lru_cache`.
+
+**Directory structure:**
+- `src/prompts/system/` — System prompt sections (8 numbered `.md` files, concatenated in sort order)
+- `src/prompts/tools/` — Tool descriptions (12 module-grouped `.md` files, parsed by `## tool_name` headers)
+- `src/prompts/templates/` — Classification/generation prompt templates (10 `.md` files with `{placeholder}` syntax)
+- `src/prompts/__init__.py` — Loader module: `load_system_prompt()`, `load_tool_descriptions()`, `render_template(name, **kwargs)`
+
+**Adding/editing prompts:**
+- System prompt: Add/edit numbered files in `system/` (e.g., `09-new-section.md`). Order matters.
+- Tool descriptions: Add `## tool_name` section in the appropriate module file in `tools/`.
+- Templates: Create `name.md` in `templates/`, use `{placeholder}` for dynamic values. Escape literal braces as `{{` / `}}`.
+
 ## Key Constraints
 
 - Specifications must be user-focused and tech-agnostic (no implementation details in specs)
@@ -86,6 +101,8 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Railway Volume mounted at `/app/data` (same JSON files, zero migration) (020-railway-cloud-deploy)
 - GitHub Actions YAML + Python 3.12 (existing app) + GitHub Actions (runners), Ruff (linting), pytest (testing), Trivy (security scanning), Railway CLI (deployment), Docker (container builds) (021-ci-cd-pipeline)
 - N/A — pipeline configuration only, no new data storage (021-ci-cd-pipeline)
+- Python 3.12 (existing codebase) + None new — uses `pathlib`, `functools.lru_cache`, `str.format()` (all stdlib) (022-prompt-externalization)
+- Markdown files in `src/prompts/` directory (committed to git, included in Docker image) (022-prompt-externalization)
 
 ## Deployment
 
@@ -172,6 +189,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 022-prompt-externalization: Added Python 3.12 (existing codebase) + None new — uses `pathlib`, `functools.lru_cache`, `str.format()` (all stdlib)
 - 021-ci-cd-pipeline: Added GitHub Actions YAML + Python 3.12 (existing app) + GitHub Actions (runners), Ruff (linting), pytest (testing), Trivy (security scanning), Railway CLI (deployment), Docker (container builds)
 - 020-railway-cloud-deploy: Railway cloud deployment with in-app APScheduler (replaces n8n), Google OAuth env var loading, optional integrations (Notion/Calendar/YNAB), ONBOARDING.md for self-service setup, railway.toml + schedules.json config
-- 019-whatsapp-voice-messages: Added openai SDK (GPT-4o Mini Transcribe for voice notes), ffmpeg (OGG→MP3 conversion in Docker). Voice notes transcribed and fed to existing Claude tool loop.

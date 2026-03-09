@@ -5,6 +5,7 @@ import logging
 from datetime import date, timedelta
 
 from src.config import ANTHROPIC_API_KEY
+from src.prompts import render_template
 from src.tools import calendar, notion, outlook, ynab
 
 logger = logging.getLogger(__name__)
@@ -185,22 +186,12 @@ def generate_meal_plan() -> dict:
     profile = notion.get_family_profile()
     recipes_summary = json.dumps(all_recipes[:20], default=str) if all_recipes else "No saved recipes yet."
 
-    prompt = (
-        "Generate a 6-night dinner plan (Monday through Saturday) for this family.\n\n"
-        f"Family profile:\n{profile}\n\n"
-        f"Saved recipes ({len(all_recipes)} total):\n{recipes_summary}\n\n"
-        f"Recent meal plans (avoid repeats):\n{recent_plans[:2] if recent_plans else 'None'}\n\n"
-        "Rules:\n"
-        "- Mon-Sat dinners only (Sunday is leftovers/eating out)\n"
-        "- Simpler meals on busy days (Tue has gymnastics, Fri has nature class)\n"
-        "- Use saved recipes when they're a good fit\n"
-        "- Kid-friendly focus (Vienna 5, Zoey 3)\n"
-        "- No repeats from last 2 weeks\n"
-        "- Mix of complexities\n\n"
-        "Return ONLY valid JSON array:\n"
-        '[{"day": "Monday", "meal_name": "...", "source": "recipe_id or general", '
-        '"ingredients": [{"name": "...", "quantity": "...", "unit": "..."}], '
-        '"complexity": "easy|medium|involved"}]'
+    prompt = render_template(
+        "meal_plan_generation",
+        profile=profile,
+        recipe_count=len(all_recipes),
+        recipes_summary=recipes_summary,
+        recent_plans=recent_plans[:2] if recent_plans else "None",
     )
 
     response = client.messages.create(
@@ -316,11 +307,7 @@ def handle_meal_swap(plan: list[dict], day: str, new_meal: str) -> dict:
                 messages=[
                     {
                         "role": "user",
-                        "content": (
-                            f"List the ingredients for '{new_meal}' (family of 4, kid-friendly). "
-                            "Return ONLY a JSON array: "
-                            '[{"name": "...", "quantity": "...", "unit": "..."}]'
-                        ),
+                        "content": render_template("meal_swap", new_meal=new_meal),
                     }
                 ],
             )
@@ -374,23 +361,13 @@ def detect_conflicts(days_ahead: int = 1) -> list[dict]:
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    prompt = (
-        f"Analyze these calendars for the next {days_ahead} day(s) starting {today.isoformat()}.\n\n"
-        f"Google Calendar events:\n{cal_events_raw}\n\n"
-        f"Outlook (Jason work) events:\n{outlook_events_raw}\n\n"
-        f"Family routine templates:\n{templates}\n\n"
-        "IMPORTANT: Events are pulled from multiple calendars (jason, erin, family). "
-        "The SAME event often appears on more than one calendar (e.g., a shared family "
-        "event shows on both Erin's calendar and the Family calendar). Two entries with "
-        "the same name and time on different calendars are NOT a conflict — they are the "
-        "same event. Only flag a conflict when two DIFFERENT events overlap in time.\n\n"
-        "Find:\n"
-        "1. Hard conflicts: two DIFFERENT events with overlapping times\n"
-        "2. Soft conflicts: events that overlap with routine commitments "
-        "(pickup times, dropoff times, Sandy/grandma schedule)\n\n"
-        "Return ONLY a JSON array (empty if no conflicts):\n"
-        '[{"day": "YYYY-MM-DD", "type": "hard|soft", "event": "event name + time", '
-        '"conflict_with": "other event or routine", "suggestion": "how to resolve"}]'
+    prompt = render_template(
+        "conflict_detection",
+        days_ahead=days_ahead,
+        today=today.isoformat(),
+        cal_events=cal_events_raw,
+        outlook_events=outlook_events_raw,
+        templates=templates,
     )
 
     response = client.messages.create(
@@ -529,16 +506,7 @@ def format_budget_summary() -> dict:
         messages=[
             {
                 "role": "user",
-                "content": (
-                    f"Format this YNAB budget data for a WhatsApp message:\n\n{raw}\n\n"
-                    "Rules:\n"
-                    "- Start with *💰 Weekly Budget Summary*\n"
-                    "- List over-budget categories first with ⚠️ and amount over\n"
-                    "- Then list top on-track categories briefly\n"
-                    "- End with total spent vs total budget\n"
-                    "- Use WhatsApp formatting (*bold*, bullets)\n"
-                    "- Keep it scannable (< 500 chars if possible)"
-                ),
+                "content": render_template("budget_formatting", raw=raw),
             }
         ],
     )
