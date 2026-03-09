@@ -7,32 +7,28 @@ merchant/service names, and classify into budget categories.
 
 import json
 import logging
-import os
-import time
 from dataclasses import asdict
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Optional
 
 from src.tools.amazon_sync import (
-    _get_gmail_service,
-    _extract_html_body,
-    _strip_html,
-    classify_item,
-    load_category_mappings,
-    save_category_mapping,
-    SyncRecord,
-    MatchedItem,
+    _DATA_DIR,
     CategoryMapping,
-    load_sync_records,
-    save_sync_record,
-    is_transaction_processed,
-    load_sync_config,
-    save_sync_config,
-    lookup_cached_category,
+    MatchedItem,
+    SyncRecord,
+    _extract_html_body,
+    _get_gmail_service,
     _load_json,
     _save_json,
-    _DATA_DIR,
+    _strip_html,
+    classify_item,
+    is_transaction_processed,
+    load_category_mappings,
+    load_sync_config,
+    load_sync_records,
+    save_category_mapping,
+    save_sync_config,
+    save_sync_record,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,12 +72,14 @@ _EXCLUDED_PAYEE_KEYWORDS = ["amazon", "amzn"]
 # Phase 2: Foundational — T003, T004, T005
 # ---------------------------------------------------------------------------
 
+
 def find_provider_transactions(provider: str, days: int = 30) -> list[dict]:
     """Fetch YNAB transactions matching a provider's payee filter, excluding already-processed.
 
     Returns list of unprocessed transaction dicts with id, amount, date, memo, payee_name.
     """
     import httpx
+
     from src.tools import ynab
 
     config = PROVIDER_CONFIGS[provider]
@@ -105,16 +103,18 @@ def find_provider_transactions(provider: str, days: int = 30) -> list[dict]:
         # Skip already-processed
         if is_transaction_processed(t["id"]):
             continue
-        results.append({
-            "id": t["id"],
-            "amount": t["amount"],  # milliunits
-            "date": t["date"],
-            "memo": t.get("memo") or "",
-            "payee_name": t.get("payee_name") or "",
-            "category_id": t.get("category_id") or "",
-            "category_name": t.get("category_name") or "",
-            "account_id": t.get("account_id") or "",
-        })
+        results.append(
+            {
+                "id": t["id"],
+                "amount": t["amount"],  # milliunits
+                "date": t["date"],
+                "memo": t.get("memo") or "",
+                "payee_name": t.get("payee_name") or "",
+                "category_id": t.get("category_id") or "",
+                "category_name": t.get("category_name") or "",
+                "account_id": t.get("account_id") or "",
+            }
+        )
 
     logger.info("Found %d unprocessed %s transactions in YNAB", len(results), provider)
     return results
@@ -150,6 +150,7 @@ def _search_provider_emails(provider: str, days: int = 30) -> list[dict]:
                 if header["name"].lower() == "date":
                     try:
                         from email.utils import parsedate_to_datetime
+
                         dt = parsedate_to_datetime(header["value"])
                         email_date = dt.strftime("%Y-%m-%d")
                     except Exception:
@@ -164,12 +165,14 @@ def _search_provider_emails(provider: str, days: int = 30) -> list[dict]:
             if not stripped.strip():
                 continue
 
-            emails.append({
-                "email_id": msg_meta["id"],
-                "email_date": email_date,
-                "html_body": html_body,
-                "stripped_text": stripped,
-            })
+            emails.append(
+                {
+                    "email_id": msg_meta["id"],
+                    "email_date": email_date,
+                    "html_body": html_body,
+                    "stripped_text": stripped,
+                }
+            )
 
         logger.info("Fetched %d %s emails from Gmail", len(emails), provider)
         return emails
@@ -232,11 +235,13 @@ def match_emails_to_transactions(
                     used_emails.add(i)
                     break
 
-        results.append({
-            "ynab_transaction": txn,
-            "matched_email": matched_email,
-            "match_type": match_type,
-        })
+        results.append(
+            {
+                "ynab_transaction": txn,
+                "matched_email": matched_email,
+                "match_type": match_type,
+            }
+        )
 
     matched_count = sum(1 for r in results if r["matched_email"])
     logger.info("Matched %d/%d transactions to emails", matched_count, len(results))
@@ -247,9 +252,11 @@ def match_emails_to_transactions(
 # Phase 3 US1: Provider-specific parsers — T006, T007, T008
 # ---------------------------------------------------------------------------
 
+
 def _parse_paypal_email(stripped_text: str, email_date: str) -> list[dict]:
     """Parse a PayPal confirmation email into structured transaction data using Claude Haiku."""
     from anthropic import Anthropic
+
     from src.config import ANTHROPIC_API_KEY
 
     if len(stripped_text) > 15000:
@@ -303,6 +310,7 @@ def _parse_paypal_email(stripped_text: str, email_date: str) -> list[dict]:
 def _parse_venmo_email(stripped_text: str, email_date: str) -> list[dict]:
     """Parse a Venmo notification email into structured transaction data using Claude Haiku."""
     from anthropic import Anthropic
+
     from src.config import ANTHROPIC_API_KEY
 
     if len(stripped_text) > 15000:
@@ -345,7 +353,16 @@ def _parse_venmo_email(stripped_text: str, email_date: str) -> list[dict]:
         for txn in parsed:
             txn["provider"] = "venmo"
             txn["email_date"] = email_date
-            txn.setdefault("items", [{"title": txn.get("payment_note", "Venmo payment"), "price": txn.get("amount", 0), "quantity": 1}])
+            txn.setdefault(
+                "items",
+                [
+                    {
+                        "title": txn.get("payment_note", "Venmo payment"),
+                        "price": txn.get("amount", 0),
+                        "quantity": 1,
+                    }
+                ],
+            )
             txn.setdefault("is_refund", False)
             txn.setdefault("payment_note", "")
             # Detect business payments: if direction is "sent" and merchant name
@@ -367,6 +384,7 @@ def _parse_venmo_email(stripped_text: str, email_date: str) -> list[dict]:
 def _parse_apple_email(stripped_text: str, email_date: str) -> list[dict]:
     """Parse an Apple receipt email into structured transaction data using Claude Haiku."""
     from anthropic import Anthropic
+
     from src.config import ANTHROPIC_API_KEY
 
     if len(stripped_text) > 15000:
@@ -408,7 +426,16 @@ def _parse_apple_email(stripped_text: str, email_date: str) -> list[dict]:
         for txn in parsed:
             txn["provider"] = "apple"
             txn["email_date"] = email_date
-            txn.setdefault("items", [{"title": txn.get("merchant_name", "Apple service"), "price": txn.get("amount", 0), "quantity": 1}])
+            txn.setdefault(
+                "items",
+                [
+                    {
+                        "title": txn.get("merchant_name", "Apple service"),
+                        "price": txn.get("amount", 0),
+                        "quantity": 1,
+                    }
+                ],
+            )
             txn.setdefault("is_refund", False)
             txn.setdefault("payment_note", "")
         return parsed
@@ -421,12 +448,12 @@ def _extract_json_array(text: str) -> list[dict]:
     """Extract a JSON array from Claude's response text."""
     try:
         if "[" in text:
-            json_str = text[text.index("["):text.rindex("]") + 1]
+            json_str = text[text.index("[") : text.rindex("]") + 1]
             result = json.loads(json_str)
             if isinstance(result, list):
                 return [r for r in result if isinstance(r, dict)]
         elif "{" in text:
-            json_str = text[text.index("{"):text.rindex("}") + 1]
+            json_str = text[text.index("{") : text.rindex("}") + 1]
             return [json.loads(json_str)]
     except (json.JSONDecodeError, ValueError):
         pass
@@ -472,12 +499,14 @@ def _parse_provider_emails(provider: str, raw_emails: list[dict]) -> list[dict]:
 # T010: Enrich and classify
 # ---------------------------------------------------------------------------
 
+
 def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -> list[dict]:
     """Enrich YNAB memos with email details, classify into categories, create SyncRecords.
 
     Takes output of match_emails_to_transactions, returns enriched list.
     """
     import httpx
+
     from src.tools import ynab
 
     config = PROVIDER_CONFIGS[provider]
@@ -496,19 +525,23 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
                 new_memo = f"{unmatched_tag} | {existing_memo}" if existing_memo.strip() else unmatched_tag
                 try:
                     import httpx as _hx
+
                     from src.tools import ynab as _yn
+
                     memo_url = f"{_yn.BASE_URL}/budgets/{_yn.YNAB_BUDGET_ID}/transactions/{txn['id']}"
                     _hx.patch(memo_url, headers=_yn.HEADERS, json={"transaction": {"memo": new_memo[:200]}})
                 except Exception as e:
                     logger.warning("Failed to tag unmatched memo for %s: %s", txn["id"], e)
 
-            enriched.append({
-                "ynab_transaction": txn,
-                "matched_email": None,
-                "sync_record": None,
-                "classified_items": [],
-                "provider": provider,
-            })
+            enriched.append(
+                {
+                    "ynab_transaction": txn,
+                    "matched_email": None,
+                    "sync_record": None,
+                    "classified_items": [],
+                    "provider": provider,
+                }
+            )
             continue
 
         merchant = email_txn.get("merchant_name", "Unknown")
@@ -620,11 +653,13 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
                     subtxns = []
                     for ci in classified_items:
                         amount_milli = -int(round(abs(ci.price) * 1000))  # negative for outflow
-                        subtxns.append({
-                            "amount": amount_milli,
-                            "category_id": ci.classified_category_id,
-                            "memo": ci.title[:100],
-                        })
+                        subtxns.append(
+                            {
+                                "amount": amount_milli,
+                                "category_id": ci.classified_category_id,
+                                "memo": ci.title[:100],
+                            }
+                        )
                     httpx.patch(
                         cat_url,
                         headers=ynab.HEADERS,
@@ -659,13 +694,15 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
 
         save_sync_record(record)
 
-        enriched.append({
-            "ynab_transaction": txn,
-            "matched_email": email_txn,
-            "sync_record": record,
-            "classified_items": classified_items,
-            "provider": provider,
-        })
+        enriched.append(
+            {
+                "ynab_transaction": txn,
+                "matched_email": email_txn,
+                "sync_record": record,
+                "classified_items": classified_items,
+                "provider": provider,
+            }
+        )
 
     return enriched
 
@@ -673,6 +710,7 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
 def _get_ynab_categories() -> list[dict]:
     """Fetch YNAB budget categories."""
     import httpx
+
     from src.tools import ynab
 
     try:
@@ -686,11 +724,13 @@ def _get_ynab_categories() -> list[dict]:
                 continue
             for cat in group.get("categories", []):
                 if not cat.get("hidden") and not cat.get("deleted"):
-                    categories.append({
-                        "id": cat["id"],
-                        "name": cat["name"],
-                        "group": group["name"],
-                    })
+                    categories.append(
+                        {
+                            "id": cat["id"],
+                            "name": cat["name"],
+                            "group": group["name"],
+                        }
+                    )
         return categories
     except Exception as e:
         logger.warning("Failed to fetch YNAB categories: %s", e)
@@ -724,6 +764,7 @@ def _find_refund_original_category(merchant_name: str, amount: float) -> Optiona
 # ---------------------------------------------------------------------------
 # T011: Recurring charge detection + suggestion message formatting
 # ---------------------------------------------------------------------------
+
 
 def _is_recurring_charge(merchant_name: str, amount: float) -> bool:
     """Check if a merchant/amount combination is a known recurring charge.
@@ -843,6 +884,7 @@ def format_email_suggestion_message(enriched_transactions: list[dict]) -> str:
 # T012: Main orchestrator
 # ---------------------------------------------------------------------------
 
+
 def run_email_sync() -> str | None:
     """Run the email sync for all providers. Returns short status string or None if nothing to do.
 
@@ -876,13 +918,15 @@ def run_email_sync() -> str | None:
             if not raw_emails:
                 # Tag unmatched and continue
                 for txn in txns:
-                    all_enriched.append({
-                        "ynab_transaction": txn,
-                        "matched_email": None,
-                        "sync_record": None,
-                        "classified_items": [],
-                        "provider": provider,
-                    })
+                    all_enriched.append(
+                        {
+                            "ynab_transaction": txn,
+                            "matched_email": None,
+                            "sync_record": None,
+                            "classified_items": [],
+                            "provider": provider,
+                        }
+                    )
                 continue
 
             # Parse emails
@@ -914,6 +958,7 @@ def run_email_sync() -> str | None:
     if message:
         try:
             from src.assistant import send_sync_message_direct
+
             send_sync_message_direct(message)
         except Exception as e:
             logger.error("Failed to send email sync message: %s", e)
@@ -943,21 +988,21 @@ def run_email_sync() -> str | None:
 # T013: Pending suggestions & reply handling
 # ---------------------------------------------------------------------------
 
+
 def _set_email_pending_suggestions(enriched_transactions: list[dict]) -> None:
     """Store pending email sync suggestions to disk."""
-    pending = [
-        m for m in enriched_transactions
-        if m.get("sync_record") and m["sync_record"].status == "split_pending"
-    ]
+    pending = [m for m in enriched_transactions if m.get("sync_record") and m["sync_record"].status == "split_pending"]
     serialized = []
     for m in pending:
-        serialized.append({
-            "ynab_transaction": m["ynab_transaction"],
-            "sync_record_id": m["sync_record"].ynab_transaction_id,
-            "classified_items": [asdict(ci) for ci in m.get("classified_items", [])],
-            "provider": m.get("provider", ""),
-            "matched_email": m.get("matched_email", {}),
-        })
+        serialized.append(
+            {
+                "ynab_transaction": m["ynab_transaction"],
+                "sync_record_id": m["sync_record"].ynab_transaction_id,
+                "classified_items": [asdict(ci) for ci in m.get("classified_items", [])],
+                "provider": m.get("provider", ""),
+                "matched_email": m.get("matched_email", {}),
+            }
+        )
     _save_json(_EMAIL_PENDING_SUGGESTIONS_FILE, {"suggestions": serialized})
     logger.info("Saved %d email pending suggestions to disk", len(serialized))
 
@@ -976,13 +1021,15 @@ def _load_email_pending_suggestions() -> list[dict]:
         items = [MatchedItem(**ci) for ci in entry.get("classified_items", [])]
         record = load_record(entry["sync_record_id"])
         if record and record.status == "split_pending":
-            result.append({
-                "ynab_transaction": entry["ynab_transaction"],
-                "sync_record": record,
-                "classified_items": items,
-                "provider": entry.get("provider", ""),
-                "matched_email": entry.get("matched_email", {}),
-            })
+            result.append(
+                {
+                    "ynab_transaction": entry["ynab_transaction"],
+                    "sync_record": record,
+                    "classified_items": items,
+                    "provider": entry.get("provider", ""),
+                    "matched_email": entry.get("matched_email", {}),
+                }
+            )
     return result
 
 
@@ -991,9 +1038,11 @@ def handle_email_sync_reply(message_text: str) -> str:
 
     Supports: "N yes", "N adjust — [correction]", "N skip"
     """
-    import httpx
-    from src.tools import ynab
     import re
+
+    import httpx
+
+    from src.tools import ynab
 
     pending = _load_email_pending_suggestions()
     if not pending:
@@ -1012,7 +1061,11 @@ def handle_email_sync_reply(message_text: str) -> str:
         elif text.startswith("adjust"):
             idx, action, rest = 1, "adjust", text[6:]
         else:
-            return f"I have {len(pending)} pending email sync suggestions. Reply with a number + action (e.g., '1 yes', '2 adjust — put in Groceries', '3 skip')."
+            return (
+                f"I have {len(pending)} pending email sync suggestions. "
+                f"Reply with a number + action "
+                f"(e.g., '1 yes', '2 adjust — put in Groceries', '3 skip')."
+            )
     else:
         idx = int(match.group(1))
         action = match.group(2)
@@ -1069,7 +1122,7 @@ def handle_email_sync_reply(message_text: str) -> str:
         _remove_pending_suggestion(idx - 1)
 
         cat_name = items[0].classified_category if items else "the suggested category"
-        return f"Applied: {cat_name} for ${abs(txn['amount'])/1000:.2f}. Mapping saved for future."
+        return f"Applied: {cat_name} for ${abs(txn['amount']) / 1000:.2f}. Mapping saved for future."
 
     elif action == "skip":
         record.status = "skipped"
@@ -1080,7 +1133,7 @@ def handle_email_sync_reply(message_text: str) -> str:
         save_sync_config(config)
 
         _remove_pending_suggestion(idx - 1)
-        return f"Skipped categorization for ${abs(txn['amount'])/1000:.2f}."
+        return f"Skipped categorization for ${abs(txn['amount']) / 1000:.2f}."
 
     elif action == "adjust":
         # Parse the correction
@@ -1128,7 +1181,7 @@ def handle_email_sync_reply(message_text: str) -> str:
         save_sync_config(config)
 
         _remove_pending_suggestion(idx - 1)
-        return f"Adjusted: applied '{resolved['name']}' for ${abs(txn['amount'])/1000:.2f}. Mapping saved."
+        return f"Adjusted: applied '{resolved['name']}' for ${abs(txn['amount']) / 1000:.2f}. Mapping saved."
 
     return "Unrecognized action. Use 'yes', 'adjust — [category]', or 'skip'."
 
@@ -1179,6 +1232,7 @@ def _resolve_category_name(text: str, categories: list[dict]) -> Optional[dict]:
 # T031: Status
 # ---------------------------------------------------------------------------
 
+
 def get_email_sync_status() -> str:
     """Return email sync status and statistics."""
     config = load_sync_config()
@@ -1207,7 +1261,9 @@ def get_email_sync_status() -> str:
 
     if config.email_total_suggestions > 0:
         rate = config.email_unmodified_accepts / config.email_total_suggestions * 100
-        parts.append(f"Acceptance rate: {rate:.0f}% ({config.email_unmodified_accepts}/{config.email_total_suggestions})")
+        parts.append(
+            f"Acceptance rate: {rate:.0f}% ({config.email_unmodified_accepts}/{config.email_total_suggestions})"
+        )
 
     mode = "ON" if config.email_auto_categorize_enabled else "OFF"
     parts.append(f"Auto-categorize: {mode}")
@@ -1218,6 +1274,7 @@ def get_email_sync_status() -> str:
 # ---------------------------------------------------------------------------
 # T024-T026: Auto-categorize graduation, toggle, undo
 # ---------------------------------------------------------------------------
+
 
 def get_email_acceptance_rate() -> float:
     """Return the email sync acceptance rate (0.0-1.0)."""
@@ -1263,7 +1320,11 @@ def set_email_auto_categorize(enabled: bool) -> str:
     save_sync_config(config)
 
     if enabled:
-        return "Auto-categorize mode enabled for PayPal, Venmo, and Apple transactions. I'll apply categories automatically for known merchants and recurring charges. Reply 'undo' to revert any categorization."
+        return (
+            "Auto-categorize mode enabled for PayPal, Venmo, and Apple transactions. "
+            "I'll apply categories automatically for known merchants and recurring "
+            "charges. Reply 'undo' to revert any categorization."
+        )
     else:
         return "Auto-categorize mode disabled. I'll go back to asking you for each transaction."
 
@@ -1274,6 +1335,7 @@ def handle_email_undo(transaction_index: int) -> str:
     Restores original memo and category from SyncRecord.
     """
     import httpx
+
     from src.tools import ynab
 
     records = load_sync_records()

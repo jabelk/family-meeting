@@ -8,13 +8,10 @@ from zoneinfo import ZoneInfo
 from src.tools.calendar import get_events_for_date_raw
 from src.tools.notion import (
     query_all_chores,
+    query_nudges_by_type,
     update_chore_completion,
     update_chore_preference,
-    seed_default_chores,
-    create_nudge,
-    query_nudges_by_type,
     update_nudge_status,
-    get_family_profile,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,6 +45,7 @@ def _reset_skipped_if_new_day() -> None:
 # T017: Free window detection
 # ---------------------------------------------------------------------------
 
+
 def detect_free_windows(target_date: date) -> list[dict]:
     """Find free windows in Erin's day by comparing calendar events against time boundaries.
 
@@ -58,12 +56,20 @@ def detect_free_windows(target_date: date) -> list[dict]:
 
     # Define day boundaries (7 AM to 8:30 PM Pacific)
     day_start = datetime(
-        target_date.year, target_date.month, target_date.day,
-        hour=7, minute=0, tzinfo=PACIFIC,
+        target_date.year,
+        target_date.month,
+        target_date.day,
+        hour=7,
+        minute=0,
+        tzinfo=PACIFIC,
     )
     day_end = datetime(
-        target_date.year, target_date.month, target_date.day,
-        hour=20, minute=30, tzinfo=PACIFIC,
+        target_date.year,
+        target_date.month,
+        target_date.day,
+        hour=20,
+        minute=30,
+        tzinfo=PACIFIC,
     )
 
     # Collect all busy periods
@@ -103,11 +109,13 @@ def detect_free_windows(target_date: date) -> list[dict]:
         if busy_start > current_time:
             gap_minutes = int((busy_start - current_time).total_seconds() / 60)
             if gap_minutes >= 15:
-                windows.append({
-                    "start": current_time,
-                    "end": busy_start,
-                    "duration_minutes": gap_minutes,
-                })
+                windows.append(
+                    {
+                        "start": current_time,
+                        "end": busy_start,
+                        "duration_minutes": gap_minutes,
+                    }
+                )
 
         current_time = max(current_time, busy_end)
 
@@ -115,11 +123,13 @@ def detect_free_windows(target_date: date) -> list[dict]:
     if current_time < day_end:
         gap_minutes = int((day_end - current_time).total_seconds() / 60)
         if gap_minutes >= 15:
-            windows.append({
-                "start": current_time,
-                "end": day_end,
-                "duration_minutes": gap_minutes,
-            })
+            windows.append(
+                {
+                    "start": current_time,
+                    "end": day_end,
+                    "duration_minutes": gap_minutes,
+                }
+            )
 
     return windows
 
@@ -127,6 +137,7 @@ def detect_free_windows(target_date: date) -> list[dict]:
 # ---------------------------------------------------------------------------
 # T018: Chore suggestion algorithm
 # ---------------------------------------------------------------------------
+
 
 def suggest_chore(free_window_minutes: int) -> list[dict]:
     """Suggest 1-2 chores that fit within the available time window.
@@ -195,13 +206,15 @@ def suggest_chore(free_window_minutes: int) -> list[dict]:
     # Return top 1-2
     suggestions = []
     for score, chore in scored[:2]:
-        suggestions.append({
-            "id": chore["id"],
-            "name": chore["name"],
-            "duration": chore["duration"],
-            "category": chore.get("category", ""),
-            "overdue_score": round(score, 1),
-        })
+        suggestions.append(
+            {
+                "id": chore["id"],
+                "name": chore["name"],
+                "duration": chore["duration"],
+                "category": chore.get("category", ""),
+                "overdue_score": round(score, 1),
+            }
+        )
 
     return suggestions
 
@@ -209,6 +222,7 @@ def suggest_chore(free_window_minutes: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 # T019: Complete and skip chores
 # ---------------------------------------------------------------------------
+
 
 def complete_chore(chore_name: str) -> str:
     """Mark a chore as completed. Updates Chores DB and associated nudge."""
@@ -218,7 +232,7 @@ def complete_chore(chore_name: str) -> str:
         return f"Couldn't find a chore matching '{chore_name}'. Check the name and try again."
 
     today_str = date.today().isoformat()
-    result = update_chore_completion(match["id"], today_str)
+    update_chore_completion(match["id"], today_str)
 
     # Mark associated chore nudge as Done
     chore_nudges = query_nudges_by_type("chore", statuses=["Sent", "Pending"])
@@ -285,6 +299,7 @@ def _fuzzy_match_chore(name: str, chores: list[dict]) -> dict | None:
 # T022: Set chore preference (US4 — implemented here for chores.py coherence)
 # ---------------------------------------------------------------------------
 
+
 def set_chore_preference(
     chore_name: str,
     preference: str | None = None,
@@ -295,9 +310,12 @@ def set_chore_preference(
     chores = query_all_chores()
     match = _fuzzy_match_chore(chore_name, chores)
     if not match:
-        return f"Couldn't find a chore matching '{chore_name}'. Available chores: {', '.join(c['name'] for c in chores[:5])}"
+        return (
+            f"Couldn't find a chore matching '{chore_name}'. "
+            f"Available chores: {', '.join(c['name'] for c in chores[:5])}"
+        )
 
-    result = update_chore_preference(
+    update_chore_preference(
         match["id"],
         preference=preference,
         preferred_days=preferred_days,
@@ -319,6 +337,7 @@ def set_chore_preference(
 # ---------------------------------------------------------------------------
 # T023: Chore history (US4)
 # ---------------------------------------------------------------------------
+
 
 def get_chore_history(days: int = 7) -> str:
     """Get a summary of completed chores over the past N days."""

@@ -2,11 +2,13 @@
 
 import json
 import logging
-from datetime import datetime, date, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+
 import httpx
 import icalendar
 import recurring_ical_events
+
 from src.config import OUTLOOK_CALENDAR_ICS_URL
 
 logger = logging.getLogger(__name__)
@@ -207,11 +209,13 @@ def get_outlook_busy_windows(target_date: str = "") -> list[tuple[str, str, str]
             try:
                 start_dt = datetime.fromisoformat(event.get("start", ""))
                 end_dt = datetime.fromisoformat(event.get("end", ""))
-                windows.append((
-                    title,
-                    start_dt.strftime("%-I:%M %p"),
-                    end_dt.strftime("%-I:%M %p"),
-                ))
+                windows.append(
+                    (
+                        title,
+                        start_dt.strftime("%-I:%M %p"),
+                        end_dt.strftime("%-I:%M %p"),
+                    )
+                )
             except (ValueError, TypeError):
                 continue
         return windows
@@ -234,11 +238,13 @@ def get_outlook_busy_windows(target_date: str = "") -> list[tuple[str, str, str]
                 event_end = event_end.dt if event_end else event_start
 
                 if hasattr(event_start, "strftime"):
-                    windows.append((
-                        summary,
-                        event_start.strftime("%-I:%M %p"),
-                        event_end.strftime("%-I:%M %p") if hasattr(event_end, "strftime") else "",
-                    ))
+                    windows.append(
+                        (
+                            summary,
+                            event_start.strftime("%-I:%M %p"),
+                            event_end.strftime("%-I:%M %p") if hasattr(event_end, "strftime") else "",
+                        )
+                    )
             return windows
         except Exception as e:
             logger.warning("Failed to get Outlook busy windows via ICS: %s", e)

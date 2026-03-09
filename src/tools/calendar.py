@@ -1,16 +1,18 @@
 """Google Calendar API wrapper — read from 3 calendars + write to Erin's calendar."""
 
 import json
-import os
 import logging
+import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from src.config import CALENDAR_IDS, GOOGLE_TOKEN_JSON, GOOGLE_CREDENTIALS_JSON
+
+from src.config import CALENDAR_IDS, GOOGLE_CREDENTIALS_JSON, GOOGLE_TOKEN_JSON
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +24,12 @@ TOKEN_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "token.json")
 CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "credentials.json")
 
 # Color coding for assistant-created events (Google Calendar colorId values)
-COLOR_CHORES = "6"       # Tangerine
-COLOR_REST = "2"          # Sage
+COLOR_CHORES = "6"  # Tangerine
+COLOR_REST = "2"  # Sage
 COLOR_DEVELOPMENT = "10"  # Basil
-COLOR_EXERCISE = "3"      # Grape
-COLOR_SIDE_WORK = "5"     # Banana
-COLOR_BACKLOG = "1"       # Lavender
+COLOR_EXERCISE = "3"  # Grape
+COLOR_SIDE_WORK = "5"  # Banana
+COLOR_BACKLOG = "1"  # Lavender
 
 CREATED_BY_TAG = "family-meeting-assistant"
 
@@ -85,6 +87,7 @@ def _get_service():
         if GOOGLE_CREDENTIALS_JSON:
             # Write credentials from env var to temp file for the flow
             import tempfile
+
             with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
                 f.write(GOOGLE_CREDENTIALS_JSON)
                 cred_path = f.name
@@ -104,6 +107,7 @@ def _get_service():
 # ---------------------------------------------------------------------------
 # Read: get events from one or more calendars
 # ---------------------------------------------------------------------------
+
 
 def get_calendar_events(
     days_ahead: int = 7,
@@ -224,6 +228,7 @@ def get_events_for_date(
 # Read: raw events for nudge processing (Feature 003)
 # ---------------------------------------------------------------------------
 
+
 def get_events_for_date_raw(
     target_date: date,
     calendar_names: list[str] | None = None,
@@ -239,9 +244,7 @@ def get_events_for_date_raw(
 
     service = _get_service()
     pacific = ZoneInfo("America/Los_Angeles")
-    start_of_day = datetime(
-        target_date.year, target_date.month, target_date.day, tzinfo=pacific
-    )
+    start_of_day = datetime(target_date.year, target_date.month, target_date.day, tzinfo=pacific)
     end_of_day = start_of_day + timedelta(days=1)
 
     events = []
@@ -267,15 +270,14 @@ def get_events_for_date_raw(
         except Exception as e:
             logger.warning("Failed to read %s calendar for date: %s", name, e)
 
-    events.sort(
-        key=lambda e: e["start"].get("dateTime", e["start"].get("date", ""))
-    )
+    events.sort(key=lambda e: e["start"].get("dateTime", e["start"].get("date", "")))
     return events
 
 
 # ---------------------------------------------------------------------------
 # Write: create events on Erin's calendar
 # ---------------------------------------------------------------------------
+
 
 def create_event(
     summary: str,
@@ -303,9 +305,7 @@ def create_event(
         "start": {"dateTime": start_time, "timeZone": "America/Los_Angeles"},
         "end": {"dateTime": end_time, "timeZone": "America/Los_Angeles"},
         "colorId": color_id,
-        "extendedProperties": {
-            "private": {"createdBy": CREATED_BY_TAG}
-        },
+        "extendedProperties": {"private": {"createdBy": CREATED_BY_TAG}},
     }
     event = service.events().insert(calendarId=cal_id, body=event_body).execute()
     return f"Created event: {summary} ({event.get('id', '')})"
@@ -340,6 +340,7 @@ def create_quick_event(
     if not end_time:
         # Default to 30-minute event
         from datetime import datetime as dt
+
         try:
             start_dt = dt.fromisoformat(start_time)
             end_dt = start_dt + timedelta(minutes=30)
@@ -359,9 +360,7 @@ def create_quick_event(
                 {"method": "popup", "minutes": reminder_minutes},
             ],
         },
-        "extendedProperties": {
-            "private": {"createdBy": CREATED_BY_TAG}
-        },
+        "extendedProperties": {"private": {"createdBy": CREATED_BY_TAG}},
     }
     if description:
         event_body["description"] = description
@@ -384,7 +383,8 @@ def batch_create_events(events_data: list[dict], calendar_name: str = "erin") ->
     if len(events_data) > MAX_CALENDAR_CREATES:
         logger.error(
             "SAFEGUARD: Refusing to create %d calendar events (max %d).",
-            len(events_data), MAX_CALENDAR_CREATES,
+            len(events_data),
+            MAX_CALENDAR_CREATES,
         )
         raise ValueError(
             f"Safety limit: refusing to create {len(events_data)} events "
@@ -400,9 +400,7 @@ def batch_create_events(events_data: list[dict], calendar_name: str = "erin") ->
                 "start": {"dateTime": evt["start_time"], "timeZone": "America/Los_Angeles"},
                 "end": {"dateTime": evt["end_time"], "timeZone": "America/Los_Angeles"},
                 "colorId": evt.get("color_id", COLOR_CHORES),
-                "extendedProperties": {
-                    "private": {"createdBy": CREATED_BY_TAG}
-                },
+                "extendedProperties": {"private": {"createdBy": CREATED_BY_TAG}},
             }
             service.events().insert(calendarId=cal_id, body=event_body).execute()
             created += 1
@@ -441,9 +439,12 @@ def delete_assistant_events(
     events = result.get("items", [])
     if len(events) > MAX_CALENDAR_DELETES:
         logger.error(
-            "SAFEGUARD: Refusing to delete %d calendar events (max %d). "
-            "Date range %s to %s on calendar '%s'.",
-            len(events), MAX_CALENDAR_DELETES, start_date, end_date, calendar_name,
+            "SAFEGUARD: Refusing to delete %d calendar events (max %d). Date range %s to %s on calendar '%s'.",
+            len(events),
+            MAX_CALENDAR_DELETES,
+            start_date,
+            end_date,
+            calendar_name,
         )
         raise ValueError(
             f"Safety limit: refusing to delete {len(events)} events "

@@ -4,19 +4,21 @@ import logging
 import re
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
+
 from notion_client import Client
+
 from src.config import (
-    NOTION_TOKEN,
     NOTION_ACTION_ITEMS_DB,
+    NOTION_BACKLOG_DB,
+    NOTION_CHORES_DB,
+    NOTION_COOKBOOKS_DB,
+    NOTION_FAMILY_PROFILE_PAGE,
+    NOTION_GROCERY_HISTORY_DB,
     NOTION_MEAL_PLANS_DB,
     NOTION_MEETINGS_DB,
-    NOTION_FAMILY_PROFILE_PAGE,
-    NOTION_BACKLOG_DB,
-    NOTION_GROCERY_HISTORY_DB,
-    NOTION_RECIPES_DB,
-    NOTION_COOKBOOKS_DB,
     NOTION_NUDGE_QUEUE_DB,
-    NOTION_CHORES_DB,
+    NOTION_RECIPES_DB,
+    NOTION_TOKEN,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,13 +26,13 @@ logger = logging.getLogger(__name__)
 notion = Client(auth=NOTION_TOKEN)
 
 # Safety thresholds for destructive operations
-MAX_ROLLOVER_ITEMS = 25          # refuse to roll over more than this
+MAX_ROLLOVER_ITEMS = 25  # refuse to roll over more than this
 MAX_TEMPLATE_BLOCK_DELETES = 50  # refuse to delete more template blocks than this
-MAX_PENDING_ORDER_CLEAR = 100    # refuse to clear more pending orders than this
+MAX_PENDING_ORDER_CLEAR = 100  # refuse to clear more pending orders than this
 
 # UUID pattern for Notion page IDs (with or without hyphens)
 _UUID_RE = re.compile(
-    r'^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$',
+    r"^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$",
     re.IGNORECASE,
 )
 
@@ -43,6 +45,7 @@ def _is_notion_uuid(value: str) -> bool:
 # ---------------------------------------------------------------------------
 # Family Profile (T010 + T011)
 # ---------------------------------------------------------------------------
+
 
 def get_family_profile() -> str:
     """Read the Family Profile page and return its content as plain text."""
@@ -78,9 +81,7 @@ def update_family_profile(section: str, content: str) -> str:
     new_block = {
         "object": "block",
         "type": "bulleted_list_item",
-        "bulleted_list_item": {
-            "rich_text": [{"type": "text", "text": {"content": content}}]
-        },
+        "bulleted_list_item": {"rich_text": [{"type": "text", "text": {"content": content}}]},
     }
 
     if after_id:
@@ -100,6 +101,7 @@ def update_family_profile(section: str, content: str) -> str:
 # ---------------------------------------------------------------------------
 # Action Items (T015 for get, T020 for add, T021 for complete, T022 for rollover)
 # ---------------------------------------------------------------------------
+
 
 def get_action_items(assignee: str = "", status: str = "") -> str:
     """Query action items with optional filters. Returns formatted text."""
@@ -184,8 +186,7 @@ def complete_action_item(page_id: str) -> str:
                 break
         if not best_match:
             return (
-                f"Could not find an action item matching '{page_id}'. "
-                "Use get_action_items to find the correct page ID."
+                f"Could not find an action item matching '{page_id}'. Use get_action_items to find the correct page ID."
             )
         logger.info("Fuzzy-matched action item '%s' → %s (%s)", page_id, best_match, best_title)
         page_id = best_match
@@ -217,7 +218,8 @@ def rollover_incomplete_items() -> str:
     if len(items) > MAX_ROLLOVER_ITEMS:
         logger.error(
             "SAFEGUARD: Refusing to roll over %d items (max %d). Something may be wrong.",
-            len(items), MAX_ROLLOVER_ITEMS,
+            len(items),
+            MAX_ROLLOVER_ITEMS,
         )
         return (
             f"Safety limit: {len(items)} items would be rolled over "
@@ -253,7 +255,7 @@ def rollover_incomplete_items() -> str:
                     status_val = _get_status(props.get("Status", {}))
                     icon = "✅" if status_val == "Done" else "⬜"
                     backlog_lines.append(f"  {icon} {desc}")
-                summary += f"\n\nBacklog items surfaced this week:\n" + "\n".join(backlog_lines)
+                summary += "\n\nBacklog items surfaced this week:\n" + "\n".join(backlog_lines)
             else:
                 summary += "\n\nNo backlog items were surfaced this week."
         except Exception as e:
@@ -265,6 +267,7 @@ def rollover_incomplete_items() -> str:
 # ---------------------------------------------------------------------------
 # Custom Topics (T016)
 # ---------------------------------------------------------------------------
+
 
 def add_topic(description: str) -> str:
     """Add a custom agenda topic (stored as an action item with Due Context='Custom Topic')."""
@@ -282,6 +285,7 @@ def add_topic(description: str) -> str:
 # ---------------------------------------------------------------------------
 # Meetings (T017)
 # ---------------------------------------------------------------------------
+
 
 def create_meeting(meeting_date: str = "") -> str:
     """Create a new Meeting page. Returns the meeting page ID."""
@@ -307,13 +311,13 @@ def save_meeting_agenda(meeting_id: str, agenda_text: str) -> str:
         line = line.strip()
         if not line:
             continue
-        blocks.append({
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": [{"type": "text", "text": {"content": line}}]
-            },
-        })
+        blocks.append(
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"type": "text", "text": {"content": line}}]},
+            }
+        )
     if blocks:
         notion.blocks.children.append(block_id=meeting_id, children=blocks)
     return "Agenda saved."
@@ -322,6 +326,7 @@ def save_meeting_agenda(meeting_id: str, agenda_text: str) -> str:
 # ---------------------------------------------------------------------------
 # Meal Plans (T025 + T026)
 # ---------------------------------------------------------------------------
+
 
 def save_meal_plan(week_start: str, plan_content: str, grocery_list: str) -> str:
     """Create a Meal Plan page with daily meals and grocery list."""
@@ -342,29 +347,35 @@ def save_meal_plan(week_start: str, plan_content: str, grocery_list: str) -> str
         line = line.strip()
         if not line:
             continue
-        blocks.append({
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {"rich_text": [{"type": "text", "text": {"content": line}}]},
-        })
+        blocks.append(
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"type": "text", "text": {"content": line}}]},
+            }
+        )
 
     if grocery_list:
-        blocks.append({
-            "object": "block",
-            "type": "heading_2",
-            "heading_2": {"rich_text": [{"type": "text", "text": {"content": "Grocery List"}}]},
-        })
+        blocks.append(
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {"rich_text": [{"type": "text", "text": {"content": "Grocery List"}}]},
+            }
+        )
         for item in grocery_list.split("\n"):
             item = item.strip().lstrip("□-•* ")
             if item:
-                blocks.append({
-                    "object": "block",
-                    "type": "to_do",
-                    "to_do": {
-                        "rich_text": [{"type": "text", "text": {"content": item}}],
-                        "checked": False,
-                    },
-                })
+                blocks.append(
+                    {
+                        "object": "block",
+                        "type": "to_do",
+                        "to_do": {
+                            "rich_text": [{"type": "text", "text": {"content": item}}],
+                            "checked": False,
+                        },
+                    }
+                )
 
     if blocks:
         notion.blocks.children.append(block_id=page_id, children=blocks)
@@ -398,6 +409,7 @@ def get_meal_plan(week_start: str = "") -> str:
 # ---------------------------------------------------------------------------
 # Backlog (T009)
 # ---------------------------------------------------------------------------
+
 
 def get_backlog_items(assignee: str = "", status: str = "") -> str:
     """Query backlog items with optional filters. Returns formatted text."""
@@ -576,7 +588,9 @@ def get_backlog_for_nudge(assignee: str = "Erin") -> dict | None:
     # Update Last Surfaced so it rotates
     notion.pages.update(
         page_id=page_id,
-        properties={"Last Surfaced": {"date": {"start": datetime.now(tz=ZoneInfo("America/Los_Angeles")).date().isoformat()}}},
+        properties={
+            "Last Surfaced": {"date": {"start": datetime.now(tz=ZoneInfo("America/Los_Angeles")).date().isoformat()}}
+        },
     )
 
     return {
@@ -590,6 +604,7 @@ def get_backlog_for_nudge(assignee: str = "Erin") -> dict | None:
 # ---------------------------------------------------------------------------
 # Routine Templates (T010 — stored in Family Profile page)
 # ---------------------------------------------------------------------------
+
 
 def get_routine_templates() -> str:
     """Read the Routine Templates section from the Family Profile page.
@@ -642,7 +657,8 @@ def save_routine_templates(templates_text: str) -> str:
     if len(blocks_to_delete) > MAX_TEMPLATE_BLOCK_DELETES:
         logger.error(
             "SAFEGUARD: Refusing to delete %d template blocks (max %d).",
-            len(blocks_to_delete), MAX_TEMPLATE_BLOCK_DELETES,
+            len(blocks_to_delete),
+            MAX_TEMPLATE_BLOCK_DELETES,
         )
         return (
             f"Safety limit: {len(blocks_to_delete)} blocks would be deleted "
@@ -662,11 +678,13 @@ def save_routine_templates(templates_text: str) -> str:
         line = line.rstrip()
         if not line:
             continue
-        new_blocks.append({
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {"rich_text": [{"type": "text", "text": {"content": line}}]},
-        })
+        new_blocks.append(
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"type": "text", "text": {"content": line}}]},
+            }
+        )
 
     if new_blocks:
         notion.blocks.children.append(block_id=target, children=new_blocks)
@@ -676,6 +694,7 @@ def save_routine_templates(templates_text: str) -> str:
 # ---------------------------------------------------------------------------
 # Grocery History (T011 — reference data for meal planning)
 # ---------------------------------------------------------------------------
+
 
 def get_grocery_history(category: str = "") -> str:
     """Get grocery history items, optionally filtered by category."""
@@ -744,6 +763,7 @@ def get_staple_items() -> str:
 # ---------------------------------------------------------------------------
 # Recipes (T012 — Feature 002)
 # ---------------------------------------------------------------------------
+
 
 def create_recipe(
     name: str,
@@ -817,11 +837,13 @@ def search_recipes_by_title(title_contains: str) -> list[dict]:
                 cookbook_name = _get_title(cb_page["properties"].get("Name", {}))
             except Exception:
                 pass
-        recipes.append({
-            "id": page["id"],
-            "name": _get_title(props.get("Name", {})),
-            "cookbook": cookbook_name,
-        })
+        recipes.append(
+            {
+                "id": page["id"],
+                "name": _get_title(props.get("Name", {})),
+                "cookbook": cookbook_name,
+            }
+        )
     return recipes
 
 
@@ -834,10 +856,7 @@ def search_recipes_by_source_url(url: str) -> list[dict]:
         database_id=NOTION_RECIPES_DB,
         filter={"property": "Source URL", "url": {"equals": url}},
     )
-    return [
-        {"id": page["id"], "name": _get_title(page["properties"].get("Name", {}))}
-        for page in results["results"]
-    ]
+    return [{"id": page["id"], "name": _get_title(page["properties"].get("Name", {}))} for page in results["results"]]
 
 
 def get_all_recipes() -> list[dict]:
@@ -850,13 +869,15 @@ def get_all_recipes() -> list[dict]:
     for page in results["results"]:
         props = page["properties"]
         cookbook_rel = props.get("Cookbook", {}).get("relation", [])
-        recipes.append({
-            "id": page["id"],
-            "name": _get_title(props.get("Name", {})),
-            "cookbook_id": cookbook_rel[0]["id"] if cookbook_rel else "",
-            "tags": [opt["name"] for opt in props.get("Tags", {}).get("multi_select", [])],
-            "times_used": props.get("Times Used", {}).get("number", 0),
-        })
+        recipes.append(
+            {
+                "id": page["id"],
+                "name": _get_title(props.get("Name", {})),
+                "cookbook_id": cookbook_rel[0]["id"] if cookbook_rel else "",
+                "tags": [opt["name"] for opt in props.get("Tags", {}).get("multi_select", [])],
+                "times_used": props.get("Times Used", {}).get("number", 0),
+            }
+        )
     return recipes
 
 
@@ -868,6 +889,7 @@ def update_recipe(page_id: str, properties: dict) -> None:
 # ---------------------------------------------------------------------------
 # Cookbooks (T013 — Feature 002)
 # ---------------------------------------------------------------------------
+
 
 def create_cookbook(name: str, description: str = "") -> str:
     """Create a cookbook. Returns the Notion page ID."""
@@ -932,17 +954,20 @@ def list_cookbooks() -> dict:
                 recipe_count = len(recipes["results"])
             except Exception:
                 pass
-        cookbooks.append({
-            "name": name,
-            "recipe_count": recipe_count,
-            "notion_page_id": page["id"],
-        })
+        cookbooks.append(
+            {
+                "name": name,
+                "recipe_count": recipe_count,
+                "notion_page_id": page["id"],
+            }
+        )
     return {"cookbooks": cookbooks}
 
 
 # ---------------------------------------------------------------------------
 # Grocery History — Pending Order tracking (T014 — Feature 002)
 # ---------------------------------------------------------------------------
+
 
 def set_pending_order(item_ids: list[str], push_date: str) -> int:
     """Mark grocery items as pending order after AnyList push."""
@@ -967,11 +992,11 @@ def clear_pending_order(item_ids: list[str]) -> int:
     if len(item_ids) > MAX_PENDING_ORDER_CLEAR:
         logger.error(
             "SAFEGUARD: Refusing to clear %d pending orders (max %d).",
-            len(item_ids), MAX_PENDING_ORDER_CLEAR,
+            len(item_ids),
+            MAX_PENDING_ORDER_CLEAR,
         )
         raise ValueError(
-            f"Safety limit: {len(item_ids)} pending orders would be cleared "
-            f"(max {MAX_PENDING_ORDER_CLEAR})."
+            f"Safety limit: {len(item_ids)} pending orders would be cleared (max {MAX_PENDING_ORDER_CLEAR})."
         )
 
     count = 0
@@ -1007,17 +1032,20 @@ def get_pending_orders() -> list[dict]:
     for page in results["results"]:
         props = page["properties"]
         push_date_prop = props.get("Last Push Date", {}).get("date")
-        items.append({
-            "id": page["id"],
-            "name": _get_title(props.get("Item Name", {})),
-            "push_date": push_date_prop.get("start") if push_date_prop else None,
-        })
+        items.append(
+            {
+                "id": page["id"],
+                "name": _get_title(props.get("Item Name", {})),
+                "push_date": push_date_prop.get("start") if push_date_prop else None,
+            }
+        )
     return items
 
 
 # ---------------------------------------------------------------------------
 # Nudge Queue (Feature 003 — Smart Nudges)
 # ---------------------------------------------------------------------------
+
 
 def create_nudge(
     summary: str,
@@ -1045,9 +1073,7 @@ def create_nudge(
     if context:
         properties["Context"] = {"rich_text": [{"text": {"content": context[:2000]}}]}
 
-    page = notion.pages.create(
-        parent={"database_id": NOTION_NUDGE_QUEUE_DB}, properties=properties
-    )
+    page = notion.pages.create(parent={"database_id": NOTION_NUDGE_QUEUE_DB}, properties=properties)
     return page["id"]
 
 
@@ -1078,21 +1104,21 @@ def query_pending_nudges(due_before: str) -> list[dict]:
     for page in results["results"]:
         props = page["properties"]
         scheduled = props.get("Scheduled Time", {}).get("date")
-        nudges.append({
-            "id": page["id"],
-            "summary": _get_title(props.get("Summary", {})),
-            "nudge_type": _get_select(props.get("Nudge Type", {})),
-            "scheduled_time": scheduled.get("start") if scheduled else "",
-            "event_id": _get_rich_text(props.get("Event ID", {})),
-            "message": _get_rich_text(props.get("Message", {})),
-            "context": _get_rich_text(props.get("Context", {})),
-        })
+        nudges.append(
+            {
+                "id": page["id"],
+                "summary": _get_title(props.get("Summary", {})),
+                "nudge_type": _get_select(props.get("Nudge Type", {})),
+                "scheduled_time": scheduled.get("start") if scheduled else "",
+                "event_id": _get_rich_text(props.get("Event ID", {})),
+                "message": _get_rich_text(props.get("Message", {})),
+                "context": _get_rich_text(props.get("Context", {})),
+            }
+        )
     return nudges
 
 
-def query_nudges_by_type(
-    nudge_type: str, statuses: list[str] | None = None
-) -> list[dict]:
+def query_nudges_by_type(nudge_type: str, statuses: list[str] | None = None) -> list[dict]:
     """Query nudges by type and optionally by statuses.
 
     Args:
@@ -1104,37 +1130,33 @@ def query_nudges_by_type(
     if not NOTION_NUDGE_QUEUE_DB:
         return []
 
-    filters: list[dict] = [
-        {"property": "Nudge Type", "select": {"equals": nudge_type}}
-    ]
+    filters: list[dict] = [{"property": "Nudge Type", "select": {"equals": nudge_type}}]
     if statuses:
-        status_filters = [
-            {"property": "Status", "status": {"equals": s}} for s in statuses
-        ]
+        status_filters = [{"property": "Status", "status": {"equals": s}} for s in statuses]
         if len(status_filters) == 1:
             filters.append(status_filters[0])
         else:
             filters.append({"or": status_filters})
 
     query_filter = {"and": filters} if len(filters) > 1 else filters[0]
-    results = notion.databases.query(
-        database_id=NOTION_NUDGE_QUEUE_DB, filter=query_filter
-    )
+    results = notion.databases.query(database_id=NOTION_NUDGE_QUEUE_DB, filter=query_filter)
 
     nudges = []
     for page in results["results"]:
         props = page["properties"]
         scheduled = props.get("Scheduled Time", {}).get("date")
-        nudges.append({
-            "id": page["id"],
-            "summary": _get_title(props.get("Summary", {})),
-            "nudge_type": _get_select(props.get("Nudge Type", {})),
-            "status": _get_status(props.get("Status", {})),
-            "scheduled_time": scheduled.get("start") if scheduled else "",
-            "event_id": _get_rich_text(props.get("Event ID", {})),
-            "message": _get_rich_text(props.get("Message", {})),
-            "context": _get_rich_text(props.get("Context", {})),
-        })
+        nudges.append(
+            {
+                "id": page["id"],
+                "summary": _get_title(props.get("Summary", {})),
+                "nudge_type": _get_select(props.get("Nudge Type", {})),
+                "status": _get_status(props.get("Status", {})),
+                "scheduled_time": scheduled.get("start") if scheduled else "",
+                "event_id": _get_rich_text(props.get("Event ID", {})),
+                "message": _get_rich_text(props.get("Message", {})),
+                "context": _get_rich_text(props.get("Context", {})),
+            }
+        )
     return nudges
 
 
@@ -1151,11 +1173,13 @@ def query_nudges_by_event_id(event_id: str) -> list[dict]:
     nudges = []
     for page in results["results"]:
         props = page["properties"]
-        nudges.append({
-            "id": page["id"],
-            "nudge_type": _get_select(props.get("Nudge Type", {})),
-            "status": _get_status(props.get("Status", {})),
-        })
+        nudges.append(
+            {
+                "id": page["id"],
+                "nudge_type": _get_select(props.get("Nudge Type", {})),
+                "status": _get_status(props.get("Status", {})),
+            }
+        )
     return nudges
 
 
@@ -1219,6 +1243,7 @@ def check_quiet_day() -> bool:
 # Chores (Feature 003 — Smart Nudges)
 # ---------------------------------------------------------------------------
 
+
 def query_all_chores() -> list[dict]:
     """Get all chores from the Chores database."""
     if not NOTION_CHORES_DB:
@@ -1229,20 +1254,19 @@ def query_all_chores() -> list[dict]:
     for page in results["results"]:
         props = page["properties"]
         last_completed = props.get("Last Completed", {}).get("date")
-        chores.append({
-            "id": page["id"],
-            "name": _get_title(props.get("Name", {})),
-            "duration": props.get("Duration", {}).get("number", 0),
-            "frequency": _get_select(props.get("Frequency", {})),
-            "preferred_days": [
-                opt["name"]
-                for opt in props.get("Preferred Days", {}).get("multi_select", [])
-            ],
-            "preference": _get_select(props.get("Preference", {})),
-            "last_completed": last_completed.get("start") if last_completed else None,
-            "times_completed": props.get("Times Completed", {}).get("number", 0),
-            "category": _get_select(props.get("Category", {})),
-        })
+        chores.append(
+            {
+                "id": page["id"],
+                "name": _get_title(props.get("Name", {})),
+                "duration": props.get("Duration", {}).get("number", 0),
+                "frequency": _get_select(props.get("Frequency", {})),
+                "preferred_days": [opt["name"] for opt in props.get("Preferred Days", {}).get("multi_select", [])],
+                "preference": _get_select(props.get("Preference", {})),
+                "last_completed": last_completed.get("start") if last_completed else None,
+                "times_completed": props.get("Times Completed", {}).get("number", 0),
+                "category": _get_select(props.get("Category", {})),
+            }
+        )
     return chores
 
 
@@ -1273,9 +1297,7 @@ def update_chore_preference(
     if preference is not None:
         updates["Preference"] = {"select": {"name": preference}}
     if preferred_days is not None:
-        updates["Preferred Days"] = {
-            "multi_select": [{"name": d} for d in preferred_days]
-        }
+        updates["Preferred Days"] = {"multi_select": [{"name": d} for d in preferred_days]}
     if frequency is not None:
         updates["Frequency"] = {"select": {"name": frequency}}
 
@@ -1331,6 +1353,7 @@ def seed_default_chores() -> str:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _blocks_to_text(blocks: list) -> str:
     lines = []

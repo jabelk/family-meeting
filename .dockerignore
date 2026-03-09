@@ -1,36 +1,18 @@
-# Git
 .git/
-.gitignore
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
+.github/
 .venv/
 venv/
-dist/
-*.egg-info/
-
-# Environment & credentials
-.env
-token.json
-credentials.json
-
-# Node.js (handled by anylist-sidecar's own Dockerfile)
+__pycache__/
+*.pyc
 node_modules/
-
-# IDE & OS
+.env
+.env.*
+*.log
+.DS_Store
 .vscode/
 .idea/
-*.swp
-*.tmp
-.DS_Store
-Thumbs.db
-
-# Docs & specs (not needed in container)
 specs/
-docs/
 .specify/
+memory/
 .claude/
-*.md
-!requirements.txt
+tests/

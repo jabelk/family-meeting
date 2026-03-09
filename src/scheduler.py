@@ -36,6 +36,7 @@ def _load_schedules() -> dict:
     if _BUNDLED_SCHEDULES_PATH.exists():
         logger.info("First boot: copying bundled schedules.json to volume")
         import shutil
+
         _SCHEDULES_PATH.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(_BUNDLED_SCHEDULES_PATH, _SCHEDULES_PATH)
         return json.loads(_SCHEDULES_PATH.read_text())
@@ -51,22 +52,27 @@ def _load_schedules() -> dict:
 # endpoints, but without FastAPI request/response overhead.
 # ---------------------------------------------------------------------------
 
+
 async def _run_daily_briefing():
     from src.assistant import generate_daily_plan
-    from src.whatsapp import send_message
     from src.config import ERIN_PHONE
+    from src.whatsapp import send_message
+
     reply = generate_daily_plan("erin")
     await send_message(ERIN_PHONE, reply)
 
 
 async def _run_nudge_scan():
     """Nudge scan — mirrors app.py nudge_scan() endpoint logic."""
-    from src.tools.nudges import scan_upcoming_departures, process_pending_nudges
-    from src.tools.notion import (
-        check_quiet_day, count_sent_today, seed_default_chores,
-        create_nudge, get_backlog_for_nudge, query_nudges_by_type,
-    )
     from src.tools.chores import detect_free_windows, suggest_chore
+    from src.tools.notion import (
+        check_quiet_day,
+        create_nudge,
+        get_backlog_for_nudge,
+        query_nudges_by_type,
+        seed_default_chores,
+    )
+    from src.tools.nudges import process_pending_nudges, scan_upcoming_departures
 
     if check_quiet_day():
         logger.info("Quiet day active — skipping nudge scan")
@@ -90,17 +96,16 @@ async def _run_nudge_scan():
             if window["start"] > _now and window["duration_minutes"] >= 15:
                 suggestions = suggest_chore(window["duration_minutes"])
                 for suggestion in suggestions:
-                    context = json.dumps({
-                        "chore_id": suggestion["id"],
-                        "chore_name": suggestion["name"],
-                        "duration": suggestion["duration"],
-                        "window_start": window["start"].isoformat(),
-                        "window_end": window["end"].isoformat(),
-                    })
-                    msg = (
-                        f"Free window coming up! How about: {suggestion['name']} "
-                        f"(~{suggestion['duration']} min)?"
+                    context = json.dumps(
+                        {
+                            "chore_id": suggestion["id"],
+                            "chore_name": suggestion["name"],
+                            "duration": suggestion["duration"],
+                            "window_start": window["start"].isoformat(),
+                            "window_end": window["end"].isoformat(),
+                        }
                     )
+                    msg = f"Free window coming up! How about: {suggestion['name']} (~{suggestion['duration']} min)?"
                     create_nudge(
                         summary=f"Chore: {suggestion['name']}",
                         nudge_type="chore",
@@ -121,11 +126,13 @@ async def _run_nudge_scan():
             msg = f"Backlog reminder: {backlog['description']}"
             if backlog["priority"] == "High":
                 msg = f"High priority: {backlog['description']}"
-            context = json.dumps({
-                "backlog_id": backlog["id"],
-                "description": backlog["description"],
-                "category": backlog["category"],
-            })
+            context = json.dumps(
+                {
+                    "backlog_id": backlog["id"],
+                    "description": backlog["description"],
+                    "category": backlog["category"],
+                }
+            )
             create_nudge(
                 summary=f"Backlog: {backlog['description'][:50]}",
                 nudge_type="backlog",
@@ -144,13 +151,17 @@ async def _run_nudge_scan():
 
 async def _run_budget_scan():
     """Budget scan — mirrors app.py budget_scan() endpoint logic."""
-    from src.tools.nudges import process_pending_nudges
     from src.tools.notion import (
-        check_quiet_day, count_sent_today, create_nudge, query_nudges_by_type,
+        check_quiet_day,
+        create_nudge,
+        query_nudges_by_type,
     )
+    from src.tools.nudges import process_pending_nudges
     from src.tools.ynab import (
-        check_overspend_warnings, check_uncategorized_pileup,
-        check_spending_anomalies, check_savings_goals,
+        check_overspend_warnings,
+        check_savings_goals,
+        check_spending_anomalies,
+        check_uncategorized_pileup,
     )
 
     if check_quiet_day():
@@ -174,13 +185,15 @@ async def _run_budget_scan():
                 f"(${w['spent']:,.0f} / ${w['budgeted']:,.0f}) with "
                 f"{w['days_remaining']} days left this month."
             )
-            context = json.dumps({
-                "insight_type": "overspend_warning",
-                "category_name": w["category_name"],
-                "spent": w["spent"],
-                "budgeted": w["budgeted"],
-                "percent_used": w["percent_used"],
-            })
+            context = json.dumps(
+                {
+                    "insight_type": "overspend_warning",
+                    "category_name": w["category_name"],
+                    "spent": w["spent"],
+                    "budgeted": w["budgeted"],
+                    "percent_used": w["percent_used"],
+                }
+            )
             create_nudge(
                 summary=f"Overspend: {w['category_name']}",
                 nudge_type="budget",
@@ -202,12 +215,14 @@ async def _run_budget_scan():
                     f"totaling ${pileup['total_amount']:,.2f} (oldest: {pileup['oldest_date']}). "
                     f"Want help categorizing them?"
                 )
-                context = json.dumps({
-                    "insight_type": "uncategorized_pileup",
-                    "count": pileup["count"],
-                    "total_amount": pileup["total_amount"],
-                    "oldest_date": pileup["oldest_date"],
-                })
+                context = json.dumps(
+                    {
+                        "insight_type": "uncategorized_pileup",
+                        "count": pileup["count"],
+                        "total_amount": pileup["total_amount"],
+                        "oldest_date": pileup["oldest_date"],
+                    }
+                )
                 create_nudge(
                     summary="Uncategorized transactions pileup",
                     nudge_type="budget",
@@ -231,13 +246,15 @@ async def _run_budget_scan():
                     f"{a['percent_above']:.0f}% above your 3-month average "
                     f"of ${a['average_amount']:,.0f}."
                 )
-                context = json.dumps({
-                    "insight_type": "spending_anomaly",
-                    "category_name": a["category_name"],
-                    "current_month": a["current_amount"],
-                    "rolling_average": a["average_amount"],
-                    "percent_above": a["percent_above"],
-                })
+                context = json.dumps(
+                    {
+                        "insight_type": "spending_anomaly",
+                        "category_name": a["category_name"],
+                        "current_month": a["current_amount"],
+                        "rolling_average": a["average_amount"],
+                        "percent_above": a["percent_above"],
+                    }
+                )
                 create_nudge(
                     summary=f"Anomaly: {a['category_name']}",
                     nudge_type="budget",
@@ -259,13 +276,15 @@ async def _run_budget_scan():
                     f"but should be ~{g['expected_percent']:.0f}% by now. "
                     f"Shortfall: ${g['shortfall']:,.0f}."
                 )
-                context = json.dumps({
-                    "insight_type": "savings_goal_gap",
-                    "goal_name": g["category_name"],
-                    "funded": g["funded"],
-                    "target": g["goal_target"],
-                    "shortfall": g["shortfall"],
-                })
+                context = json.dumps(
+                    {
+                        "insight_type": "savings_goal_gap",
+                        "goal_name": g["category_name"],
+                        "funded": g["funded"],
+                        "target": g["goal_target"],
+                        "shortfall": g["shortfall"],
+                    }
+                )
                 create_nudge(
                     summary=f"Goal gap: {g['category_name']}",
                     nudge_type="budget",
@@ -284,8 +303,8 @@ async def _run_budget_scan():
 
 
 async def _run_populate_week():
-    from src.tools.calendar import delete_assistant_events
     from src.assistant import handle_message
+    from src.tools.calendar import delete_assistant_events
 
     now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
     # Next Monday
@@ -294,8 +313,6 @@ async def _run_populate_week():
         days_until_monday = 7
     monday = now.date() + timedelta(days=days_until_monday)
     week_start = monday.isoformat()
-    week_end = (monday + timedelta(days=5)).isoformat()
-
     start_iso = datetime.combine(monday, datetime.min.time(), tzinfo=timezone.utc).isoformat()
     end_iso = datetime.combine(monday + timedelta(days=5), datetime.min.time(), tzinfo=timezone.utc).isoformat()
     deleted = delete_assistant_events(start_iso, end_iso, calendar_name="erin")
@@ -312,9 +329,9 @@ async def _run_populate_week():
 
 
 async def _run_meal_plan():
+    from src.config import ERIN_PHONE
     from src.tools.proactive import generate_meal_plan, merge_grocery_list
     from src.whatsapp import send_message
-    from src.config import ERIN_PHONE
 
     result = generate_meal_plan()
     if not result.get("success"):
@@ -346,9 +363,9 @@ async def _run_meal_plan():
 
 
 async def _run_amazon_sync():
+    from src.config import ERIN_PHONE
     from src.tools import amazon_sync
     from src.whatsapp import send_message
-    from src.config import ERIN_PHONE
 
     message = amazon_sync.run_nightly_sync()
     if message:
@@ -357,17 +374,19 @@ async def _run_amazon_sync():
 
 async def _run_email_sync():
     from src.tools import email_sync
+
     email_sync.run_email_sync()
 
 
 async def _run_budget_health():
     from src.tools import ynab
+
     ynab.run_budget_health_check()
 
 
 async def _run_grandma_prompt():
-    from src.whatsapp import send_message
     from src.config import ERIN_PHONE
+    from src.whatsapp import send_message
 
     message = (
         "Hi! Quick question for the week \u2014 what days is grandma taking Zoey? "
@@ -377,9 +396,9 @@ async def _run_grandma_prompt():
 
 
 async def _run_conflict_check():
+    from src.config import ERIN_PHONE
     from src.tools.proactive import detect_conflicts
     from src.whatsapp import send_message
-    from src.config import ERIN_PHONE
 
     conflicts = detect_conflicts(7)
     if not conflicts:
@@ -397,9 +416,9 @@ async def _run_conflict_check():
 
 
 async def _run_action_item_reminder():
+    from src.config import ERIN_PHONE
     from src.tools.proactive import check_action_item_progress
     from src.whatsapp import send_message
-    from src.config import ERIN_PHONE
 
     result = check_action_item_progress()
     if result.get("status") == "all_complete":
@@ -409,7 +428,7 @@ async def _run_action_item_reminder():
         logger.error("Action item check failed: %s", result.get("message"))
         return
 
-    lines = [f"*\U0001f4cb Mid-Week Check-In*\n"]
+    lines = ["*\U0001f4cb Mid-Week Check-In*\n"]
     lines.append(f"{result['done']} of {result['total']} items done this week\n")
     for assignee, items in result.get("remaining_by_assignee", {}).items():
         lines.append(f"*{assignee}:*")
@@ -422,9 +441,9 @@ async def _run_action_item_reminder():
 
 
 async def _run_grocery_reorder():
+    from src.config import ERIN_PHONE
     from src.tools.proactive import check_reorder_items
     from src.whatsapp import send_message
-    from src.config import ERIN_PHONE
 
     result = check_reorder_items()
     if result["total"] == 0:
@@ -441,9 +460,9 @@ async def _run_grocery_reorder():
 
 
 async def _run_grocery_confirmation():
+    from src.config import ERIN_PHONE
     from src.tools.proactive import check_grocery_confirmation
     from src.whatsapp import send_message
-    from src.config import ERIN_PHONE
 
     result = check_grocery_confirmation()
     if result["status"] == "needs_reminder":
@@ -451,16 +470,18 @@ async def _run_grocery_confirmation():
 
 
 async def _run_budget_summary():
+    from src.config import ERIN_PHONE
     from src.tools.proactive import format_budget_summary
     from src.whatsapp import send_message_with_template_fallback
-    from src.config import ERIN_PHONE
 
     result = format_budget_summary()
     if result.get("status") != "ok":
         logger.error("Budget summary failed: %s", result.get("message"))
         return
     await send_message_with_template_fallback(
-        ERIN_PHONE, result["message"], template_name="budget_summary",
+        ERIN_PHONE,
+        result["message"],
+        template_name="budget_summary",
     )
 
 
@@ -489,6 +510,7 @@ ENDPOINT_HANDLERS: dict[str, callable] = {
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
+
 
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the APScheduler instance from schedules.json."""

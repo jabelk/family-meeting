@@ -2,10 +2,10 @@
 
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from src.config import ANTHROPIC_API_KEY
-from src.tools import notion, calendar, ynab, outlook
+from src.tools import calendar, notion, outlook, ynab
 
 logger = logging.getLogger(__name__)
 
@@ -14,13 +14,15 @@ logger = logging.getLogger(__name__)
 # US2: Grocery Reorder Suggestions (T026-T028)
 # ---------------------------------------------------------------------------
 
+
 def check_reorder_items() -> dict:
     """Check grocery history for staple/regular items due for reorder.
 
     Queries items where days since last ordered >= avg reorder interval.
     Groups results by store, sorted by days overdue.
     """
-    from src.tools.notion import notion as notion_client, _get_title, NOTION_GROCERY_HISTORY_DB
+    from src.tools.notion import NOTION_GROCERY_HISTORY_DB, _get_title
+    from src.tools.notion import notion as notion_client
 
     if not NOTION_GROCERY_HISTORY_DB:
         return {"items_by_store": {}, "total": 0, "error": "Grocery History DB not configured"}
@@ -76,15 +78,17 @@ def check_reorder_items() -> dict:
             if days_since >= avg_reorder:
                 store_options = props.get("Store", {}).get("multi_select", [])
                 store = store_options[0]["name"] if store_options else "Whole Foods"
-                due_items.append({
-                    "id": page["id"],
-                    "name": _get_title(props.get("Item Name", {})),
-                    "store": store,
-                    "days_overdue": days_since - avg_reorder,
-                    "days_since": days_since,
-                    "avg_reorder_days": avg_reorder,
-                    "type": type_name,
-                })
+                due_items.append(
+                    {
+                        "id": page["id"],
+                        "name": _get_title(props.get("Item Name", {})),
+                        "store": store,
+                        "days_overdue": days_since - avg_reorder,
+                        "days_since": days_since,
+                        "avg_reorder_days": avg_reorder,
+                        "type": type_name,
+                    }
+                )
 
     except Exception as e:
         logger.error("Failed to check reorder items: %s", e)
@@ -156,6 +160,7 @@ def check_grocery_confirmation() -> dict:
 # ---------------------------------------------------------------------------
 # US3: Meal Planning (T033-T035)
 # ---------------------------------------------------------------------------
+
 
 def generate_meal_plan() -> dict:
     """Generate a 6-night dinner plan using saved recipes and family preferences.
@@ -308,14 +313,16 @@ def handle_meal_swap(plan: list[dict], day: str, new_meal: str) -> dict:
             response = client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=500,
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"List the ingredients for '{new_meal}' (family of 4, kid-friendly). "
-                        "Return ONLY a JSON array: "
-                        '[{"name": "...", "quantity": "...", "unit": "..."}]'
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            f"List the ingredients for '{new_meal}' (family of 4, kid-friendly). "
+                            "Return ONLY a JSON array: "
+                            '[{"name": "...", "quantity": "...", "unit": "..."}]'
+                        ),
+                    }
+                ],
             )
             raw = response.content[0].text.strip()
             if raw.startswith("```"):
@@ -335,6 +342,7 @@ def handle_meal_swap(plan: list[dict], day: str, new_meal: str) -> dict:
 # ---------------------------------------------------------------------------
 # US5: Calendar Conflict Detection (T043)
 # ---------------------------------------------------------------------------
+
 
 def detect_conflicts(days_ahead: int = 1) -> list[dict]:
     """Detect calendar conflicts across all calendars and routine templates.
@@ -363,6 +371,7 @@ def detect_conflicts(days_ahead: int = 1) -> list[dict]:
 
     # Use Claude to analyze conflicts (simpler than hand-parsing multiple calendar formats)
     from anthropic import Anthropic
+
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
     prompt = (
@@ -414,12 +423,14 @@ def detect_conflicts(days_ahead: int = 1) -> list[dict]:
 # US6: Action Item Progress Check (T047)
 # ---------------------------------------------------------------------------
 
+
 def check_action_item_progress() -> dict:
     """Check action item completion for the current week.
 
     Returns summary with counts and items grouped by assignee.
     """
-    from src.tools.notion import notion as notion_client, _get_title, NOTION_ACTION_ITEMS_DB
+    from src.tools.notion import NOTION_ACTION_ITEMS_DB, _get_title
+    from src.tools.notion import notion as notion_client
 
     if not NOTION_ACTION_ITEMS_DB:
         return {"status": "error", "message": "Action Items DB not configured"}
@@ -497,6 +508,7 @@ def check_action_item_progress() -> dict:
 # US7: Budget Summary Formatter (T050)
 # ---------------------------------------------------------------------------
 
+
 def format_budget_summary() -> dict:
     """Format YNAB budget data into a structured WhatsApp message.
 
@@ -508,24 +520,27 @@ def format_budget_summary() -> dict:
 
     # Use Claude to format the budget data nicely
     from anthropic import Anthropic
+
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1000,
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Format this YNAB budget data for a WhatsApp message:\n\n{raw}\n\n"
-                "Rules:\n"
-                "- Start with *💰 Weekly Budget Summary*\n"
-                "- List over-budget categories first with ⚠️ and amount over\n"
-                "- Then list top on-track categories briefly\n"
-                "- End with total spent vs total budget\n"
-                "- Use WhatsApp formatting (*bold*, bullets)\n"
-                "- Keep it scannable (< 500 chars if possible)"
-            ),
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Format this YNAB budget data for a WhatsApp message:\n\n{raw}\n\n"
+                    "Rules:\n"
+                    "- Start with *💰 Weekly Budget Summary*\n"
+                    "- List over-budget categories first with ⚠️ and amount over\n"
+                    "- Then list top on-track categories briefly\n"
+                    "- End with total spent vs total budget\n"
+                    "- Use WhatsApp formatting (*bold*, bullets)\n"
+                    "- Keep it scannable (< 500 chars if possible)"
+                ),
+            }
+        ],
     )
 
     formatted = response.content[0].text.strip()

@@ -1,7 +1,9 @@
 """AnyList sidecar bridge — push grocery lists via the Node.js REST API."""
 
 import logging
+
 import httpx
+
 from src.config import ANYLIST_SIDECAR_URL
 
 logger = logging.getLogger(__name__)
@@ -9,8 +11,8 @@ logger = logging.getLogger(__name__)
 TIMEOUT = 15.0
 
 # Safety thresholds
-MAX_ANYLIST_PUSH = 200    # refuse to push more items than this
-MAX_ANYLIST_CLEAR = 150   # warn if clearing more than this many items
+MAX_ANYLIST_PUSH = 200  # refuse to push more items than this
+MAX_ANYLIST_CLEAR = 150  # warn if clearing more than this many items
 
 
 def push_grocery_list(items: list[str], list_name: str = "Grocery") -> str:
@@ -29,7 +31,8 @@ def push_grocery_list(items: list[str], list_name: str = "Grocery") -> str:
     if len(items) > MAX_ANYLIST_PUSH:
         logger.error(
             "SAFEGUARD: Refusing to push %d items to AnyList (max %d).",
-            len(items), MAX_ANYLIST_PUSH,
+            len(items),
+            MAX_ANYLIST_PUSH,
         )
         raise ValueError(
             f"Safety limit: {len(items)} grocery items is unusually high "
@@ -44,8 +47,9 @@ def push_grocery_list(items: list[str], list_name: str = "Grocery") -> str:
     cleared = resp.json().get("count", 0)
     if cleared > MAX_ANYLIST_CLEAR:
         logger.warning(
-            "SAFEGUARD WARNING: Cleared %d items from AnyList (threshold %d). "
-            "This is unusually high.", cleared, MAX_ANYLIST_CLEAR,
+            "SAFEGUARD WARNING: Cleared %d items from AnyList (threshold %d). This is unusually high.",
+            cleared,
+            MAX_ANYLIST_CLEAR,
         )
     logger.info("Cleared %d old items from AnyList", cleared)
 
@@ -71,7 +75,9 @@ def clear_grocery_list(list_name: str = "Grocery") -> str:
     if count > MAX_ANYLIST_CLEAR:
         logger.warning(
             "SAFEGUARD WARNING: Cleared %d items from AnyList '%s' (threshold %d).",
-            count, list_name, MAX_ANYLIST_CLEAR,
+            count,
+            list_name,
+            MAX_ANYLIST_CLEAR,
         )
     return f"Cleared {count} items from {list_name}."
 

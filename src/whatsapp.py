@@ -1,10 +1,11 @@
 """WhatsApp message send/receive helpers via Meta Cloud API."""
 
 import asyncio
-import base64
 import logging
+
 import httpx
-from src.config import WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN
+
+from src.config import WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,21 @@ async def send_message(to: str, text: str) -> None:
                     break  # Success or non-retryable error
                 except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout) as e:
                     if attempt < MAX_RETRIES - 1:
-                        logger.warning("WhatsApp send attempt %d failed (%s), retrying in %ds", attempt + 1, type(e).__name__, RETRY_DELAYS[attempt])
+                        logger.warning(
+                            "WhatsApp send attempt %d failed (%s), retrying in %ds",
+                            attempt + 1,
+                            type(e).__name__,
+                            RETRY_DELAYS[attempt],
+                        )
                         await asyncio.sleep(RETRY_DELAYS[attempt])
                     else:
-                        logger.error("WhatsApp send failed after %d attempts: %s. Message to %s: %s", MAX_RETRIES, e, to, chunk[:200])
+                        logger.error(
+                            "WhatsApp send failed after %d attempts: %s. Message to %s: %s",
+                            MAX_RETRIES,
+                            e,
+                            to,
+                            chunk[:200],
+                        )
 
 
 def _split_message(text: str) -> list[str]:
@@ -83,10 +95,12 @@ async def send_template_message(to: str, template_name: str, parameters: list[st
     """
     components = []
     if parameters:
-        components.append({
-            "type": "body",
-            "parameters": [{"type": "text", "text": p} for p in parameters],
-        })
+        components.append(
+            {
+                "type": "body",
+                "parameters": [{"type": "text", "text": p} for p in parameters],
+            }
+        )
 
     payload = {
         "messaging_product": "whatsapp",
@@ -116,10 +130,21 @@ async def send_template_message(to: str, template_name: str, parameters: list[st
                 break  # Success or non-retryable error
             except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout) as e:
                 if attempt < MAX_RETRIES - 1:
-                    logger.warning("WhatsApp template send attempt %d failed (%s), retrying in %ds", attempt + 1, type(e).__name__, RETRY_DELAYS[attempt])
+                    logger.warning(
+                        "WhatsApp template send attempt %d failed (%s), retrying in %ds",
+                        attempt + 1,
+                        type(e).__name__,
+                        RETRY_DELAYS[attempt],
+                    )
                     await asyncio.sleep(RETRY_DELAYS[attempt])
                 else:
-                    logger.error("WhatsApp template send failed after %d attempts: %s. Template: %s to %s", MAX_RETRIES, e, template_name, to)
+                    logger.error(
+                        "WhatsApp template send failed after %d attempts: %s. Template: %s to %s",
+                        MAX_RETRIES,
+                        e,
+                        template_name,
+                        to,
+                    )
 
 
 async def send_message_with_template_fallback(
@@ -167,10 +192,21 @@ async def send_message_with_template_fallback(
                     break  # Success or non-retryable error
                 except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout) as e:
                     if attempt < MAX_RETRIES - 1:
-                        logger.warning("WhatsApp fallback send attempt %d failed (%s), retrying in %ds", attempt + 1, type(e).__name__, RETRY_DELAYS[attempt])
+                        logger.warning(
+                            "WhatsApp fallback send attempt %d failed (%s), retrying in %ds",
+                            attempt + 1,
+                            type(e).__name__,
+                            RETRY_DELAYS[attempt],
+                        )
                         await asyncio.sleep(RETRY_DELAYS[attempt])
                     else:
-                        logger.error("WhatsApp fallback send failed after %d attempts: %s. Message to %s: %s", MAX_RETRIES, e, to, chunk[:200])
+                        logger.error(
+                            "WhatsApp fallback send failed after %d attempts: %s. Message to %s: %s",
+                            MAX_RETRIES,
+                            e,
+                            to,
+                            chunk[:200],
+                        )
 
 
 async def download_media(media_id: str) -> tuple[bytes, str]:

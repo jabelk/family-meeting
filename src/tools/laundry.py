@@ -28,9 +28,7 @@ def _get_active_session() -> tuple[str | None, list[dict]]:
     """
     all_nudges: list[dict] = []
     for ltype in LAUNDRY_TYPES:
-        all_nudges.extend(
-            query_nudges_by_type(ltype, statuses=["Pending", "Sent"])
-        )
+        all_nudges.extend(query_nudges_by_type(ltype, statuses=["Pending", "Sent"]))
 
     if not all_nudges:
         return None, []
@@ -78,9 +76,8 @@ def _check_calendar_conflicts(target_time: datetime) -> str:
 # T013: Start laundry session
 # ---------------------------------------------------------------------------
 
-def start_laundry_session(
-    washer_minutes: int = 45, dryer_minutes: int = 60
-) -> str:
+
+def start_laundry_session(washer_minutes: int = 45, dryer_minutes: int = 60) -> str:
     """Start a new laundry session with timed washer and follow-up nudges.
 
     Creates:
@@ -103,11 +100,13 @@ def start_laundry_session(
     washer_done = now + timedelta(minutes=washer_minutes)
     followup_time = now + timedelta(hours=2, minutes=45)
 
-    context = json.dumps({
-        "session_id": session_id,
-        "dryer_minutes": dryer_minutes,
-        "started_at": now.isoformat(),
-    })
+    context = json.dumps(
+        {
+            "session_id": session_id,
+            "dryer_minutes": dryer_minutes,
+            "started_at": now.isoformat(),
+        }
+    )
 
     # Check for calendar conflicts during expected dryer window
     dryer_done_estimate = washer_done + timedelta(minutes=dryer_minutes)
@@ -119,7 +118,7 @@ def start_laundry_session(
         nudge_type="laundry_washer",
         scheduled_time=washer_done.isoformat(),
         event_id=session_id,
-        message=f"Washer should be done! Time to move clothes to the dryer.",
+        message="Washer should be done! Time to move clothes to the dryer.",
         context=context,
     )
 
@@ -152,6 +151,7 @@ def start_laundry_session(
 # ---------------------------------------------------------------------------
 # T014: Advance laundry (moved to dryer)
 # ---------------------------------------------------------------------------
+
 
 def advance_laundry() -> str:
     """Advance laundry session to dryer phase.
@@ -191,12 +191,14 @@ def advance_laundry() -> str:
     # Check for calendar conflicts with dryer completion
     conflict_warning = _check_calendar_conflicts(dryer_done)
 
-    context = json.dumps({
-        "session_id": session_id,
-        "dryer_minutes": dryer_minutes,
-        "phase": "drying",
-        "moved_at": now.isoformat(),
-    })
+    context = json.dumps(
+        {
+            "session_id": session_id,
+            "dryer_minutes": dryer_minutes,
+            "phase": "drying",
+            "moved_at": now.isoformat(),
+        }
+    )
 
     # Create dryer-done nudge
     create_nudge(
@@ -220,6 +222,7 @@ def advance_laundry() -> str:
 # ---------------------------------------------------------------------------
 # T015: Cancel laundry
 # ---------------------------------------------------------------------------
+
 
 def cancel_laundry() -> str:
     """Cancel the active laundry session and all its pending nudges."""

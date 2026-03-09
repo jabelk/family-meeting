@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,10 +18,14 @@ REQUIRED_VARS = [
 ]
 
 OPTIONAL_GROUPS = {
-    "Notion": ["NOTION_TOKEN", "NOTION_ACTION_ITEMS_DB", "NOTION_MEAL_PLANS_DB",
-               "NOTION_MEETINGS_DB", "NOTION_FAMILY_PROFILE_PAGE"],
-    "Google Calendar": ["GOOGLE_CALENDAR_JASON_ID", "GOOGLE_CALENDAR_ERIN_ID",
-                        "GOOGLE_CALENDAR_FAMILY_ID"],
+    "Notion": [
+        "NOTION_TOKEN",
+        "NOTION_ACTION_ITEMS_DB",
+        "NOTION_MEAL_PLANS_DB",
+        "NOTION_MEETINGS_DB",
+        "NOTION_FAMILY_PROFILE_PAGE",
+    ],
+    "Google Calendar": ["GOOGLE_CALENDAR_JASON_ID", "GOOGLE_CALENDAR_ERIN_ID", "GOOGLE_CALENDAR_FAMILY_ID"],
     "YNAB": ["YNAB_ACCESS_TOKEN", "YNAB_BUDGET_ID"],
 }
 
