@@ -61,68 +61,52 @@ All LLM prompts live in `src/prompts/` as external Markdown files, loaded at sta
 - Tasks specify full file paths and mark parallel-safe items with `[P]`
 
 ## Active Technologies
-- Python 3.12 + FastAPI, anthropic SDK, notion-client, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn, httpx
-- Notion API (free plan) — 5 databases (Action Items, Meal Plans, Meetings, Backlog, Grocery History) + Family Profile page
-- Node.js sidecar (Express + codetheweb/anylist@^0.8.5) for AnyList grocery integration
-- Docker Compose on NUC (`warp-nuc`) + Cloudflare Tunnel + n8n for scheduling
+
+**Core stack**: Python 3.12 + FastAPI, anthropic SDK (Claude Haiku 4.5 for chat, Claude vision for OCR), uvicorn, httpx, Pydantic
+
+**Integrations**:
+- Notion API (free plan) — 7 databases (Action Items, Meal Plans, Meetings, Backlog, Grocery History, Recipes, Cookbooks) + Family Profile page. notion-client >=2.2.0,<2.3.0
+- Google Calendar — google-api-python-client, google-auth-oauthlib (3 calendars: Jason, Erin, Family)
+- Outlook/Work Calendar — icalendar, recurring-ical-events (ICS feed) + iOS Shortcut push fallback
+- YNAB — ynab SDK + httpx for transaction writes
+- Gmail — google-api-python-client (Amazon/PayPal/Venmo/Apple receipt parsing)
+- AnyList — Node.js 20 sidecar (Express + codetheweb/anylist@^0.8.5) for grocery lists
+- Cloudflare R2 — boto3 (recipe photo storage)
+- Downshiftology — httpx (recipe search, read-only)
+- OpenAI — openai SDK (Whisper transcription for voice messages)
 - WhatsApp Cloud API (Meta) for messaging interface
-- Public URL: `https://mombot.sierrastoryco.com`
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 + Claude vision for OCR), notion-client >=2.2.0,<2.3.0, boto3 (Cloudflare R2 S3-compatible API), httpx, google-api-python-client, google-auth-oauthlib, icalendar, recurring-ical-events, ynab, uvicorn (002-proactive-recipes-automation)
-- Notion (2 new databases: Recipes, Cookbooks) + Cloudflare R2 (recipe photo storage) + existing 5 Notion databases (002-proactive-recipes-automation)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Sonnet 4), notion-client >=2.2.0,<2.3.0, httpx, google-api-python-clien (003-smart-nudges-chores)
-- Notion API (2 new databases: Nudge Queue, Chores) + existing Google Calendar read (003-smart-nudges-chores)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), httpx (YNAB API calls), notion-client >=2.2.0,<2.3.0 (004-ynab-smart-budget)
-- YNAB API (external, transactions + budgets), Notion Nudge Queue (budget insights as nudges) (004-ynab-smart-budget)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), httpx (Downshiftology API calls), notion-client >=2.2.0,<2.3.0 (005-downshiftology-recipes)
-- Downshiftology API (external, read-only), Notion Recipes + Cookbooks databases (read/write) (005-downshiftology-recipes)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), notion-client >=2.2.0,<2.3.0 (006-feature-discovery)
-- Notion (existing databases — no new databases needed), in-memory set for welcome tracking (006-feature-discovery)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), Pydantic (via anthropic SDK) (007-chat-memory)
-- JSON file in `data/` directory (same pattern as `data/usage_counters.json`), Docker volume mount already configured (007-chat-memory)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus), existing 47 tools (008-holistic-family-intelligence)
-- N/A (no new storage — uses existing Notion, YNAB, Google Calendar via tools) (008-holistic-family-intelligence)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 for classification), httpx (YNAB API), amazon-orders>=4.0.18, existing WhatsApp/n8n infrastructure (010-amazon-ynab-sync)
-- JSON files in `data/` for sync records & category mappings; YNAB API for transaction writes (010-amazon-ynab-sync)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5 for email parsing/classification), httpx (YNAB API), google-api-python-client (Gmail API), existing WhatsApp/n8n infrastructure (011-email-ynab-sync)
-- JSON files in `data/` directory (extends existing `category_mappings.json`, `amazon_sync_records.json` pattern) + YNAB API for transaction writes (011-email-ynab-sync)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Opus for tool loop), httpx (YNAB API), existing WhatsApp/n8n infrastructure (012-smart-budget-maintenance)
-- In-memory computation from YNAB API data; pending suggestions stored in `data/budget_pending_suggestions.json` (same pattern as Amazon/email sync) (012-smart-budget-maintenance)
-- Python 3.12 (existing codebase) + FastAPI, Pydantic (request model validation), json (stdlib for atomic JSON writes) (015-ios-work-calendar)
-- Atomic JSON file at `data/work_calendar.json` (same pattern as `preferences.py`, `conversation.py`, `routines.py`) (015-ios-work-calendar)
-- Python 3.12 (existing codebase) + anthropic SDK (system prompt construction), datetime/zoneinfo (time injection) (016-time-and-context-fix)
-- Existing `data/conversations.json` (atomic JSON file pattern) (016-time-and-context-fix)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5), existing tool functions (017-smart-daily-planner)
-- JSON file at `data/drive_times.json` (same atomic write pattern as `preferences.py`, `routines.py`, `conversation.py`) (017-smart-daily-planner)
-- Bash (shell script on NUC) — no Python changes needed + cron (already on NUC Ubuntu 24.04), scp/ssh (already configured) (018-conversation-log-backup)
-- Flat JSON files in `data/conversation_archives/` on NUC (same Docker volume mount) (018-conversation-log-backup)
-- Python 3.12 (existing codebase) + FastAPI, anthropic SDK (existing), openai SDK (new — for Whisper transcription only), ffmpeg (new — apt package in Docker) (019-whatsapp-voice-messages)
-- N/A — transcribed text flows through existing conversation pipeline (019-whatsapp-voice-messages)
-- Python 3.12 (existing codebase) + Node.js 20 (AnyList sidecar) + FastAPI, anthropic SDK, APScheduler (new), existing deps unchanged (020-railway-cloud-deploy)
-- Railway Volume mounted at `/app/data` (same JSON files, zero migration) (020-railway-cloud-deploy)
-- GitHub Actions YAML + Python 3.12 (existing app) + GitHub Actions (runners), Ruff (linting), pytest (testing), Trivy (security scanning), Railway CLI (deployment), Docker (container builds) (021-ci-cd-pipeline)
-- N/A — pipeline configuration only, no new data storage (021-ci-cd-pipeline)
-- Python 3.12 (existing codebase) + None new — uses `pathlib`, `functools.lru_cache`, `str.format()` (all stdlib) (022-prompt-externalization)
-- Markdown files in `src/prompts/` directory (committed to git, included in Docker image) (022-prompt-externalization)
+
+**Scheduling**: APScheduler (in-app, loads from `data/schedules.json`)
+
+**Storage**: JSON files in `data/` directory (atomic write pattern), Railway Volume at `/app/data`
+
+**Prompts**: External Markdown files in `src/prompts/` (system/, tools/, templates/), loaded at startup via `@lru_cache`
+
+**CI/CD**: GitHub Actions (Ruff lint, pytest, Trivy security scan, Railway deploy, GHCR Docker images)
+
+**Public URL**: `https://mombot.sierrastoryco.com`
 
 ## Deployment
 
-### Railway (Cloud)
+> **Primary deployment: Railway (cloud).** NUC is a secondary home-server option.
 
-Railway deployment uses the same Dockerfile. CI/CD pipeline auto-deploys on push to main after checks pass.
+### Railway (Cloud) — Primary
+
+CI/CD pipeline auto-deploys on push to main after checks pass.
 
 - **Config**: `railway.toml` (build config, healthcheck)
 - **Storage**: Railway Volume mounted at `/app/data` (persistent JSON files)
-- **Scheduling**: In-app APScheduler (`src/scheduler.py`) replaces n8n — loads jobs from `data/schedules.json`
+- **Scheduling**: In-app APScheduler (`src/scheduler.py`) — loads jobs from `data/schedules.json`
 - **Google OAuth**: `GOOGLE_TOKEN_JSON` env var loaded via `Credentials.from_authorized_user_info()`; refreshed tokens written back to volume
 - **Services**: FastAPI (public domain) + optional AnyList sidecar (private networking via `*.railway.internal`)
-- **Required env vars**: `ANTHROPIC_API_KEY`, `WHATSAPP_*`, `N8N_WEBHOOK_SECRET`
+- **Required env vars**: `ANTHROPIC_API_KEY`, `WHATSAPP_*`, `N8N_WEBHOOK_SECRET` (reused as general API auth)
 - **Optional integrations**: Notion, Google Calendar, YNAB, AnyList — app works as standalone chat assistant without them
 - **Hard constraint**: Single uvicorn worker only (APScheduler requirement)
 - **Onboarding**: See `ONBOARDING.md` for self-service setup guide
 
-### NUC (Home Server)
+### NUC (Home Server — Secondary)
 
-The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.152) via Docker Compose. SSH access is configured via `ssh warp-nuc`.
+Alternative deployment on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.152) via Docker Compose. Uses n8n for scheduling instead of APScheduler. SSH access via `ssh warp-nuc`.
 
 **Helper script** — use `./scripts/nuc.sh` for all NUC operations:
 ```bash
@@ -139,7 +123,7 @@ The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.15
 ./scripts/nuc.sh chat-logs latest    # Pull most recent archive
 ```
 
-**Services**: fastapi (port 8000), anylist-sidecar (port 3000), cloudflared (tunnel). n8n runs separately on the NUC (port 5678) for scheduling (Railway uses in-app APScheduler instead).
+**Services**: fastapi (port 8000), anylist-sidecar (port 3000), cloudflared (tunnel), n8n (port 5678).
 
 **Updating code**: Edit locally, commit, push to main, then `./scripts/nuc.sh deploy`.
 **Updating .env**: Edit locally, then `./scripts/nuc.sh env` (copies .env and restarts fastapi).
@@ -188,7 +172,14 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList push | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_PUSH` | 200 | Raises `ValueError` |
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
-## Recent Changes
-- 022-prompt-externalization: Added Python 3.12 (existing codebase) + None new — uses `pathlib`, `functools.lru_cache`, `str.format()` (all stdlib)
-- 021-ci-cd-pipeline: Added GitHub Actions YAML + Python 3.12 (existing app) + GitHub Actions (runners), Ruff (linting), pytest (testing), Trivy (security scanning), Railway CLI (deployment), Docker (container builds)
-- 020-railway-cloud-deploy: Railway cloud deployment with in-app APScheduler (replaces n8n), Google OAuth env var loading, optional integrations (Notion/Calendar/YNAB), ONBOARDING.md for self-service setup, railway.toml + schedules.json config
+## Feature History
+
+Features 001-022 are implemented and deployed. Spec artifacts for each live under `specs/###-feature-name/`. Key milestones:
+- 001: Core assistant (WhatsApp + Notion + Calendar + YNAB + AnyList)
+- 002: Recipe management (Notion + Cloudflare R2 photo storage)
+- 010-012: Financial automation (Amazon/Gmail receipt parsing → YNAB)
+- 015: iOS Shortcut → work calendar push
+- 019: WhatsApp voice message transcription (OpenAI Whisper)
+- 020: Railway cloud deployment (APScheduler replaces n8n)
+- 021: CI/CD pipeline (GitHub Actions)
+- 022: Prompt externalization (Markdown files in src/prompts/)

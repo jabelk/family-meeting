@@ -1,3 +1,5 @@
+# NUC Home Server deployment configuration.
+# For Railway deployment, see railway.toml and ONBOARDING.md.
 version: "3.8"
 
 services:
