@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 def _load_env():
     missing = [v for v in REQUIRED_VARS if not os.getenv(v)]
     if missing:
+        # Allow tests to import the app without real credentials
+        if "pytest" in sys.modules or os.getenv("TESTING"):
+            logger.warning("Missing env vars (test mode): %s", ", ".join(missing))
+            return
         print(f"Missing required environment variables: {', '.join(missing)}", file=sys.stderr)
         print("Copy .env.example to .env and fill in all values.", file=sys.stderr)
         sys.exit(1)
@@ -49,13 +53,13 @@ def _load_env():
 _load_env()
 
 # Anthropic
-ANTHROPIC_API_KEY: str = os.environ["ANTHROPIC_API_KEY"]
+ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # WhatsApp (required — core messaging interface)
-WHATSAPP_PHONE_NUMBER_ID: str = os.environ["WHATSAPP_PHONE_NUMBER_ID"]
-WHATSAPP_ACCESS_TOKEN: str = os.environ["WHATSAPP_ACCESS_TOKEN"]
-WHATSAPP_VERIFY_TOKEN: str = os.environ["WHATSAPP_VERIFY_TOKEN"]
-WHATSAPP_APP_SECRET: str = os.environ["WHATSAPP_APP_SECRET"]
+WHATSAPP_PHONE_NUMBER_ID: str = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_ACCESS_TOKEN: str = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
+WHATSAPP_VERIFY_TOKEN: str = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
+WHATSAPP_APP_SECRET: str = os.environ.get("WHATSAPP_APP_SECRET", "")
 
 # Notion (optional — configure for task/meal/meeting management)
 NOTION_TOKEN: str = os.environ.get("NOTION_TOKEN", "")
@@ -112,7 +116,7 @@ NOTION_NUDGE_QUEUE_DB: str = os.environ.get("NOTION_NUDGE_QUEUE_DB", "")
 NOTION_CHORES_DB: str = os.environ.get("NOTION_CHORES_DB", "")
 
 # n8n webhook auth (shared secret for /api/v1/* endpoint protection)
-N8N_WEBHOOK_SECRET: str = os.environ["N8N_WEBHOOK_SECRET"]
+N8N_WEBHOOK_SECRET: str = os.environ.get("N8N_WEBHOOK_SECRET", "")
 
 # Gmail API is used for Feature 010 Amazon-YNAB sync (reads Amazon order emails).
 # Auth handled via token.json (shared with Google Calendar OAuth).
