@@ -497,6 +497,13 @@ TOOLS = [
                     "description": "Target calendar. Default: family.",
                     "default": "family",
                 },
+                "location": {
+                    "type": "string",
+                    "description": (
+                        "Physical address or place name for the event. "
+                        "Shown in calendar event details and enables map links on mobile."
+                    ),
+                },
             },
             "required": ["summary", "start_time"],
         },
@@ -1420,6 +1427,7 @@ TOOL_FUNCTIONS = {
         int(kw.get("reminder_minutes", 15)),
         kw.get("recurrence"),
         kw.get("calendar_name", "family"),
+        kw.get("location", ""),
     ),
     "delete_calendar_event": lambda **kw: calendar.delete_calendar_event(
         kw["event_id"],

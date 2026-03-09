@@ -333,6 +333,7 @@ def create_quick_event(
     reminder_minutes: int = 15,
     recurrence: list[str] | None = None,
     calendar_name: str = "family",
+    location: str = "",
 ) -> str:
     """Create a quick reminder/event on a Google Calendar.
 
@@ -380,6 +381,8 @@ def create_quick_event(
     }
     if description:
         event_body["description"] = description
+    if location:
+        event_body["location"] = location
     if recurrence:
         event_body["recurrence"] = recurrence
 
