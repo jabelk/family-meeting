@@ -369,6 +369,11 @@ def detect_conflicts(days_ahead: int = 1) -> list[dict]:
         cal_events=cal_events_raw,
         outlook_events=outlook_events_raw,
         templates=templates,
+        partner1_name=FAMILY_CONFIG.get("partner1_name", "Partner1"),
+        partner1_name_lower=FAMILY_CONFIG.get("partner1_name_lower", "partner1"),
+        partner2_name=FAMILY_CONFIG.get("partner2_name", "Partner2"),
+        partner2_name_lower=FAMILY_CONFIG.get("partner2_name_lower", "partner2"),
+        caregiver_names=FAMILY_CONFIG.get("caregiver_names", ""),
     )
 
     response = client.messages.create(
