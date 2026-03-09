@@ -238,6 +238,24 @@ async def _process_voice_and_reply(phone: str, parsed: dict):
 
 async def _process_and_reply(phone: str, text: str):
     """Process a text message through Claude and send the reply via WhatsApp."""
+    # Intercept update commands before passing to Claude
+    cmd = text.strip().lower()
+    if cmd == "update":
+        from src.tools.updater import handle_update_command
+
+        await handle_update_command(phone)
+        return
+    if cmd == "skip":
+        from src.tools.updater import handle_skip_command
+
+        await handle_skip_command(phone)
+        return
+    if cmd == "undo update":
+        from src.tools.updater import handle_undo_command
+
+        await handle_undo_command(phone)
+        return
+
     start = time.time()
     try:
         reply = handle_message(phone, text)
