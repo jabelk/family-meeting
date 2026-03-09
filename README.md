@@ -28,7 +28,7 @@ Claude (Anthropic) — agentic tool loop
 
 You text the bot in WhatsApp. Claude reads your message, decides which tools to call (calendar, budget, recipes, etc.), executes them, and sends back a formatted response. It remembers conversation context for 24 hours.
 
-Scheduled workflows run via n8n (open-source automation):
+Scheduled workflows run via in-app APScheduler (Railway) or n8n (NUC):
 - **7:00am** — Daily briefing with calendar, chores, meals, and cross-domain insights
 - **10:00pm** — Amazon order sync (matches orders to YNAB transactions)
 - **10:05pm** — Email sync (PayPal, Venmo, Apple charges matched to YNAB)
@@ -128,15 +128,14 @@ family-meeting/
 
 ## Deployment
 
-The production stack runs on a home server (Intel NUC, Ubuntu 24.04) via Docker Compose with a Cloudflare Tunnel for public HTTPS.
+**Primary: Railway (cloud).** CI/CD pipeline auto-deploys on push to main. See `ONBOARDING.md` for self-service setup.
 
-**Services:**
+**Secondary: NUC home server** (Intel NUC, Ubuntu 24.04) via Docker Compose with Cloudflare Tunnel for HTTPS. Uses n8n for scheduling instead of in-app APScheduler. Deploy via `./scripts/nuc.sh deploy`.
+
+**Services** (both environments):
 - `fastapi` — Python app (port 8000)
 - `anylist-sidecar` — Node.js AnyList bridge (port 3000)
-- `cloudflared` — Cloudflare Tunnel (HTTPS ingress)
-- `n8n-mombot` — Workflow automation (port 5679)
-
-**Deploy workflow:** Edit locally → commit → push to GitHub → `./scripts/nuc.sh deploy` (pulls, rebuilds, restarts on NUC via SSH).
+- NUC also runs: `cloudflared` (tunnel), `n8n-mombot` (scheduling)
 
 ## Setup Guide
 
@@ -273,11 +272,11 @@ docker compose exec n8n-mombot n8n import:workflow --input=/tmp/workflows/daily-
 
 This bot was built for a specific family — you'll need to customize it for yours:
 
-1. **System prompt** (`src/assistant.py` — `SYSTEM_PROMPT`): Replace family member names, schedules, preferences, and rules with your own. This is the bot's personality and knowledge base.
+1. **System prompt** (`src/prompts/system/` — external Markdown files): Replace family member names, schedules, preferences, and rules with your own. This is the bot's personality and knowledge base.
 
 2. **Tools**: Enable/disable features by adding/removing tools from the `TOOLS` list and `TOOL_FUNCTIONS` dict in `assistant.py`. Each tool module in `src/tools/` is independent.
 
-3. **Schedules**: Update n8n workflows for your timezone and preferred automation times.
+3. **Schedules**: Update `data/schedules.json` (Railway) or n8n workflows (NUC) for your timezone and preferred automation times.
 
 4. **Categories**: YNAB category mappings, recipe tags, chore lists — all configurable through the bot itself via natural language ("I like to vacuum on Wednesdays", "add to backlog: organize garage").
 
@@ -378,10 +377,10 @@ claude
 # Each task gets checked off as it completes.
 
 # 7. Deploy and test
-> commit this and deploy to NUC and do end to end test
+> commit this and deploy
 
-# Claude commits, pushes, SSHes to the NUC, rebuilds Docker,
-# triggers the sync endpoint, and verifies results in the logs.
+# Claude commits, pushes, CI/CD auto-deploys to Railway,
+# triggers the sync endpoint, and verifies results.
 ```
 
 The entire Feature 011 — from spec to production deployment with 13 real transactions processed — was built in a single Claude Code session.

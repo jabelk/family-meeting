@@ -115,7 +115,8 @@ NOTION_COOKBOOKS_DB: str = os.environ.get("NOTION_COOKBOOKS_DB", "")
 NOTION_NUDGE_QUEUE_DB: str = os.environ.get("NOTION_NUDGE_QUEUE_DB", "")
 NOTION_CHORES_DB: str = os.environ.get("NOTION_CHORES_DB", "")
 
-# n8n webhook auth (shared secret for /api/v1/* endpoint protection)
+# API auth — shared secret for /api/v1/* endpoint protection.
+# Named N8N_WEBHOOK_SECRET for historical reasons; used on both Railway and NUC deployments.
 N8N_WEBHOOK_SECRET: str = os.environ.get("N8N_WEBHOOK_SECRET", "")
 
 # Gmail API is used for Feature 010 Amazon-YNAB sync (reads Amazon order emails).

@@ -1,4 +1,6 @@
-# n8n Workflow Setup Guide
+# n8n Workflow Setup Guide (NUC Home Server Only)
+
+> **Note:** This guide applies to the NUC home-server deployment only. Railway deployment uses in-app APScheduler (`src/scheduler.py` + `data/schedules.json`) — no n8n required. See `CLAUDE.md` for Railway setup.
 
 This guide walks through creating the 8 scheduled workflows in the dedicated Mom Bot n8n instance.
 

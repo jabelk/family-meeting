@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Helper commands for managing the family-meeting stack on the NUC
+# Helper script for NUC home-server deployment. Not used for Railway deployment.
+# For Railway, CI/CD auto-deploys on push to main (see .github/workflows/ci.yml).
 # Usage: ./scripts/nuc.sh <command>
 
 set -e
