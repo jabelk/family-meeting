@@ -485,6 +485,19 @@ async def _run_budget_summary():
     )
 
 
+async def _run_update_check():
+    from src.tools.updater import check_for_updates, generate_changelog_summary, notify_update_available
+
+    result = check_for_updates()
+    if not result.get("update_available"):
+        if result.get("error"):
+            logger.warning("Update check failed: %s", result["error"])
+        return
+
+    summary = generate_changelog_summary(result["raw_log"], result["commit_count"])
+    await notify_update_available(result["upstream_sha"], summary, result["commit_count"])
+
+
 # ---------------------------------------------------------------------------
 # Endpoint path → handler mapping
 # ---------------------------------------------------------------------------
@@ -504,6 +517,7 @@ ENDPOINT_HANDLERS: dict[str, callable] = {
     "grocery/reorder-check": _run_grocery_reorder,
     "reminders/grocery-confirmation": _run_grocery_confirmation,
     "budget/weekly-summary": _run_budget_summary,
+    "updates/check": _run_update_check,
 }
 
 

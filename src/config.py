@@ -27,6 +27,7 @@ OPTIONAL_GROUPS = {
     ],
     "Google Calendar": ["GOOGLE_CALENDAR_JASON_ID", "GOOGLE_CALENDAR_ERIN_ID", "GOOGLE_CALENDAR_FAMILY_ID"],
     "YNAB": ["YNAB_ACCESS_TOKEN", "YNAB_BUDGET_ID"],
+    "Updates": ["ADMIN_PHONE", "UPSTREAM_REMOTE"],
 }
 
 logger = logging.getLogger(__name__)
@@ -131,3 +132,7 @@ GOOGLE_CREDENTIALS_JSON: str = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 
 # Scheduler (enabled by default; set to "false" to disable in-app APScheduler)
 SCHEDULER_ENABLED: bool = os.environ.get("SCHEDULER_ENABLED", "true").lower() != "false"
+
+# Upstream update notifications (optional — for template repo instances)
+ADMIN_PHONE: str = os.environ.get("ADMIN_PHONE", "") or ERIN_PHONE
+UPSTREAM_REMOTE: str = os.environ.get("UPSTREAM_REMOTE", "upstream")
