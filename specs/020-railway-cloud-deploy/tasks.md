@@ -93,9 +93,9 @@
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Deploy FastAPI service to Railway — create project, link GitHub repo, add volume at /app/data, set all required env vars (ANTHROPIC_API_KEY, WHATSAPP_*, N8N_WEBHOOK_SECRET, PORT=8000, RAILWAY_RUN_UID=0)
-- [ ] T015 [US1] Set optional integration env vars on Railway — GOOGLE_TOKEN_JSON, GOOGLE_CREDENTIALS_JSON, GOOGLE_CALENDAR_*_ID, NOTION_*, YNAB_*, OUTLOOK_CALENDAR_ICS_URL
-- [ ] T016 [US1] Verify end-to-end: health check returns 200, WhatsApp webhook responds, daily briefing fires, scheduler shows 14 jobs in logs, container starts serving within 60s (NFR-001), message response latency ≤15s (NFR-003)
+- [x] T014 [US1] Deploy FastAPI service to Railway — create project, link GitHub repo, add volume at /app/data, set all required env vars (ANTHROPIC_API_KEY, WHATSAPP_*, N8N_WEBHOOK_SECRET, PORT=8000, RAILWAY_RUN_UID=0)
+- [x] T015 [US1] Set optional integration env vars on Railway — GOOGLE_TOKEN_JSON, GOOGLE_CREDENTIALS_JSON, GOOGLE_CALENDAR_*_ID, NOTION_*, YNAB_*, OUTLOOK_CALENDAR_ICS_URL
+- [x] T016 [US1] Verify end-to-end: health check returns 200, WhatsApp webhook responds, daily briefing fires, scheduler shows 14 jobs in logs, container starts serving within 60s (NFR-001), message response latency ≤15s (NFR-003)
 
 **Checkpoint**: Railway instance fully operational, can switch WhatsApp webhook between NUC and Railway
 
@@ -153,7 +153,7 @@
 **Purpose**: Final verification and documentation updates
 
 - [x] T025 Update CLAUDE.md — add Railway deployment section (020-railway-cloud-deploy), document new env vars, scheduler architecture
-- [ ] T026 [P] Run quickstart.md scenarios 1-7 as validation checklist
+- [x] T026 [P] Run quickstart.md scenarios 1-7 as validation checklist
 - [x] T027 Verify all 14 scheduled jobs have correct endpoint-to-handler mappings in src/scheduler.py by cross-referencing data/schedules.json endpoints with src/app.py endpoint definitions; verify non-Pacific timezone support (FR-013) by testing with a different timezone value in schedules.json
 
 ---
