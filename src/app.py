@@ -8,18 +8,22 @@ import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, Request, Response, BackgroundTasks, Depends, Header, HTTPException
+
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel
+
+from src.assistant import generate_daily_plan, generate_meeting_prep, handle_message
 from src.config import (
-    WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET,
-    PHONE_TO_NAME, ERIN_PHONE, N8N_WEBHOOK_SECRET,
+    ERIN_PHONE,
+    N8N_WEBHOOK_SECRET,
+    PHONE_TO_NAME,
     SCHEDULER_ENABLED,
+    WHATSAPP_APP_SECRET,
+    WHATSAPP_VERIFY_TOKEN,
 )
-from src.whatsapp import extract_message, send_message, download_media
-from src.assistant import handle_message, generate_daily_plan, generate_meeting_prep
-from src.transcribe import transcribe_voice_note, get_audio_duration, MAX_DURATION_SECONDS
-from src.tools.calendar import delete_assistant_events, batch_create_events, get_events_for_date
-from src.tools.notion import get_routine_templates
+from src.tools.calendar import delete_assistant_events
+from src.transcribe import MAX_DURATION_SECONDS, get_audio_duration, transcribe_voice_note
+from src.whatsapp import download_media, extract_message, send_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +38,7 @@ async def lifespan(app: FastAPI):
     scheduler = None
     if SCHEDULER_ENABLED:
         from src.scheduler import create_scheduler
+
         scheduler = create_scheduler()
         scheduler.start()
         logger.info("In-app scheduler started")
@@ -52,6 +57,7 @@ app = FastAPI(title="Family Meeting Assistant", lifespan=lifespan)
 # Webhook signature verification (security)
 # ---------------------------------------------------------------------------
 
+
 def _verify_webhook_signature(payload_body: bytes, signature_header: str) -> bool:
     """Verify X-Hub-Signature-256 from Meta using HMAC-SHA256."""
     if not WHATSAPP_APP_SECRET:
@@ -59,9 +65,7 @@ def _verify_webhook_signature(payload_body: bytes, signature_header: str) -> boo
         return True  # Allow during initial setup, but log warning
     if not signature_header:
         return False
-    expected = "sha256=" + hmac.new(
-        WHATSAPP_APP_SECRET.encode(), payload_body, hashlib.sha256
-    ).hexdigest()
+    expected = "sha256=" + hmac.new(WHATSAPP_APP_SECRET.encode(), payload_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature_header)
 
 
@@ -69,8 +73,8 @@ def _verify_webhook_signature(payload_body: bytes, signature_header: str) -> boo
 # Per-phone rate limiting (security)
 # ---------------------------------------------------------------------------
 
-RATE_LIMIT_MAX = 5          # max messages per window
-RATE_LIMIT_WINDOW = 60.0    # window in seconds
+RATE_LIMIT_MAX = 5  # max messages per window
+RATE_LIMIT_WINDOW = 60.0  # window in seconds
 
 _rate_limit_log: dict[str, list[float]] = defaultdict(list)
 
@@ -79,9 +83,7 @@ def _check_rate_limit(phone: str) -> bool:
     """Return True if the phone is within rate limits, False if exceeded."""
     now = time.time()
     # Prune old entries
-    _rate_limit_log[phone] = [
-        t for t in _rate_limit_log[phone] if now - t < RATE_LIMIT_WINDOW
-    ]
+    _rate_limit_log[phone] = [t for t in _rate_limit_log[phone] if now - t < RATE_LIMIT_WINDOW]
     if len(_rate_limit_log[phone]) >= RATE_LIMIT_MAX:
         return False
     _rate_limit_log[phone].append(now)
@@ -91,6 +93,7 @@ def _check_rate_limit(phone: str) -> bool:
 # ---------------------------------------------------------------------------
 # Auth dependency for n8n endpoints (T015)
 # ---------------------------------------------------------------------------
+
 
 async def verify_n8n_auth(x_n8n_auth: str = Header(None)):
     """Verify X-N8N-Auth header for /api/v1/* endpoints."""
@@ -105,19 +108,24 @@ async def verify_n8n_auth(x_n8n_auth: str = Header(None)):
 # Request models for n8n endpoints
 # ---------------------------------------------------------------------------
 
+
 class DailyBriefingRequest(BaseModel):
     target: str = "erin"
+
 
 class PopulateWeekRequest(BaseModel):
     week_start: str  # YYYY-MM-DD (Monday)
 
+
 class GrandmaPromptRequest(BaseModel):
     pass
+
 
 class WorkEventInput(BaseModel):
     title: str
     start: str  # ISO 8601 datetime
-    end: str    # ISO 8601 datetime
+    end: str  # ISO 8601 datetime
+
 
 class WorkEventsRequest(BaseModel):
     events: list[WorkEventInput]
@@ -126,6 +134,7 @@ class WorkEventsRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # WhatsApp webhook
 # ---------------------------------------------------------------------------
+
 
 @app.get("/webhook")
 async def verify_webhook(request: Request):
@@ -271,6 +280,7 @@ async def health():
 # n8n automation endpoints (T021-T023)
 # ---------------------------------------------------------------------------
 
+
 @app.post("/api/v1/briefing/daily", dependencies=[Depends(verify_n8n_auth)])
 async def daily_briefing(req: DailyBriefingRequest, background_tasks: BackgroundTasks):
     """Generate and send daily briefing via WhatsApp.
@@ -327,6 +337,7 @@ async def amazon_sync_endpoint(background_tasks: BackgroundTasks):
     async def _run():
         try:
             from src.tools import amazon_sync
+
             message = amazon_sync.run_nightly_sync()
             if message:
                 await send_message(ERIN_PHONE, message)
@@ -353,6 +364,7 @@ async def email_sync_endpoint(background_tasks: BackgroundTasks):
     async def _run():
         try:
             from src.tools import email_sync
+
             message = email_sync.run_email_sync()
             if message:
                 logger.info("Email sync complete: %s", message[:200])
@@ -378,6 +390,7 @@ async def budget_health_check_endpoint(background_tasks: BackgroundTasks):
     async def _run():
         try:
             from src.tools import ynab
+
             result = ynab.run_budget_health_check()
             logger.info("Budget health check complete: %s", result)
         except Exception:
@@ -427,6 +440,7 @@ async def populate_week(req: PopulateWeekRequest):
 # Feature 015: iOS Work Calendar Push
 # ---------------------------------------------------------------------------
 
+
 @app.post("/api/v1/calendar/work-events", dependencies=[Depends(verify_n8n_auth)])
 async def receive_work_events(req: WorkEventsRequest):
     """Receive Jason's work calendar events from iOS Shortcut.
@@ -447,11 +461,13 @@ async def receive_work_events(req: WorkEventsRequest):
         except ValueError:
             logger.warning("Invalid start datetime: %s", event.start)
             continue
-        events_by_date.setdefault(date_key, []).append({
-            "title": event.title,
-            "start": event.start,
-            "end": event.end,
-        })
+        events_by_date.setdefault(date_key, []).append(
+            {
+                "title": event.title,
+                "start": event.start,
+                "end": event.end,
+            }
+        )
 
     if events_by_date:
         save_work_calendar(events_by_date)
@@ -493,6 +509,7 @@ async def grandma_schedule_prompt(background_tasks: BackgroundTasks):
 # Feature 003: Nudge Scanner (T010)
 # ---------------------------------------------------------------------------
 
+
 @app.post("/api/v1/nudges/scan", dependencies=[Depends(verify_n8n_auth)])
 async def nudge_scan():
     """Scan calendar for departure events, process pending nudges.
@@ -500,10 +517,15 @@ async def nudge_scan():
     Called by n8n every 15 minutes (7am-8:30pm Pacific).
     Creates departure nudges for upcoming events, then delivers all due nudges.
     """
-    from src.tools.nudges import scan_upcoming_departures, process_pending_nudges
-    from src.tools.notion import check_quiet_day, count_sent_today, seed_default_chores
-    from src.tools.notion import create_nudge, get_backlog_for_nudge
     from src.tools.chores import detect_free_windows, suggest_chore
+    from src.tools.notion import (
+        check_quiet_day,
+        count_sent_today,
+        create_nudge,
+        get_backlog_for_nudge,
+        seed_default_chores,
+    )
+    from src.tools.nudges import process_pending_nudges, scan_upcoming_departures
 
     logger.info("Nudge scan triggered")
 
@@ -542,6 +564,7 @@ async def nudge_scan():
         import json as _json
         from datetime import datetime as _dt
         from zoneinfo import ZoneInfo as _ZI
+
         _now = _dt.now(tz=_ZI("America/Los_Angeles"))
         windows = detect_free_windows(_now.date())
 
@@ -550,17 +573,16 @@ async def nudge_scan():
             if window["start"] > _now and window["duration_minutes"] >= 15:
                 suggestions = suggest_chore(window["duration_minutes"])
                 for suggestion in suggestions:
-                    context = _json.dumps({
-                        "chore_id": suggestion["id"],
-                        "chore_name": suggestion["name"],
-                        "duration": suggestion["duration"],
-                        "window_start": window["start"].isoformat(),
-                        "window_end": window["end"].isoformat(),
-                    })
-                    msg = (
-                        f"Free window coming up! How about: {suggestion['name']} "
-                        f"(~{suggestion['duration']} min)?"
+                    context = _json.dumps(
+                        {
+                            "chore_id": suggestion["id"],
+                            "chore_name": suggestion["name"],
+                            "duration": suggestion["duration"],
+                            "window_start": window["start"].isoformat(),
+                            "window_end": window["end"].isoformat(),
+                        }
                     )
+                    msg = f"Free window coming up! How about: {suggestion['name']} (~{suggestion['duration']} min)?"
                     create_nudge(
                         summary=f"Chore: {suggestion['name']}",
                         nudge_type="chore",
@@ -577,17 +599,20 @@ async def nudge_scan():
     # Surface a backlog item alongside chore suggestions (max 1 per day)
     try:
         from src.tools.notion import query_nudges_by_type
+
         existing_backlog = query_nudges_by_type("backlog", statuses=["Pending", "Sent"])
         backlog = get_backlog_for_nudge() if not existing_backlog else None
         if backlog:
             msg = f"Backlog reminder: {backlog['description']}"
             if backlog["priority"] == "High":
                 msg = f"High priority: {backlog['description']}"
-            context = _json.dumps({
-                "backlog_id": backlog["id"],
-                "description": backlog["description"],
-                "category": backlog["category"],
-            })
+            context = _json.dumps(
+                {
+                    "backlog_id": backlog["id"],
+                    "description": backlog["description"],
+                    "category": backlog["category"],
+                }
+            )
             create_nudge(
                 summary=f"Backlog: {backlog['description'][:50]}",
                 nudge_type="backlog",
@@ -626,21 +651,25 @@ async def nudge_scan():
 # Budget Scan (Feature 004 — YNAB Smart Budget)
 # ---------------------------------------------------------------------------
 
+
 @app.post("/api/v1/budget/scan", dependencies=[Depends(verify_n8n_auth)])
 async def budget_scan():
     """Proactive budget insight scanner — overspending, uncategorized, anomalies, goals.
 
     Called by n8n daily at 9am Pacific.
     """
-    from src.tools.nudges import process_pending_nudges
-    from src.tools.notion import check_quiet_day, count_sent_today, create_nudge, query_nudges_by_type
-    from src.tools.ynab import (
-        check_overspend_warnings, check_uncategorized_pileup,
-        check_spending_anomalies, check_savings_goals,
-    )
     import json as _json
     from datetime import datetime as _dt
     from zoneinfo import ZoneInfo as _ZI
+
+    from src.tools.notion import check_quiet_day, count_sent_today, create_nudge, query_nudges_by_type
+    from src.tools.nudges import process_pending_nudges
+    from src.tools.ynab import (
+        check_overspend_warnings,
+        check_savings_goals,
+        check_spending_anomalies,
+        check_uncategorized_pileup,
+    )
 
     logger.info("Budget scan triggered")
     _now = _dt.now(tz=_ZI("America/Los_Angeles"))
@@ -676,10 +705,7 @@ async def budget_scan():
                 break
             # Dedup: check if we already sent an overspend nudge for this category today
             existing = query_nudges_by_type("budget", statuses=["Pending", "Sent"])
-            already_warned = any(
-                w["category_name"] in (n.get("summary") or "")
-                for n in existing
-            )
+            already_warned = any(w["category_name"] in (n.get("summary") or "") for n in existing)
             if already_warned:
                 continue
 
@@ -688,13 +714,15 @@ async def budget_scan():
                 f"(${w['spent']:,.0f} / ${w['budgeted']:,.0f}) with "
                 f"{w['days_remaining']} days left this month."
             )
-            context = _json.dumps({
-                "insight_type": "overspend_warning",
-                "category_name": w["category_name"],
-                "spent": w["spent"],
-                "budgeted": w["budgeted"],
-                "percent_used": w["percent_used"],
-            })
+            context = _json.dumps(
+                {
+                    "insight_type": "overspend_warning",
+                    "category_name": w["category_name"],
+                    "spent": w["spent"],
+                    "budgeted": w["budgeted"],
+                    "percent_used": w["percent_used"],
+                }
+            )
             create_nudge(
                 summary=f"Overspend: {w['category_name']}",
                 nudge_type="budget",
@@ -722,12 +750,14 @@ async def budget_scan():
                     f"totaling ${pileup['total_amount']:,.2f} (oldest: {pileup['oldest_date']}). "
                     f"Want help categorizing them?"
                 )
-                context = _json.dumps({
-                    "insight_type": "uncategorized_pileup",
-                    "count": pileup["count"],
-                    "total_amount": pileup["total_amount"],
-                    "oldest_date": pileup["oldest_date"],
-                })
+                context = _json.dumps(
+                    {
+                        "insight_type": "uncategorized_pileup",
+                        "count": pileup["count"],
+                        "total_amount": pileup["total_amount"],
+                        "oldest_date": pileup["oldest_date"],
+                    }
+                )
                 create_nudge(
                     summary="Uncategorized transactions pileup",
                     nudge_type="budget",
@@ -755,13 +785,15 @@ async def budget_scan():
                     f"{a['percent_above']:.0f}% above your 3-month average "
                     f"of ${a['average_amount']:,.0f}."
                 )
-                context = _json.dumps({
-                    "insight_type": "spending_anomaly",
-                    "category_name": a["category_name"],
-                    "current_month": a["current_amount"],
-                    "rolling_average": a["average_amount"],
-                    "percent_above": a["percent_above"],
-                })
+                context = _json.dumps(
+                    {
+                        "insight_type": "spending_anomaly",
+                        "category_name": a["category_name"],
+                        "current_month": a["current_amount"],
+                        "rolling_average": a["average_amount"],
+                        "percent_above": a["percent_above"],
+                    }
+                )
                 create_nudge(
                     summary=f"Anomaly: {a['category_name']}",
                     nudge_type="budget",
@@ -787,13 +819,15 @@ async def budget_scan():
                     f"but should be ~{g['expected_percent']:.0f}% by now. "
                     f"Shortfall: ${g['shortfall']:,.0f}."
                 )
-                context = _json.dumps({
-                    "insight_type": "savings_goal_gap",
-                    "goal_name": g["category_name"],
-                    "funded": g["funded"],
-                    "target": g["goal_target"],
-                    "shortfall": g["shortfall"],
-                })
+                context = _json.dumps(
+                    {
+                        "insight_type": "savings_goal_gap",
+                        "goal_name": g["category_name"],
+                        "funded": g["funded"],
+                        "target": g["goal_target"],
+                        "shortfall": g["shortfall"],
+                    }
+                )
                 create_nudge(
                     summary=f"Goal gap: {g['category_name']}",
                     nudge_type="budget",
@@ -819,8 +853,11 @@ async def budget_scan():
 
     logger.info(
         "Budget scan complete: %d insights, %d overspend, %d uncategorized, %d anomalies, %d goal gaps",
-        result["insights_created"], result["overspend_warnings"],
-        result["uncategorized_count"], result["anomalies_detected"], result["goal_gaps"],
+        result["insights_created"],
+        result["overspend_warnings"],
+        result["uncategorized_count"],
+        result["anomalies_detected"],
+        result["goal_gaps"],
     )
     return result
 
@@ -828,6 +865,7 @@ async def budget_scan():
 # ---------------------------------------------------------------------------
 # US2: Grocery Reorder (T029-T030)
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/v1/grocery/reorder-check", dependencies=[Depends(verify_n8n_auth)])
 async def reorder_check(background_tasks: BackgroundTasks):
@@ -894,6 +932,7 @@ async def grocery_confirmation_reminder(background_tasks: BackgroundTasks):
 # US3: Meal Planning (T036)
 # ---------------------------------------------------------------------------
 
+
 @app.post("/api/v1/meals/plan-week", dependencies=[Depends(verify_n8n_auth)])
 async def plan_week_meals(background_tasks: BackgroundTasks):
     """Generate 6-night dinner plan + merged grocery list and send via WhatsApp.
@@ -948,6 +987,7 @@ async def plan_week_meals(background_tasks: BackgroundTasks):
 # US5: Conflict Detection (T044-T045)
 # ---------------------------------------------------------------------------
 
+
 @app.post("/api/v1/calendar/conflict-check", dependencies=[Depends(verify_n8n_auth)])
 async def conflict_check(background_tasks: BackgroundTasks, days_ahead: int = 7):
     """Detect calendar conflicts and send report via WhatsApp.
@@ -987,6 +1027,7 @@ async def conflict_check(background_tasks: BackgroundTasks, days_ahead: int = 7)
 # US6: Action Item Reminders (T048)
 # ---------------------------------------------------------------------------
 
+
 @app.post("/api/v1/reminders/action-items", dependencies=[Depends(verify_n8n_auth)])
 async def action_item_reminder(background_tasks: BackgroundTasks):
     """Send mid-week action item progress report via WhatsApp.
@@ -1002,14 +1043,15 @@ async def action_item_reminder(background_tasks: BackgroundTasks):
             result = check_action_item_progress()
 
             if result.get("status") == "all_complete":
-                await send_message(ERIN_PHONE, "✅ *All caught up!* Every action item for this week is done. Nice work!")
+                msg = "✅ *All caught up!* Every action item for this week is done. Nice work!"
+                await send_message(ERIN_PHONE, msg)
                 return
 
             if result.get("status") == "error":
                 logger.error("Action item check failed: %s", result.get("message"))
                 return
 
-            lines = [f"*📋 Mid-Week Check-In*\n"]
+            lines = ["*📋 Mid-Week Check-In*\n"]
             lines.append(f"{result['done']} of {result['total']} items done this week\n")
 
             for assignee, items in result.get("remaining_by_assignee", {}).items():
@@ -1033,6 +1075,7 @@ async def action_item_reminder(background_tasks: BackgroundTasks):
 # ---------------------------------------------------------------------------
 # US7: Budget Summary (T051)
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/v1/budget/weekly-summary", dependencies=[Depends(verify_n8n_auth)])
 async def weekly_budget_summary(background_tasks: BackgroundTasks):

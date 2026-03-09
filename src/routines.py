@@ -41,6 +41,7 @@ _routines: dict[str, dict] = {}
 # File I/O (atomic writes)
 # ---------------------------------------------------------------------------
 
+
 def _load_routines() -> None:
     """Load routines from JSON file into memory."""
     global _routines
@@ -71,6 +72,7 @@ def _save_routines() -> None:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def save_routine(phone: str, name: str, steps: list[str]) -> str:
     """Create or overwrite a routine for a phone number.
 
@@ -82,10 +84,7 @@ def save_routine(phone: str, name: str, steps: list[str]) -> str:
     exceed MAX_ROUTINES_PER_USER (when creating new).
     """
     if len(steps) > MAX_STEPS_PER_ROUTINE:
-        raise ValueError(
-            f"Routines can have at most {MAX_STEPS_PER_ROUTINE} steps. "
-            f"You provided {len(steps)}."
-        )
+        raise ValueError(f"Routines can have at most {MAX_STEPS_PER_ROUTINE} steps. You provided {len(steps)}.")
 
     name_lower = name.lower()
     now = datetime.now().isoformat()
@@ -97,10 +96,7 @@ def save_routine(phone: str, name: str, steps: list[str]) -> str:
     routines = _routines[phone]["routines"]
 
     # Build steps list
-    step_dicts = [
-        {"position": i + 1, "description": s}
-        for i, s in enumerate(steps)
-    ]
+    step_dicts = [{"position": i + 1, "description": s} for i, s in enumerate(steps)]
 
     # Check if routine with this name already exists — overwrite it
     for i, existing in enumerate(routines):

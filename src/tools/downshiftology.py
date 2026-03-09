@@ -52,8 +52,16 @@ CUISINE_IDS: dict[str, int] = {
 
 # Dietary terms for client-side filtering
 _dietary_terms: set[str] = {
-    "keto", "paleo", "whole30", "gluten-free", "dairy-free",
-    "vegan", "vegetarian", "nut-free", "low-carb", "high-protein",
+    "keto",
+    "paleo",
+    "whole30",
+    "gluten-free",
+    "dairy-free",
+    "vegan",
+    "vegetarian",
+    "nut-free",
+    "low-carb",
+    "high-protein",
 }
 
 # Module-level cache for follow-up commands ("save number 3", "tell me more about 2")
@@ -63,6 +71,7 @@ _last_search_results: list[dict] = []
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _strip_html(text: str) -> str:
     """Remove HTML tags and unescape entities."""
@@ -90,10 +99,7 @@ def _fetch_recipes(params: dict) -> list[dict]:
         return []
 
     # Filter out roundup/collection posts
-    return [
-        r for r in recipes
-        if r.get("recipe", {}).get("parent_post_id") not in ("0", "", None)
-    ]
+    return [r for r in recipes if r.get("recipe", {}).get("parent_post_id") not in ("0", "", None)]
 
 
 def _format_recipe_summary(recipe: dict) -> dict:
@@ -133,6 +139,7 @@ def _format_recipe_summary(recipe: dict) -> dict:
 # US1: Recipe Search
 # ---------------------------------------------------------------------------
 
+
 def search_downshiftology(
     query: str = "",
     course: str = "",
@@ -171,10 +178,12 @@ def search_downshiftology(
         dietary_lower = dietary.lower().strip()
         filtered = []
         for s in summaries:
-            searchable = " ".join([
-                s["name"].lower(),
-                " ".join(k.lower() for k in s["keywords"]),
-            ])
+            searchable = " ".join(
+                [
+                    s["name"].lower(),
+                    " ".join(k.lower() for k in s["keywords"]),
+                ]
+            )
             if dietary_lower in searchable:
                 filtered.append(s)
         summaries = filtered if filtered else summaries  # fall back if no matches
@@ -193,7 +202,7 @@ def search_downshiftology(
 
     lines = []
     for i, s in enumerate(summaries, 1):
-        time_str = f"{s['total_time']} min" if s['total_time'] else "Time N/A"
+        time_str = f"{s['total_time']} min" if s["total_time"] else "Time N/A"
         tags = ", ".join(s["course"] + s["cuisine"])
         rating_str = f" | {s['rating']:.1f}★" if s["rating"] else ""
         lines.append(f"{i}. {s['name']} | {time_str} | {tags}{rating_str}\n   {s['link']}")
@@ -204,6 +213,7 @@ def search_downshiftology(
 # ---------------------------------------------------------------------------
 # US1: Recipe Details
 # ---------------------------------------------------------------------------
+
 
 def get_downshiftology_details(result_number: int) -> str:
     """Get full details of a recipe from the most recent search results.
@@ -315,6 +325,7 @@ def get_downshiftology_details(result_number: int) -> str:
 # US2: Recipe Import
 # ---------------------------------------------------------------------------
 
+
 def _map_tags(recipe_data: dict) -> tuple[list[str], str]:
     """Map Downshiftology course/cuisine tags to Notion Tags and Cuisine values.
 
@@ -332,10 +343,7 @@ def _map_tags(recipe_data: dict) -> tuple[list[str], str]:
         notion_tags.append("Salad")
     if "main course" in course_names or "dinner" in course_names:
         # Check ingredients for meat vs seafood
-        ingredients_text = " ".join(
-            ing.get("name", "").lower()
-            for ing in recipe_data.get("ingredients_flat", [])
-        )
+        ingredients_text = " ".join(ing.get("name", "").lower() for ing in recipe_data.get("ingredients_flat", []))
         if any(w in ingredients_text for w in ("shrimp", "salmon", "fish", "tuna", "cod", "crab")):
             notion_tags.append("Seafood")
         else:
@@ -348,8 +356,13 @@ def _map_tags(recipe_data: dict) -> tuple[list[str], str]:
         "american": "American",
         "mexican": "Mexican",
         "italian": "Italian",
-        "asian": "Asian", "chinese": "Asian", "japanese": "Asian", "indonesian": "Asian",
-        "mediterranean": "Mediterranean", "greek": "Mediterranean", "middle eastern": "Mediterranean",
+        "asian": "Asian",
+        "chinese": "Asian",
+        "japanese": "Asian",
+        "indonesian": "Asian",
+        "mediterranean": "Mediterranean",
+        "greek": "Mediterranean",
+        "middle eastern": "Mediterranean",
         "middle-eastern": "Mediterranean",
     }
     notion_cuisine = "Other"
@@ -425,11 +438,13 @@ def import_downshiftology_recipe(
     # Ingredients → JSON format [{name, quantity, unit}]
     ingredients = []
     for ing in r.get("ingredients_flat", []):
-        ingredients.append({
-            "name": ing.get("name", ""),
-            "quantity": ing.get("amount", ""),
-            "unit": ing.get("unit", ""),
-        })
+        ingredients.append(
+            {
+                "name": ing.get("name", ""),
+                "quantity": ing.get("amount", ""),
+                "unit": ing.get("unit", ""),
+            }
+        )
     ingredients_json = json.dumps(ingredients)
 
     # Instructions → plain text
@@ -466,7 +481,7 @@ def import_downshiftology_recipe(
     photo_url = r.get("image_url", "")
 
     # Create in Notion
-    page_id = notion.create_recipe(
+    notion.create_recipe(
         name=name,
         cookbook_id=cookbook_id,
         ingredients_json=ingredients_json,
@@ -494,6 +509,7 @@ def import_downshiftology_recipe(
 # US3: Grocery History Cross-Reference
 # ---------------------------------------------------------------------------
 
+
 def _cross_reference_grocery_history(ingredients_flat: list[dict]) -> str:
     """Cross-reference recipe ingredients against grocery purchase history.
 
@@ -514,10 +530,7 @@ def _cross_reference_grocery_history(ingredients_flat: list[dict]) -> str:
         ing_lower = ing_name.lower()
 
         # Check if ingredient matches any grocery history item (substring match)
-        matched = any(
-            ing_lower in item or item in ing_lower
-            for item in grocery_set
-        )
+        matched = any(ing_lower in item or item in ing_lower for item in grocery_set)
         if matched:
             on_hand.append(ing_name)
         else:

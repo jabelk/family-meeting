@@ -13,7 +13,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from src import preferences
-from src.config import PHONE_TO_NAME
 from src.tools import notion
 from src.tools.calendar import get_events_for_date
 
@@ -27,8 +26,14 @@ PACIFIC = ZoneInfo("America/Los_Angeles")
 
 # Keywords that indicate someone other than Erin has Zoey
 CHILDCARE_KEYWORDS: set[str] = {
-    "zoey", "sandy", "preschool", "childcare", "babysit",
-    "milestones", "daycare", "nanny",
+    "zoey",
+    "sandy",
+    "preschool",
+    "childcare",
+    "babysit",
+    "milestones",
+    "daycare",
+    "nanny",
 }
 
 # Communication mode time boundaries (hour in Pacific time)
@@ -44,6 +49,7 @@ MODE_BOUNDARIES: list[tuple[int, int, str, str]] = [
 # ---------------------------------------------------------------------------
 # Communication Mode (T002)
 # ---------------------------------------------------------------------------
+
 
 def get_communication_mode(phone: str) -> tuple[str, str]:
     """Derive communication mode from current Pacific time and user preferences.
@@ -117,6 +123,7 @@ def _parse_quiet_hours(phone: str) -> int | None:
 # Daily Context (T001)
 # ---------------------------------------------------------------------------
 
+
 def get_daily_context(phone: str) -> str:
     """Build a structured plain-text snapshot of today's family context.
 
@@ -134,8 +141,6 @@ def get_daily_context(phone: str) -> str:
         Structured plain text block for the assistant's context window.
     """
     now = datetime.now(tz=PACIFIC)
-    user_name = PHONE_TO_NAME.get(phone, "User")
-
     # Header: date and time
     date_line = now.strftime("%A, %B %-d, %Y at %-I:%M %p Pacific")
 
@@ -182,7 +187,7 @@ def get_daily_context(phone: str) -> str:
         lines.append("")
     else:
         # Jason's events
-        lines.append(f"\U0001f464 Jason's events today:")
+        lines.append("\U0001f464 Jason's events today:")
         if jason_events:
             for event in jason_events:
                 lines.append(f"- {_format_event(event)}")
@@ -191,7 +196,7 @@ def get_daily_context(phone: str) -> str:
         lines.append("")
 
         # Erin's events
-        lines.append(f"\U0001f464 Erin's events today:")
+        lines.append("\U0001f464 Erin's events today:")
         if erin_events:
             for event in erin_events:
                 lines.append(f"- {_format_event(event)}")
@@ -200,7 +205,7 @@ def get_daily_context(phone: str) -> str:
         lines.append("")
 
         # Family events
-        lines.append(f"\U0001f468\u200d\U0001f469\u200d\U0001f467\u200d\U0001f466 Family events today:")
+        lines.append("\U0001f468\u200d\U0001f469\u200d\U0001f467\u200d\U0001f466 Family events today:")
         if family_events:
             for event in family_events:
                 lines.append(f"- {_format_event(event)}")
@@ -209,9 +214,7 @@ def get_daily_context(phone: str) -> str:
         lines.append("")
 
         # Childcare inference
-        childcare_status = _infer_childcare(
-            jason_events + erin_events + family_events, now
-        )
+        childcare_status = _infer_childcare(jason_events + erin_events + family_events, now)
         lines.append(f"\U0001f476 Zoey: {childcare_status}")
         lines.append("")
 
@@ -226,6 +229,7 @@ def get_daily_context(phone: str) -> str:
     # --- Drive times ---
     try:
         from src import drive_times as _dt
+
         dt_text = _dt.get_drive_times()
         lines.append(f"\U0001f697 {dt_text}")
     except Exception as e:
@@ -241,6 +245,7 @@ def get_daily_context(phone: str) -> str:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _format_event(event: dict) -> str:
     """Format a single calendar event dict into a readable string.
@@ -307,9 +312,7 @@ def _infer_childcare(events: list[dict], now: datetime) -> str:
                 start_time = start_dt.strftime("%-I:%M %p")
                 end_time = end_dt.strftime("%-I:%M %p")
                 caregiver = _extract_caregiver(summary)
-                return (
-                    f"With Erin now; {caregiver} from {start_time}\u2013{end_time}"
-                )
+                return f"With Erin now; {caregiver} from {start_time}\u2013{end_time}"
         elif start_raw.get("date"):
             # All-day childcare event — assume active all day
             caregiver = _extract_caregiver(summary)

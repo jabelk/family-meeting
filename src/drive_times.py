@@ -41,6 +41,7 @@ _drive_times: dict[str, dict] = {}
 # File I/O (atomic writes)
 # ---------------------------------------------------------------------------
 
+
 def _load_drive_times() -> None:
     """Load drive times from JSON file into memory."""
     global _drive_times
@@ -70,12 +71,13 @@ def _save_drive_times() -> None:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def _normalize_location(location: str) -> str:
     """Normalize location name: lowercase, strip articles."""
     loc = location.strip().lower()
     for prefix in ("the ", "a ", "an "):
         if loc.startswith(prefix):
-            loc = loc[len(prefix):]
+            loc = loc[len(prefix) :]
     return loc
 
 

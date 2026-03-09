@@ -10,7 +10,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 # Load .env before importing config (which also calls load_dotenv)
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -22,10 +22,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from mcp.server.fastmcp import FastMCP
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive
-from src.tools import anylist_bridge
-from src.assistant import _handle_write_calendar_blocks, _handle_push_grocery_list, generate_daily_plan
+from mcp.server.fastmcp import FastMCP  # noqa: E402
+
+from src.assistant import _handle_push_grocery_list, _handle_write_calendar_blocks, generate_daily_plan  # noqa: E402
+from src.tools import calendar, notion, outlook, proactive, recipes, ynab  # noqa: E402
 
 mcp = FastMCP("family-meeting")
 
@@ -36,19 +36,33 @@ mcp = FastMCP("family-meeting")
 
 @mcp.tool()
 def get_calendar_events(days_ahead: int = 7, calendar_names: list[str] | None = None) -> str:
-    """Fetch upcoming events from Google Calendars (Jason personal, Erin personal, Family shared). Use calendar_names to filter: "jason", "erin", "family"."""
+    """Fetch upcoming events from Google Calendars (Jason personal, Erin personal, Family shared).
+
+    Use calendar_names to filter: "jason", "erin", "family".
+    """
     return calendar.get_calendar_events(days_ahead, calendar_names)
 
 
 @mcp.tool()
 def get_outlook_events(target_date: str = "") -> str:
-    """Fetch Jason's work calendar events (Outlook/Cisco) for a date. Shows meeting times so Erin can plan around his schedule. Date format: YYYY-MM-DD. Defaults to today."""
+    """Fetch Jason's work calendar events (Outlook/Cisco) for a date.
+
+    Shows meeting times so Erin can plan around his schedule.
+    Date format: YYYY-MM-DD. Defaults to today.
+    """
     return outlook.get_outlook_events(target_date)
 
 
 @mcp.tool()
 def write_calendar_blocks(blocks: list[dict]) -> str:
-    """Write time blocks to Erin's Google Calendar. Each block needs: summary (str), start_time (ISO datetime like "2026-02-23T09:30:00-08:00"), end_time (ISO datetime), color_category ("chores", "rest", "development", "exercise", "side_work", or "backlog")."""
+    """Write time blocks to Erin's Google Calendar.
+
+    Each block needs: summary (str),
+    start_time (ISO datetime like "2026-02-23T09:30:00-08:00"),
+    end_time (ISO datetime),
+    color_category ("chores", "rest", "development", "exercise",
+    "side_work", or "backlog").
+    """
     return _handle_write_calendar_blocks(blocks=blocks)
 
 
@@ -59,7 +73,12 @@ def write_calendar_blocks(blocks: list[dict]) -> str:
 
 @mcp.tool()
 def get_action_items(assignee: str = "", status: str = "") -> str:
-    """Query action items from Notion. Filter by assignee ("Jason" or "Erin") and/or status ("open" for all non-done, or a specific status like "Not Started", "In Progress", "Done")."""
+    """Query action items from Notion.
+
+    Filter by assignee ("Jason" or "Erin") and/or status
+    ("open" for all non-done, or a specific status like
+    "Not Started", "In Progress", "Done").
+    """
     return notion.get_action_items(assignee, status)
 
 
@@ -88,13 +107,19 @@ def rollover_incomplete_items() -> str:
 
 @mcp.tool()
 def get_family_profile() -> str:
-    """Read the family profile: member info, dietary preferences, routine templates, childcare schedule, recurring agenda topics, and configuration."""
+    """Read the family profile: member info, dietary preferences, routine templates,
+    childcare schedule, recurring agenda topics, and configuration.
+    """
     return notion.get_family_profile()
 
 
 @mcp.tool()
 def update_family_profile(section: str, content: str) -> str:
-    """Update the family profile with persistent info (preferences, schedule changes, dietary restrictions). Sections: "Preferences", "Recurring Agenda Topics", "Members", "Childcare Schedule", "Routine Templates", "Configuration"."""
+    """Update the family profile with persistent info (preferences, schedule changes, dietary restrictions).
+
+    Sections: "Preferences", "Recurring Agenda Topics", "Members",
+    "Childcare Schedule", "Routine Templates", "Configuration".
+    """
     return notion.update_family_profile(section, content)
 
 
@@ -111,7 +136,10 @@ def add_topic(description: str) -> str:
 
 @mcp.tool()
 def create_meeting(meeting_date: str = "") -> str:
-    """Create a new meeting record in Notion. Returns the meeting page ID. Date format: YYYY-MM-DD. Defaults to today."""
+    """Create a new meeting record in Notion. Returns the meeting page ID.
+
+    Date format: YYYY-MM-DD. Defaults to today.
+    """
     return notion.create_meeting(meeting_date)
 
 
@@ -122,7 +150,11 @@ def create_meeting(meeting_date: str = "") -> str:
 
 @mcp.tool()
 def save_meal_plan(week_start: str, plan_content: str, grocery_list: str) -> str:
-    """Save a weekly meal plan to Notion. week_start is Monday date (YYYY-MM-DD), plan_content is one line per day, grocery_list is items one per line."""
+    """Save a weekly meal plan to Notion.
+
+    week_start is Monday date (YYYY-MM-DD), plan_content is one line per day,
+    grocery_list is items one per line.
+    """
     return notion.save_meal_plan(week_start, plan_content, grocery_list)
 
 
@@ -139,13 +171,25 @@ def get_meal_plan(week_start: str = "") -> str:
 
 @mcp.tool()
 def get_backlog_items(assignee: str = "", status: str = "") -> str:
-    """Query Erin's personal backlog of one-off tasks (home improvement, personal growth, side work). Filter by assignee and/or status ("open" or specific)."""
+    """Query Erin's personal backlog of one-off tasks (home improvement, personal growth, side work).
+
+    Filter by assignee and/or status ("open" or specific).
+    """
     return notion.get_backlog_items(assignee, status)
 
 
 @mcp.tool()
-def add_backlog_item(description: str, category: str = "Other", assignee: str = "Erin", priority: str = "Medium") -> str:
-    """Add a one-off task to the backlog (e.g., "reorganize tupperware", "clean garage"). Categories: "Home Improvement", "Personal Growth", "Side Work", "Exercise", "Other". Priority: "High", "Medium", "Low"."""
+def add_backlog_item(
+    description: str,
+    category: str = "Other",
+    assignee: str = "Erin",
+    priority: str = "Medium",
+) -> str:
+    """Add a one-off task to the backlog (e.g., "reorganize tupperware", "clean garage").
+
+    Categories: "Home Improvement", "Personal Growth", "Side Work",
+    "Exercise", "Other". Priority: "High", "Medium", "Low".
+    """
     return notion.add_backlog_item(description, category, assignee, priority)
 
 
@@ -162,7 +206,11 @@ def complete_backlog_item(page_id: str) -> str:
 
 @mcp.tool()
 def get_routine_templates() -> str:
-    """Read Erin's daily routine templates. Templates define time blocks for scenarios like "Weekday with Zoey" or "Weekday with Grandma". Used for daily plan generation."""
+    """Read Erin's daily routine templates.
+
+    Templates define time blocks for scenarios like "Weekday with Zoey"
+    or "Weekday with Grandma". Used for daily plan generation.
+    """
     return notion.get_routine_templates()
 
 
@@ -173,13 +221,20 @@ def get_routine_templates() -> str:
 
 @mcp.tool()
 def get_grocery_history(category: str = "") -> str:
-    """Get grocery purchase history from past Whole Foods orders. Filter by category: "Produce", "Meat", "Dairy", "Pantry", "Frozen", "Bakery", "Beverages"."""
+    """Get grocery purchase history from past Whole Foods orders.
+
+    Filter by category: "Produce", "Meat", "Dairy", "Pantry",
+    "Frozen", "Bakery", "Beverages".
+    """
     return notion.get_grocery_history(category)
 
 
 @mcp.tool()
 def get_staple_items() -> str:
-    """Get frequently purchased grocery items (staples) sorted by frequency. Suggest these when generating grocery lists."""
+    """Get frequently purchased grocery items (staples) sorted by frequency.
+
+    Suggest these when generating grocery lists.
+    """
     return notion.get_staple_items()
 
 
@@ -190,7 +245,11 @@ def get_staple_items() -> str:
 
 @mcp.tool()
 def get_budget_summary(month: str = "", category: str = "") -> str:
-    """Get YNAB budget summary for a month, optionally filtered to one category. Month format: YYYY-MM-DD (first of month). Defaults to current month. Example categories: "Groceries", "Dining Out"."""
+    """Get YNAB budget summary for a month, optionally filtered to one category.
+
+    Month format: YYYY-MM-DD (first of month). Defaults to current month.
+    Example categories: "Groceries", "Dining Out".
+    """
     return ynab.get_budget_summary(month, category)
 
 
@@ -201,7 +260,11 @@ def get_budget_summary(month: str = "", category: str = "") -> str:
 
 @mcp.tool()
 def push_grocery_list(items: list[str]) -> str:
-    """Push grocery items to AnyList for Whole Foods delivery. Clears the existing list first, then adds new items. Erin opens AnyList -> "Order Pickup or Delivery" -> Whole Foods."""
+    """Push grocery items to AnyList for Whole Foods delivery.
+
+    Clears the existing list first, then adds new items.
+    Erin opens AnyList -> "Order Pickup or Delivery" -> Whole Foods.
+    """
     return _handle_push_grocery_list(items=items)
 
 
@@ -212,14 +275,20 @@ def push_grocery_list(items: list[str]) -> str:
 
 @mcp.tool()
 def extract_and_save_recipe(image_base64: str, mime_type: str, cookbook_name: str = "") -> str:
-    """Extract a recipe from a cookbook photo using AI vision and save to the recipe catalogue. Provide base64-encoded image data, MIME type, and optional cookbook name."""
+    """Extract a recipe from a cookbook photo using AI vision and save to the recipe catalogue.
+
+    Provide base64-encoded image data, MIME type, and optional cookbook name.
+    """
     result = recipes.extract_and_save_recipe(image_base64, mime_type, cookbook_name)
     return str(result)
 
 
 @mcp.tool()
 def search_recipes(query: str = "", cookbook_name: str = "", tags: list[str] | None = None) -> str:
-    """Search the recipe catalogue by name, cookbook, or tags. Returns matching recipes with name, cookbook, prep/cook time, and usage count."""
+    """Search the recipe catalogue by name, cookbook, or tags.
+
+    Returns matching recipes with name, cookbook, prep/cook time, and usage count.
+    """
     result = recipes.search_recipes(query, cookbook_name, tags)
     return str(result)
 
@@ -233,7 +302,11 @@ def get_recipe_details(recipe_id: str) -> str:
 
 @mcp.tool()
 def recipe_to_grocery_list(recipe_id: str, servings_multiplier: float = 1.0) -> str:
-    """Generate a grocery list from a saved recipe. Cross-references against grocery history to show needed vs already-have items. Use servings_multiplier to scale quantities."""
+    """Generate a grocery list from a saved recipe.
+
+    Cross-references against grocery history to show needed vs already-have items.
+    Use servings_multiplier to scale quantities.
+    """
     result = recipes.recipe_to_grocery_list(recipe_id, servings_multiplier)
     return str(result)
 
@@ -252,7 +325,10 @@ def list_cookbooks_tool() -> str:
 
 @mcp.tool()
 def check_reorder_items() -> str:
-    """Check grocery history for staple/regular items due for reorder. Returns items grouped by store with days overdue."""
+    """Check grocery history for staple/regular items due for reorder.
+
+    Returns items grouped by store with days overdue.
+    """
     result = proactive.check_reorder_items()
     return str(result)
 
@@ -273,7 +349,11 @@ def generate_meal_plan_tool() -> str:
 
 @mcp.tool()
 def detect_conflicts(days_ahead: int = 7) -> str:
-    """Detect calendar conflicts across all calendars (Google, Outlook) and family routines. Returns hard conflicts (double-booked) and soft conflicts (overlapping with routines like pickups)."""
+    """Detect calendar conflicts across all calendars (Google, Outlook) and family routines.
+
+    Returns hard conflicts (double-booked) and soft conflicts
+    (overlapping with routines like pickups).
+    """
     result = proactive.detect_conflicts(days_ahead)
     return str(result)
 
@@ -299,7 +379,12 @@ def get_budget_summary_formatted() -> str:
 
 @mcp.tool()
 def generate_daily_plan_tool(target: str = "erin") -> str:
-    """Generate a full daily plan for Erin (or Jason). This triggers an AI-powered planning process that reads routine templates, checks calendars, picks a backlog item, and writes time blocks to Google Calendar. Returns the formatted plan."""
+    """Generate a full daily plan for Erin (or Jason).
+
+    This triggers an AI-powered planning process that reads routine templates,
+    checks calendars, picks a backlog item, and writes time blocks to
+    Google Calendar. Returns the formatted plan.
+    """
     return generate_daily_plan(target)
 
 

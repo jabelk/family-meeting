@@ -257,13 +257,11 @@ def search_transactions(
     for t in txns[:20]:  # Cap at 20
         amt = t["amount"] / 1000
         cat_name = t.get("category_name") or "Uncategorized"
-        lines.append(
-            f"- {t['date']} | {t.get('payee_name', 'Unknown')} | ${abs(amt):,.2f} | {cat_name}"
-        )
+        lines.append(f"- {t['date']} | {t.get('payee_name', 'Unknown')} | ${abs(amt):,.2f} | {cat_name}")
 
     header = f"Found {len(txns)} transaction(s)"
     if len(txns) > 20:
-        header += f" (showing first 20)"
+        header += " (showing first 20)"
     return header + ":\n" + "\n".join(lines)
 
 
@@ -282,10 +280,7 @@ def recategorize_transaction(
         # Suggest available categories
         categories = _get_categories()
         suggestions = [c["name"] for c in list(categories.values())[:10]]
-        return (
-            f"Category '{new_category}' not found. "
-            f"Some available categories: {', '.join(suggestions)}"
-        )
+        return f"Category '{new_category}' not found. Some available categories: {', '.join(suggestions)}"
 
     cat_id, cat_name = cat_match
 
@@ -362,10 +357,7 @@ def create_transaction(
     if not cat_match:
         categories = _get_categories()
         suggestions = [c["name"] for c in list(categories.values())[:10]]
-        return (
-            f"Category '{category}' not found. "
-            f"Some available categories: {', '.join(suggestions)}"
-        )
+        return f"Category '{category}' not found. Some available categories: {', '.join(suggestions)}"
     cat_id, cat_name = cat_match
 
     # Resolve account (default: first non-closed checking account)
@@ -420,8 +412,7 @@ def create_transaction(
         f"- Payee: {payee}\n"
         f"- Amount: ${abs(amount):,.2f}\n"
         f"- Category: {cat_name}\n"
-        f"- Date: {date_str}"
-        + (f"\n- Memo: {memo}" if memo else "")
+        f"- Date: {date_str}" + (f"\n- Memo: {memo}" if memo else "")
     )
 
 
@@ -516,10 +507,7 @@ def move_money(from_category: str = "", to_category: str = "", amount: float = 0
     # Warn if source doesn't have enough
     if from_budgeted < amount_milli:
         available = from_budgeted / 1000
-        return (
-            f"*{from_name}* only has ${available:,.2f} budgeted. "
-            f"Would you like to move ${available:,.2f} instead?"
-        )
+        return f"*{from_name}* only has ${available:,.2f} budgeted. Would you like to move ${available:,.2f} instead?"
 
     # PATCH source (decrease)
     patch_from = httpx.patch(
@@ -577,12 +565,7 @@ def get_budget_summary(month: str = "", category: str = "") -> str:
             budgeted = cat["budgeted"] / 1000
             spent = abs(cat["activity"]) / 1000
             balance = cat["balance"] / 1000
-            return (
-                f"*{cat['name']}*\n"
-                f"Budgeted: ${budgeted:,.2f}\n"
-                f"Spent: ${spent:,.2f}\n"
-                f"Remaining: ${balance:,.2f}"
-            )
+            return f"*{cat['name']}*\nBudgeted: ${budgeted:,.2f}\nSpent: ${spent:,.2f}\nRemaining: ${balance:,.2f}"
 
         # Full summary
         over_budget = []
@@ -666,11 +649,13 @@ def split_transaction(transaction_id: str, subtransactions: list[dict]) -> str:
     # Build YNAB subtransactions format
     ynab_subs = []
     for sub in subtransactions:
-        ynab_subs.append({
-            "amount": sub["amount_milliunits"],
-            "category_id": sub["category_id"],
-            "memo": sub.get("memo", ""),
-        })
+        ynab_subs.append(
+            {
+                "amount": sub["amount_milliunits"],
+                "category_id": sub["category_id"],
+                "memo": sub.get("memo", ""),
+            }
+        )
 
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{transaction_id}"
     try:
@@ -746,6 +731,7 @@ def delete_transaction(transaction_id: str) -> str:
 # Proactive insight functions (called by budget scan endpoint)
 # ---------------------------------------------------------------------------
 
+
 def check_overspend_warnings() -> list:
     """Check for categories >80% spent before the 20th of the month.
 
@@ -773,14 +759,17 @@ def check_overspend_warnings() -> list:
         percent_used = (activity / budgeted) * 100
         if percent_used > 80:
             import calendar as cal_mod
+
             _, days_in_month = cal_mod.monthrange(today.year, today.month)
-            warnings.append({
-                "category_name": cat["name"],
-                "spent": activity / 1000,
-                "budgeted": budgeted / 1000,
-                "percent_used": round(percent_used, 1),
-                "days_remaining": days_in_month - today.day,
-            })
+            warnings.append(
+                {
+                    "category_name": cat["name"],
+                    "spent": activity / 1000,
+                    "budgeted": budgeted / 1000,
+                    "percent_used": round(percent_used, 1),
+                    "days_remaining": days_in_month - today.day,
+                }
+            )
 
     return warnings
 
@@ -861,12 +850,14 @@ def check_spending_anomalies() -> list:
         if name in history and len(history[name]) >= 2 and current > 0:
             avg = sum(history[name]) / len(history[name])
             if avg > 0 and current > avg * 1.5:
-                anomalies.append({
-                    "category_name": name,
-                    "current_amount": round(current, 2),
-                    "average_amount": round(avg, 2),
-                    "percent_above": round(((current - avg) / avg) * 100, 1),
-                })
+                anomalies.append(
+                    {
+                        "category_name": name,
+                        "current_amount": round(current, 2),
+                        "average_amount": round(avg, 2),
+                        "percent_above": round(((current - avg) / avg) * 100, 1),
+                    }
+                )
 
     return anomalies
 
@@ -878,6 +869,7 @@ def check_savings_goals() -> list:
     """
     today = date.today()
     import calendar as cal_mod
+
     _, days_in_month = cal_mod.monthrange(today.year, today.month)
     expected_progress = (today.day / days_in_month) * 100
 
@@ -897,14 +889,16 @@ def check_savings_goals() -> list:
 
         # Behind by more than 15 percentage points
         if pct_complete < (expected_progress - 15) and target > 0:
-            gaps.append({
-                "category_name": cat["name"],
-                "goal_target": target,
-                "funded": funded,
-                "shortfall": round(target - funded, 2),
-                "percent_complete": pct_complete,
-                "expected_percent": round(expected_progress, 1),
-            })
+            gaps.append(
+                {
+                    "category_name": cat["name"],
+                    "goal_target": target,
+                    "funded": funded,
+                    "shortfall": round(target - funded, 2),
+                    "percent_complete": pct_complete,
+                    "expected_percent": round(expected_progress, 1),
+                }
+            )
 
     return gaps
 
@@ -932,25 +926,25 @@ def _fetch_month_data(month: str) -> list[dict]:
     for cat in categories:
         if cat.get("hidden") or cat.get("deleted"):
             continue
-        result.append({
-            "id": cat["id"],
-            "name": cat["name"],
-            "group": cat.get("category_group_name", ""),
-            "budgeted": cat["budgeted"] / 1000,
-            "activity": cat["activity"] / 1000,
-            "balance": cat["balance"] / 1000,
-            "goal_type": cat.get("goal_type"),
-            "goal_target": (cat.get("goal_target") or 0) / 1000,
-            "goal_percentage_complete": cat.get("goal_percentage_complete"),
-            "goal_overall_funded": (cat.get("goal_overall_funded") or 0) / 1000,
-            "goal_under_funded": (cat.get("goal_under_funded") or 0) / 1000,
-        })
+        result.append(
+            {
+                "id": cat["id"],
+                "name": cat["name"],
+                "group": cat.get("category_group_name", ""),
+                "budgeted": cat["budgeted"] / 1000,
+                "activity": cat["activity"] / 1000,
+                "balance": cat["balance"] / 1000,
+                "goal_type": cat.get("goal_type"),
+                "goal_target": (cat.get("goal_target") or 0) / 1000,
+                "goal_percentage_complete": cat.get("goal_percentage_complete"),
+                "goal_overall_funded": (cat.get("goal_overall_funded") or 0) / 1000,
+                "goal_under_funded": (cat.get("goal_under_funded") or 0) / 1000,
+            }
+        )
     return result
 
 
-def _build_category_profiles(
-    lookback_months: int = 3, drift_threshold: float = 30
-) -> list[dict]:
+def _build_category_profiles(lookback_months: int = 3, drift_threshold: float = 30) -> list[dict]:
     """Compute CategoryHealthProfile for all categories over the lookback window.
 
     Returns list of profile dicts with drift analysis, trend, sinking fund detection, etc.
@@ -1025,14 +1019,8 @@ def _build_category_profiles(
         # Trend detection (requires 2+ months)
         trend = "stable"
         if len(spending_months) >= 2:
-            increasing = all(
-                spending_months[i] >= spending_months[i + 1]
-                for i in range(len(spending_months) - 1)
-            )
-            decreasing = all(
-                spending_months[i] <= spending_months[i + 1]
-                for i in range(len(spending_months) - 1)
-            )
+            increasing = all(spending_months[i] >= spending_months[i + 1] for i in range(len(spending_months) - 1))
+            decreasing = all(spending_months[i] <= spending_months[i + 1] for i in range(len(spending_months) - 1))
             if increasing and spending_months[0] > spending_months[-1]:
                 trend = "increasing"
             elif decreasing and spending_months[0] < spending_months[-1]:
@@ -1069,24 +1057,26 @@ def _build_category_profiles(
         # Insufficient data flag (analyze fix F4)
         is_insufficient_data = len(spending_months) < 2
 
-        profiles.append({
-            "id": cid,
-            "name": hist["name"],
-            "group": hist["group"],
-            "goal_type": goal_type,
-            "goal_target": goal_target,
-            "budgeted_avg": round(budgeted_avg, 2),
-            "spending_avg": round(spending_avg, 2),
-            "spending_months": spending_months,
-            "drift_pct": round(drift_pct, 1),
-            "drift_type": drift_type,
-            "trend": trend,
-            "is_sinking_fund": is_sinking_fund,
-            "is_spiky": is_spiky,
-            "months_since_last_txn": months_since_last_txn,
-            "is_stale": is_stale,
-            "is_insufficient_data": is_insufficient_data,
-        })
+        profiles.append(
+            {
+                "id": cid,
+                "name": hist["name"],
+                "group": hist["group"],
+                "goal_type": goal_type,
+                "goal_target": goal_target,
+                "budgeted_avg": round(budgeted_avg, 2),
+                "spending_avg": round(spending_avg, 2),
+                "spending_months": spending_months,
+                "drift_pct": round(drift_pct, 1),
+                "drift_type": drift_type,
+                "trend": trend,
+                "is_sinking_fund": is_sinking_fund,
+                "is_spiky": is_spiky,
+                "months_since_last_txn": months_since_last_txn,
+                "is_stale": is_stale,
+                "is_insufficient_data": is_insufficient_data,
+            }
+        )
 
     return profiles
 
@@ -1170,8 +1160,7 @@ def _format_health_report(
             drift = s["drift_pct"]
             if s["spending_avg"] == 0:
                 lines.append(
-                    f"{i}. {s['category_name']}: ${s['current_goal']:,.0f} goal \u2192 "
-                    f"$0 avg \u2014 suggest removing"
+                    f"{i}. {s['category_name']}: ${s['current_goal']:,.0f} goal \u2192 $0 avg \u2014 suggest removing"
                 )
             else:
                 lines.append(
@@ -1204,9 +1193,7 @@ def _format_health_report(
         names = ", ".join(p["name"] for p in insufficient[:5])
         lines.append(f"\u2139\ufe0f Insufficient data (<2 months): {names}\n")
 
-    lines.append(
-        'Reply "update all", "yes to 1", "skip 3", or "set 2 to $2000"'
-    )
+    lines.append('Reply "update all", "yes to 1", "skip 3", or "set 2 to $2000"')
 
     result = "\n".join(lines)
     # Truncate for WhatsApp limit
@@ -1215,9 +1202,7 @@ def _format_health_report(
     return result
 
 
-def budget_health_check(
-    lookback_months: int = 3, drift_threshold: float = 30
-) -> str:
+def budget_health_check(lookback_months: int = 3, drift_threshold: float = 30) -> str:
     """Full budget health check — drift detection, suggestions, and formatted report.
 
     Returns formatted WhatsApp message and saves suggestions for follow-up.
@@ -1246,17 +1231,19 @@ def budget_health_check(
             if recommended == 0:
                 recommended = 25
 
-        suggestions.append({
-            "category_id": p["id"],
-            "category_name": p["name"],
-            "current_goal": p["goal_target"],
-            "recommended_goal": recommended,
-            "spending_avg": p["spending_avg"],
-            "drift_pct": p["drift_pct"],
-            "drift_type": p["drift_type"],
-            "has_existing_goal": p["goal_type"] is not None,
-            "status": "pending",
-        })
+        suggestions.append(
+            {
+                "category_id": p["id"],
+                "category_name": p["name"],
+                "current_goal": p["goal_target"],
+                "recommended_goal": recommended,
+                "spending_avg": p["spending_avg"],
+                "drift_pct": p["drift_pct"],
+                "drift_type": p["drift_type"],
+                "has_existing_goal": p["goal_type"] is not None,
+                "status": "pending",
+            }
+        )
 
     # Save suggestions for follow-up approval
     _save_pending_suggestions(suggestions)
@@ -1265,10 +1252,7 @@ def budget_health_check(
 
     # Append stale/merge sections if applicable (T024)
     stale_profiles = [p for p in profiles if p.get("is_stale")]
-    sinking_profiles = [
-        p for p in profiles
-        if p.get("is_sinking_fund") and p["months_since_last_txn"] >= 3
-    ]
+    sinking_profiles = [p for p in profiles if p.get("is_sinking_fund") and p["months_since_last_txn"] >= 3]
     merge_candidates = _detect_merge_candidates(profiles)
 
     if stale_profiles or merge_candidates:
@@ -1294,9 +1278,7 @@ PROTECTED_CATEGORIES = {
 MAX_AUTO_REDUCTION_PCT = 75
 
 
-def apply_goal_suggestion(
-    category: str = "", amount: float = 0, apply_all: bool = False
-) -> str:
+def apply_goal_suggestion(category: str = "", amount: float = 0, apply_all: bool = False) -> str:
     """Apply a goal suggestion from a budget health check.
 
     Can apply a single suggestion by category name, or all pending suggestions at once.
@@ -1323,21 +1305,20 @@ def apply_goal_suggestion(
 
             # Guard: skip protected categories
             if s["category_name"].lower() in PROTECTED_CATEGORIES:
-                protected.append(
-                    f"🛡️ {s['category_name']}: ${s['current_goal']:,.0f} (protected — update individually)"
-                )
+                protected.append(f"🛡️ {s['category_name']}: ${s['current_goal']:,.0f} (protected — update individually)")
                 continue
 
             # Guard: skip large reductions (>75% decrease)
             if (
                 s["current_goal"] > 0
                 and s["recommended_goal"] < s["current_goal"]
-                and (s["current_goal"] - s["recommended_goal"]) / s["current_goal"] * 100
-                > MAX_AUTO_REDUCTION_PCT
+                and (s["current_goal"] - s["recommended_goal"]) / s["current_goal"] * 100 > MAX_AUTO_REDUCTION_PCT
             ):
+                reduction_pct = (s["current_goal"] - s["recommended_goal"]) / s["current_goal"] * 100
                 large_change.append(
-                    f"⚠️ {s['category_name']}: ${s['current_goal']:,.0f} → ${s['recommended_goal']:,.0f} "
-                    f"({(s['current_goal'] - s['recommended_goal']) / s['current_goal'] * 100:.0f}% cut — review individually)"
+                    f"⚠️ {s['category_name']}: "
+                    f"${s['current_goal']:,.0f} → ${s['recommended_goal']:,.0f} "
+                    f"({reduction_pct:.0f}% cut — review individually)"
                 )
                 continue
 
@@ -1387,7 +1368,7 @@ def apply_goal_suggestion(
     if not matched["has_existing_goal"]:
         return (
             f"\u26a0\ufe0f {matched['category_name']} doesn't have a goal set in YNAB yet. "
-            f"Please open YNAB and add a \"Monthly Savings Builder\" or \"Plan Your Spending\" "
+            f'Please open YNAB and add a "Monthly Savings Builder" or "Plan Your Spending" '
             f"goal to the {matched['category_name']} category, then I can set the target "
             f"to ${matched['recommended_goal']:,.0f}."
         )
@@ -1407,7 +1388,10 @@ def apply_goal_suggestion(
         remaining = sum(1 for s in suggestions if s["status"] == "pending")
         msg = f"\u2705 Updated {matched['category_name']} goal: ${old_goal:,.0f} \u2192 ${target:,.0f}"
         if remaining > 0:
-            msg += f"\n{remaining} suggestion{'s' if remaining != 1 else ''} remaining. Reply \"update all\" or continue individually."
+            msg += (
+                f"\n{remaining} suggestion{'s' if remaining != 1 else ''} remaining. "
+                f'Reply "update all" or continue individually.'
+            )
         else:
             msg += "\nAll suggestions processed!"
         return msg
@@ -1427,14 +1411,40 @@ def _classify_priority_tiers(profiles: list[dict]) -> list[dict]:
     Essential > Savings > Discretionary.
     """
     essential_keywords = {
-        "bills", "mortgage", "insurance", "utilities", "healthcare", "health",
-        "food", "groceries", "car", "auto", "kids", "childcare", "rent",
-        "housing", "medical", "pharmacy", "gas", "fuel", "education",
-        "fixed", "immediate", "obligations",
+        "bills",
+        "mortgage",
+        "insurance",
+        "utilities",
+        "healthcare",
+        "health",
+        "food",
+        "groceries",
+        "car",
+        "auto",
+        "kids",
+        "childcare",
+        "rent",
+        "housing",
+        "medical",
+        "pharmacy",
+        "gas",
+        "fuel",
+        "education",
+        "fixed",
+        "immediate",
+        "obligations",
     }
     savings_keywords = {
-        "savings", "emergency", "fund", "debt", "investment", "retirement",
-        "sinking", "rainy", "college", "529",
+        "savings",
+        "emergency",
+        "fund",
+        "debt",
+        "investment",
+        "retirement",
+        "sinking",
+        "rainy",
+        "college",
+        "529",
     }
 
     for p in profiles:
@@ -1507,14 +1517,16 @@ def allocate_bonus(amount: float = 0, description: str = "") -> str:
         shortfall = p["goal_target"] - p["budgeted_avg"]
         if shortfall <= 0:
             continue
-        shortfalls.append({
-            "category_id": p["id"],
-            "category_name": p["name"],
-            "priority_tier": p["priority_tier"],
-            "current_shortfall": round(shortfall, 2),
-            "goal_target": p["goal_target"],
-            "budgeted": p["budgeted_avg"],
-        })
+        shortfalls.append(
+            {
+                "category_id": p["id"],
+                "category_name": p["name"],
+                "priority_tier": p["priority_tier"],
+                "current_shortfall": round(shortfall, 2),
+                "goal_target": p["goal_target"],
+                "budgeted": p["budgeted_avg"],
+            }
+        )
 
     # Sort by tier priority then shortfall amount
     tier_priority = {"essential": 0, "savings": 1, "discretionary": 2}
@@ -1527,15 +1539,18 @@ def allocate_bonus(amount: float = 0, description: str = "") -> str:
         if remaining <= 0:
             break
         alloc = min(remaining, s["current_shortfall"])
-        allocations.append({
-            "category_id": s["category_id"],
-            "category_name": s["category_name"],
-            "priority_tier": s["priority_tier"],
-            "current_shortfall": s["current_shortfall"],
-            "allocated_amount": round(alloc, 2),
-            "rationale": f"was ${s['current_shortfall']:,.0f} underfunded" if alloc >= s["current_shortfall"]
+        allocations.append(
+            {
+                "category_id": s["category_id"],
+                "category_name": s["category_name"],
+                "priority_tier": s["priority_tier"],
+                "current_shortfall": s["current_shortfall"],
+                "allocated_amount": round(alloc, 2),
+                "rationale": f"was ${s['current_shortfall']:,.0f} underfunded"
+                if alloc >= s["current_shortfall"]
                 else f"${s['current_shortfall']:,.0f} underfunded, partial fill",
-        })
+            }
+        )
         remaining -= alloc
 
     # If there's remaining money after filling all shortfalls, put it in the
@@ -1547,14 +1562,16 @@ def allocate_bonus(amount: float = 0, description: str = "") -> str:
         # No shortfalls — suggest putting it all in first available category
         if profiles:
             first = profiles[0]
-            allocations.append({
-                "category_id": first["id"],
-                "category_name": first["name"],
-                "priority_tier": first.get("priority_tier", "discretionary"),
-                "current_shortfall": 0,
-                "allocated_amount": round(amount, 2),
-                "rationale": "all categories funded — extra allocation",
-            })
+            allocations.append(
+                {
+                    "category_id": first["id"],
+                    "category_name": first["name"],
+                    "priority_tier": first.get("priority_tier", "discretionary"),
+                    "current_shortfall": 0,
+                    "allocated_amount": round(amount, 2),
+                    "rationale": "all categories funded — extra allocation",
+                }
+            )
 
     plan = {
         "total_amount": amount,
@@ -1579,7 +1596,7 @@ def approve_allocation(adjustments: str = "") -> str:
     # If adjustments provided, regenerate with modifications
     if adjustments:
         return (
-            f"Adjustment noted: \"{adjustments}\". "
+            f'Adjustment noted: "{adjustments}". '
             f"Please re-run with a specific amount, e.g., 'allocate $5000 bonus' "
             f"and I'll incorporate your preferences."
         )
@@ -1591,7 +1608,7 @@ def approve_allocation(adjustments: str = "") -> str:
         if alloc["allocated_amount"] <= 0:
             continue
         try:
-            result = update_category_budget(alloc["category_name"], alloc["allocated_amount"])
+            update_category_budget(alloc["category_name"], alloc["allocated_amount"])
             results.append(f"\u2705 {alloc['category_name']}: +${alloc['allocated_amount']:,.0f}")
             success_count += 1
         except Exception as e:
@@ -1600,7 +1617,7 @@ def approve_allocation(adjustments: str = "") -> str:
     plan["status"] = "executed"
     _save_pending_allocation(plan)
 
-    msg = f"\u2705 Bonus allocated!\n" + "\n".join(results)
+    msg = "\u2705 Bonus allocated!\n" + "\n".join(results)
     msg += f"\n\nAll money assigned. {success_count} categories updated."
     return msg
 
@@ -1661,7 +1678,7 @@ def _detect_merge_candidates(profiles: list[dict]) -> list[dict]:
 
     # Check pairs for name similarity or same group with low combined spending
     for i, a in enumerate(low_spend):
-        for b in low_spend[i + 1:]:
+        for b in low_spend[i + 1 :]:
             # Name similarity: shared non-stop word
             a_words = set(a["name"].lower().split()) - STOP_WORDS
             b_words = set(b["name"].lower().split()) - STOP_WORDS
@@ -1674,12 +1691,16 @@ def _detect_merge_candidates(profiles: list[dict]) -> list[dict]:
                 combined = a["spending_avg"] + b["spending_avg"]
                 # Pick shorter name or the group name as suggested name
                 suggested = a["group"] if same_group else a["name"].split()[0]
-                candidates.append({
-                    "categories": [a["name"], b["name"]],
-                    "combined_avg_spending": round(combined, 2),
-                    "rationale": "similar names" if name_overlap else f"same group ({a['group']}), low combined spend",
-                    "suggested_name": suggested,
-                })
+                candidates.append(
+                    {
+                        "categories": [a["name"], b["name"]],
+                        "combined_avg_spending": round(combined, 2),
+                        "rationale": "similar names"
+                        if name_overlap
+                        else f"same group ({a['group']}), low combined spend",
+                        "suggested_name": suggested,
+                    }
+                )
 
     return candidates
 
@@ -1698,8 +1719,7 @@ def _format_cleanup_report(
         for p in stale_profiles:
             goal_str = f"${p['goal_target']:,.0f} goal, " if p["goal_target"] > 0 else ""
             lines.append(
-                f"{num}. {p['name']} \u2014 {goal_str}$0 spent \u00d7 "
-                f"{p['months_since_last_txn']} months. Remove goal?"
+                f"{num}. {p['name']} \u2014 {goal_str}$0 spent \u00d7 {p['months_since_last_txn']} months. Remove goal?"
             )
             num += 1
         lines.append("")
@@ -1715,8 +1735,7 @@ def _format_cleanup_report(
         for mc in merge_candidates:
             names = " + ".join(mc["categories"])
             lines.append(
-                f"{num}. {names} \u2192 \"{mc['suggested_name']}\" "
-                f"(${mc['combined_avg_spending']:,.0f}/mo combined)"
+                f'{num}. {names} \u2192 "{mc["suggested_name"]}" (${mc["combined_avg_spending"]:,.0f}/mo combined)'
             )
             num += 1
         lines.append("")

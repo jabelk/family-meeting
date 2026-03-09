@@ -46,6 +46,7 @@ _preferences: dict[str, dict] = {}
 # File I/O (atomic writes)
 # ---------------------------------------------------------------------------
 
+
 def _load_preferences() -> None:
     """Load preferences from JSON file into memory."""
     global _preferences
@@ -75,6 +76,7 @@ def _save_preferences() -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def get_preferences(phone: str) -> list[dict]:
     """Return all active preferences for a phone number.
@@ -106,9 +108,33 @@ def add_preference(phone: str, category: str, description: str, raw_text: str) -
     prefs = _preferences[phone]["preferences"]
 
     # Check for duplicate/conflicting preference — same category + overlapping description
-    _stop_words = {"no", "not", "don't", "dont", "the", "a", "an", "me", "my", "i",
-                   "about", "from", "for", "in", "of", "to", "unless", "asked", "again",
-                   "start", "stop", "remind", "reminders", "preference", "preferences"}
+    _stop_words = {
+        "no",
+        "not",
+        "don't",
+        "dont",
+        "the",
+        "a",
+        "an",
+        "me",
+        "my",
+        "i",
+        "about",
+        "from",
+        "for",
+        "in",
+        "of",
+        "to",
+        "unless",
+        "asked",
+        "again",
+        "start",
+        "stop",
+        "remind",
+        "reminders",
+        "preference",
+        "preferences",
+    }
     description_lower = description.lower()
     for i, existing in enumerate(prefs):
         if existing.get("category") == category:
@@ -215,7 +241,9 @@ def remove_preference_by_description(phone: str, search_text: str) -> bool:
         _save_preferences()
         logger.info(
             "Removed preference by description for %s: '%s' (search: '%s')",
-            phone, removed.get("description"), search_text,
+            phone,
+            removed.get("description"),
+            search_text,
         )
         return True
 

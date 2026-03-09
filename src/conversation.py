@@ -41,6 +41,7 @@ _conversations: dict[str, dict] = {}
 # File I/O (atomic writes)
 # ---------------------------------------------------------------------------
 
+
 def _load_conversations() -> None:
     """Load conversations from JSON file into memory."""
     global _conversations
@@ -70,6 +71,7 @@ def _save_conversations() -> None:
 # Serialization helpers
 # ---------------------------------------------------------------------------
 
+
 def _serialize_message(msg: dict) -> dict:
     """Serialize a single message for JSON storage.
 
@@ -92,17 +94,17 @@ def _serialize_message(msg: dict) -> dict:
         for block in content:
             # Anthropic SDK object (TextBlock, ToolUseBlock) — has model_dump
             if hasattr(block, "model_dump"):
-                serialized_blocks.append(
-                    block.model_dump(mode="json", exclude_unset=True)
-                )
+                serialized_blocks.append(block.model_dump(mode="json", exclude_unset=True))
             # Dict with base64 image — replace with placeholder
             elif isinstance(block, dict) and block.get("type") == "image":
                 source = block.get("source", {})
                 if source.get("type") == "base64":
-                    serialized_blocks.append({
-                        "type": "text",
-                        "text": "[Image sent: photo]",
-                    })
+                    serialized_blocks.append(
+                        {
+                            "type": "text",
+                            "text": "[Image sent: photo]",
+                        }
+                    )
                 else:
                     serialized_blocks.append(block)
             # Plain dict (tool_result, text block dict, etc.) — pass through
@@ -110,10 +112,12 @@ def _serialize_message(msg: dict) -> dict:
                 serialized_blocks.append(block)
             else:
                 # Unknown type — convert to string as fallback
-                serialized_blocks.append({
-                    "type": "text",
-                    "text": str(block),
-                })
+                serialized_blocks.append(
+                    {
+                        "type": "text",
+                        "text": str(block),
+                    }
+                )
         return {"role": role, "content": serialized_blocks}
 
     # Fallback — return as-is
@@ -123,6 +127,7 @@ def _serialize_message(msg: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def get_history(phone: str) -> list[dict]:
     """Return conversation history for a phone number as a flat messages list.
@@ -140,7 +145,8 @@ def get_history(phone: str) -> list[dict]:
     cutoff = timedelta(seconds=CONVERSATION_TIMEOUT)
     original_count = len(conv.get("turns", []))
     conv["turns"] = [
-        turn for turn in conv.get("turns", [])
+        turn
+        for turn in conv.get("turns", [])
         if not turn.get("timestamp") or (now - datetime.fromisoformat(turn["timestamp"])) <= cutoff
     ]
     pruned = original_count - len(conv["turns"])

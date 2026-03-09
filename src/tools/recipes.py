@@ -2,19 +2,17 @@
 
 import json
 import logging
-from io import BytesIO
 
 import boto3
 from anthropic import Anthropic
 
 from src.config import (
     ANTHROPIC_API_KEY,
-    R2_ACCOUNT_ID,
-    R2_ACCESS_KEY_ID,
-    R2_SECRET_ACCESS_KEY,
-    R2_BUCKET_NAME,
-    NOTION_RECIPES_DB,
     NOTION_GROCERY_HISTORY_DB,
+    R2_ACCESS_KEY_ID,
+    R2_ACCOUNT_ID,
+    R2_BUCKET_NAME,
+    R2_SECRET_ACCESS_KEY,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,7 +31,9 @@ def _get_r2_client():
     global _r2_client
     if _r2_client is None:
         if not R2_ACCOUNT_ID or not R2_ACCESS_KEY_ID:
-            raise RuntimeError("R2 credentials not configured — set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in .env")
+            raise RuntimeError(
+                "R2 credentials not configured — set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in .env"
+            )
         _r2_client = boto3.client(
             "s3",
             endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
@@ -74,6 +74,7 @@ def upload_photo(image_bytes: bytes, recipe_id: str, mime_type: str) -> str:
 # Recipe Extraction via Claude Vision (T016)
 # ---------------------------------------------------------------------------
 
+
 def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict:
     """Extract a recipe from cookbook photo(s) using Claude vision and save to Notion.
 
@@ -85,11 +86,14 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
     Returns:
         Dict with recipe details and save status.
     """
+    import base64
+
     from src.tools.notion import (
-        create_recipe, get_cookbook_by_name, create_cookbook,
+        create_cookbook,
+        create_recipe,
+        get_cookbook_by_name,
         search_recipes_by_title,
     )
-    import base64
 
     cookbook_name = cookbook_name.strip() or "Uncategorized"
 
@@ -110,19 +114,22 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
     else:
         extraction_prompt += "- If two recipes are visible, extract both as a JSON array\n"
     extraction_prompt += (
-        "- If the image is NOT a recipe, return: {\"error\": \"not_a_recipe\"}\n"
+        '- If the image is NOT a recipe, return: {"error": "not_a_recipe"}\n'
         "- For ingredients, always include name; quantity and unit can be empty strings if not specified\n"
-        "- Tags should be from: Keto, Kid-Friendly, Quick (<30min), Vegetarian, Comfort Food, Soup, Salad, Pasta, Meat, Seafood\n"
+        "- Tags should be from: Keto, Kid-Friendly, Quick (<30min), Vegetarian, "
+        "Comfort Food, Soup, Salad, Pasta, Meat, Seafood\n"
         "- Cuisine should be: American, Mexican, Italian, Asian, Mediterranean, or Other"
     )
 
     # Build content blocks: one image block per page, then the text prompt
     content_blocks = []
     for img in images:
-        content_blocks.append({
-            "type": "image",
-            "source": {"type": "base64", "media_type": img["mime_type"], "data": img["base64"]},
-        })
+        content_blocks.append(
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": img["mime_type"], "data": img["base64"]},
+            }
+        )
     content_blocks.append({"type": "text", "text": extraction_prompt})
 
     response = client.messages.create(
@@ -147,7 +154,11 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
 
     # Handle "not a recipe" response
     if isinstance(extracted, dict) and extracted.get("error") == "not_a_recipe":
-        return {"success": False, "error": "not_a_recipe", "message": "That doesn't look like a recipe — did you mean to save a recipe?"}
+        return {
+            "success": False,
+            "error": "not_a_recipe",
+            "message": "That doesn't look like a recipe — did you mean to save a recipe?",
+        }
 
     # Handle multiple recipes on one page
     recipes_to_save = extracted if isinstance(extracted, list) else [extracted]
@@ -166,7 +177,11 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
                     "existing_id": ex["id"],
                     "name": name,
                     "cookbook": cookbook_name,
-                    "message": f"A recipe called '{name}' already exists in '{cookbook_name}'. Would you like to update the existing recipe or save as a new version?",
+                    "message": (
+                        f"A recipe called '{name}' already exists in "
+                        f"'{cookbook_name}'. Would you like to update the "
+                        f"existing recipe or save as a new version?"
+                    ),
                 }
 
         # Step 3: Find or create cookbook
@@ -199,6 +214,7 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
             image_bytes = base64.b64decode(first_img["base64"])
             photo_url = upload_photo(image_bytes, page_id, first_img["mime_type"])
             from src.tools.notion import update_recipe
+
             update_recipe(page_id, {"Photo URL": {"url": photo_url}})
         except Exception as e:
             logger.warning("Failed to upload photo to R2: %s", e)
@@ -213,17 +229,19 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
             if "[unclear]" in ing.get("name", ""):
                 unclear.append(f"Ingredient: {ing['name']}")
 
-        saved_recipes.append({
-            "name": name,
-            "cookbook": cookbook_name,
-            "ingredients_count": len(recipe_data.get("ingredients", [])),
-            "prep_time": recipe_data.get("prep_time"),
-            "cook_time": recipe_data.get("cook_time"),
-            "servings": recipe_data.get("servings"),
-            "unclear_portions": unclear,
-            "notion_page_id": page_id,
-            "photo_url": photo_url,
-        })
+        saved_recipes.append(
+            {
+                "name": name,
+                "cookbook": cookbook_name,
+                "ingredients_count": len(recipe_data.get("ingredients", [])),
+                "prep_time": recipe_data.get("prep_time"),
+                "cook_time": recipe_data.get("cook_time"),
+                "servings": recipe_data.get("servings"),
+                "unclear_portions": unclear,
+                "notion_page_id": page_id,
+                "photo_url": photo_url,
+            }
+        )
 
     if len(saved_recipes) == 1:
         return {"success": True, "recipe": saved_recipes[0]}
@@ -234,12 +252,13 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
 # Recipe Search (T017)
 # ---------------------------------------------------------------------------
 
+
 def search_recipes(query: str, cookbook_name: str = "", tags: list[str] | None = None) -> dict:
     """Search the recipe catalogue by name, ingredient, cookbook, or description.
 
     Uses Notion DB query with filters built from the search terms.
     """
-    from src.tools.notion import search_recipes_by_title, get_cookbook_by_name, NOTION_RECIPES_DB
+    from src.tools.notion import NOTION_RECIPES_DB, get_cookbook_by_name
     from src.tools.notion import notion as notion_client
 
     if not NOTION_RECIPES_DB:
@@ -271,18 +290,21 @@ def search_recipes(query: str, cookbook_name: str = "", tags: list[str] | None =
     recipes = []
     for page in results["results"]:
         props = page["properties"]
-        from src.tools.notion import _get_title, _get_select
+        from src.tools.notion import _get_title
+
         cookbook_rel = props.get("Cookbook", {}).get("relation", [])
-        recipes.append({
-            "name": _get_title(props.get("Name", {})),
-            "cookbook": cookbook_rel[0]["id"] if cookbook_rel else "",
-            "tags": [opt["name"] for opt in props.get("Tags", {}).get("multi_select", [])],
-            "prep_time": props.get("Prep Time", {}).get("number"),
-            "cook_time": props.get("Cook Time", {}).get("number"),
-            "servings": props.get("Servings", {}).get("number"),
-            "times_used": props.get("Times Used", {}).get("number", 0),
-            "notion_page_id": page["id"],
-        })
+        recipes.append(
+            {
+                "name": _get_title(props.get("Name", {})),
+                "cookbook": cookbook_rel[0]["id"] if cookbook_rel else "",
+                "tags": [opt["name"] for opt in props.get("Tags", {}).get("multi_select", [])],
+                "prep_time": props.get("Prep Time", {}).get("number"),
+                "cook_time": props.get("Cook Time", {}).get("number"),
+                "servings": props.get("Servings", {}).get("number"),
+                "times_used": props.get("Times Used", {}).get("number", 0),
+                "notion_page_id": page["id"],
+            }
+        )
 
     return {"results": recipes[:10], "total": len(recipes)}
 
@@ -291,9 +313,11 @@ def search_recipes(query: str, cookbook_name: str = "", tags: list[str] | None =
 # Recipe Details (T018)
 # ---------------------------------------------------------------------------
 
+
 def get_recipe_details(recipe_id: str) -> dict:
     """Get full recipe details including ingredients and instructions."""
-    from src.tools.notion import notion as notion_client, _get_title, _get_select
+    from src.tools.notion import _get_select, _get_title
+    from src.tools.notion import notion as notion_client
 
     page = notion_client.pages.retrieve(page_id=recipe_id)
     props = page["properties"]
@@ -332,15 +356,18 @@ def get_recipe_details(recipe_id: str) -> dict:
 # List Cookbooks (T019)
 # ---------------------------------------------------------------------------
 
+
 def list_cookbooks() -> dict:
     """List all cookbooks with recipe counts."""
     from src.tools.notion import list_cookbooks as notion_list_cookbooks
+
     return notion_list_cookbooks()
 
 
 # ---------------------------------------------------------------------------
 # Recipe → Grocery List (T020)
 # ---------------------------------------------------------------------------
+
 
 def recipe_to_grocery_list(recipe_id: str, servings_multiplier: float = 1.0) -> dict:
     """Generate a grocery list from a recipe, deducting recently ordered items.
@@ -350,7 +377,8 @@ def recipe_to_grocery_list(recipe_id: str, servings_multiplier: float = 1.0) -> 
     - already_have: ordered within 50% of avg reorder interval
     - unknown: not found in grocery history (added as-is)
     """
-    from src.tools.notion import notion as notion_client, _get_title
+    from src.tools.notion import _get_title
+    from src.tools.notion import notion as notion_client
 
     details = get_recipe_details(recipe_id)
     ingredients = details.get("ingredients", [])
@@ -383,6 +411,7 @@ def recipe_to_grocery_list(recipe_id: str, servings_multiplier: float = 1.0) -> 
             logger.warning("Failed to load grocery history: %s", e)
 
     from datetime import date
+
     today = date.today()
 
     for ing in ingredients:
@@ -412,10 +441,12 @@ def recipe_to_grocery_list(recipe_id: str, servings_multiplier: float = 1.0) -> 
             if last_ordered and avg_reorder:
                 days_since = (today - date.fromisoformat(last_ordered)).days
                 if days_since < avg_reorder * 0.5:
-                    already_have.append({
-                        "name": name,
-                        "reason": f"ordered {days_since} days ago (avg reorder: {avg_reorder} days)",
-                    })
+                    already_have.append(
+                        {
+                            "name": name,
+                            "reason": f"ordered {days_since} days ago (avg reorder: {avg_reorder} days)",
+                        }
+                    )
                     continue
 
             needed.append({"name": name, "quantity": qty_str, "store": store})

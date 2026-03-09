@@ -27,7 +27,11 @@ HELP_CATEGORIES = [
         "key": "budget",
         "icon": "\U0001f4b0",  # money bag
         "name": "Budget & Spending",
-        "capabilities": "Check your YNAB budget, search transactions, move money between categories, check budget health, update drifted goals, allocate bonus income, sync Amazon purchases, and auto-categorize PayPal/Venmo/Apple charges.",
+        "capabilities": (
+            "Check your YNAB budget, search transactions, move money between categories, "
+            "check budget health, update drifted goals, allocate bonus income, sync Amazon "
+            "purchases, and auto-categorize PayPal/Venmo/Apple charges."
+        ),
         "static_examples": [
             "how are my budget goals?",
             "sync my Amazon",
@@ -83,7 +87,10 @@ HELP_CATEGORIES = [
         "key": "big_picture",
         "icon": "\U0001f9e0",  # brain
         "name": "Big Picture & Strategy",
-        "capabilities": "Ask broad questions and I'll connect the dots across budget, calendar, meals, and tasks to give you strategic advice.",
+        "capabilities": (
+            "Ask broad questions and I'll connect the dots across budget, calendar, "
+            "meals, and tasks to give you strategic advice."
+        ),
         "static_examples": [
             "how's our week looking?",
             "prep me for our family meeting",
@@ -236,19 +243,28 @@ TIP_DEFINITIONS: list[dict] = [
     {
         "id": "tip_big_picture",
         "trigger_tools": ["get_budget_summary", "get_calendar_events", "get_action_items"],
-        "text": "Try asking 'how's our week looking?' and I'll connect budget, calendar, meals, and tasks into one big picture.",
+        "text": (
+            "Try asking 'how's our week looking?' and I'll connect budget, calendar, "
+            "meals, and tasks into one big picture."
+        ),
         "related_category": "big_picture",
     },
     {
         "id": "tip_meeting_prep",
         "trigger_tools": ["get_action_items", "rollover_incomplete_items", "create_meeting"],
-        "text": "Say 'prep me for our family meeting' and I'll build a full agenda with budget, calendar, action items, and priorities.",
+        "text": (
+            "Say 'prep me for our family meeting' and I'll build a full agenda "
+            "with budget, calendar, action items, and priorities."
+        ),
         "related_category": "big_picture",
     },
     {
         "id": "tip_afford",
         "trigger_tools": ["search_transactions", "get_budget_summary"],
-        "text": "Wondering about a purchase? Ask 'can we afford to eat out this weekend?' and I'll check budget, calendar, and meal plan together.",
+        "text": (
+            "Wondering about a purchase? Ask 'can we afford to eat out this weekend?' "
+            "and I'll check budget, calendar, and meal plan together."
+        ),
         "related_category": "big_picture",
     },
     {
@@ -265,7 +281,12 @@ TIP_DEFINITIONS: list[dict] = [
     },
     {
         "id": "tip_email_sync",
-        "trigger_tools": ["get_budget_summary", "search_transactions", "recategorize_transaction", "amazon_sync_trigger"],
+        "trigger_tools": [
+            "get_budget_summary",
+            "search_transactions",
+            "recategorize_transaction",
+            "amazon_sync_trigger",
+        ],
         "text": "Say 'sync my emails' to auto-categorize PayPal, Venmo, and Apple charges in YNAB!",
         "related_category": "budget",
     },
@@ -350,6 +371,7 @@ def get_underused_categories(phone: str) -> list[str]:
 # Help menu generation
 # ---------------------------------------------------------------------------
 
+
 def get_help(phone: str = "") -> str:
     """Build the personalized help menu.
 
@@ -370,7 +392,7 @@ def get_help(phone: str = "") -> str:
             except Exception as e:
                 logger.debug("Personalization failed for %s: %s", cat["key"], e)
 
-        lines.append(f'{cat["icon"]} *{cat["name"]}*')
+        lines.append(f"{cat['icon']} *{cat['name']}*")
         lines.append(cat["capabilities"])
         for ex in examples[:2]:
             lines.append(f'\u2022 "{ex}"')
@@ -396,6 +418,7 @@ def _personalize(tool_name: str, category_key: str) -> list[str] | None:
     """Fetch live data for personalized examples. Returns list of example strings or None."""
     if tool_name == "list_cookbooks":
         from src.tools import recipes
+
         result = recipes.list_cookbooks()
         if isinstance(result, str) and "cookbook" in result.lower():
             return None  # fallback — can't parse
@@ -403,6 +426,7 @@ def _personalize(tool_name: str, category_key: str) -> list[str] | None:
 
     if tool_name == "get_budget_summary":
         from src.tools import ynab
+
         result = ynab.get_budget_summary("", "")
         if isinstance(result, str) and "budget" in result.lower():
             # Extract category names from the result
@@ -411,6 +435,7 @@ def _personalize(tool_name: str, category_key: str) -> list[str] | None:
 
     if tool_name == "get_staple_items":
         from src.tools import notion
+
         result = notion.get_staple_items()
         if isinstance(result, str) and len(result) > 10:
             return None  # static examples are family-specific enough
@@ -422,6 +447,7 @@ def _personalize(tool_name: str, category_key: str) -> list[str] | None:
 # ---------------------------------------------------------------------------
 # Contextual tips
 # ---------------------------------------------------------------------------
+
 
 def get_contextual_tip(tools_used: list[str], phone: str = "") -> str | None:
     """Return a contextual tip based on tools used, or None.

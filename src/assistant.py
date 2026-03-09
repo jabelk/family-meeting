@@ -1,18 +1,30 @@
 """Claude AI assistant core — system prompt, tool definitions, and message handling."""
 
-import httpx
 import json
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+import httpx
 from anthropic import Anthropic
+
+from src import context, conversation, drive_times, preferences, routines
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
-from src.tools import notion, calendar, ynab, outlook, recipes, proactive, nudges, laundry, chores, downshiftology, discovery, amazon_sync, email_sync
-from src import conversation
-from src import preferences
-from src import context
-from src import routines
-from src import drive_times
+from src.tools import (
+    amazon_sync,
+    calendar,
+    chores,
+    discovery,
+    downshiftology,
+    email_sync,
+    laundry,
+    notion,
+    nudges,
+    outlook,
+    proactive,
+    recipes,
+    ynab,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -405,7 +417,11 @@ auto-mode, email_undo_categorize to revert.
 TOOLS = [
     {
         "name": "get_calendar_events",
-        "description": "Fetch upcoming events from Google Calendars for the next N days. Reads from Jason's personal, Erin's personal, and the shared family calendar. Events are labeled by source.",
+        "description": (
+            "Fetch upcoming events from Google Calendars for the next N days. "
+            "Reads from Jason's personal, Erin's personal, and the shared "
+            "family calendar. Events are labeled by source."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -425,7 +441,11 @@ TOOLS = [
     },
     {
         "name": "get_outlook_events",
-        "description": "Fetch Jason's work calendar events (Outlook/Cisco) for a specific date. Shows meeting times so Erin can plan around his schedule. Use for daily plan generation and breakfast timing.",
+        "description": (
+            "Fetch Jason's work calendar events (Outlook/Cisco) for a "
+            "specific date. Shows meeting times so Erin can plan around his "
+            "schedule. Use for daily plan generation and breakfast timing."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -439,7 +459,10 @@ TOOLS = [
     },
     {
         "name": "get_action_items",
-        "description": "Query action items from Notion. Can filter by assignee and/or status. Use status='open' to get all non-completed items.",
+        "description": (
+            "Query action items from Notion. Can filter by assignee "
+            "and/or status. Use status='open' to get all non-completed items."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -449,7 +472,9 @@ TOOLS = [
                 },
                 "status": {
                     "type": "string",
-                    "description": "Filter by status: 'Not Started', 'In Progress', 'Done', or 'open' for all non-done items.",
+                    "description": (
+                        "Filter by status: 'Not Started', 'In Progress', 'Done', or 'open' for all non-done items."
+                    ),
                 },
             },
             "required": [],
@@ -474,11 +499,23 @@ TOOLS = [
     },
     {
         "name": "complete_action_item",
-        "description": "Mark an action item as Done. Accepts either a Notion page UUID or the task description text (will fuzzy-match against open items). Prefer using the page_id from get_action_items when available.",
+        "description": (
+            "Mark an action item as Done. Accepts either a Notion page UUID "
+            "or the task description text (will fuzzy-match against open "
+            "items). Prefer using the page_id from get_action_items "
+            "when available."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "page_id": {"type": "string", "description": "The Notion page UUID of the action item, or its description text (e.g., 'Call preschool'). UUIDs are preferred — use get_action_items to find them."},
+                "page_id": {
+                    "type": "string",
+                    "description": (
+                        "The Notion page UUID of the action item, or its "
+                        "description text (e.g., 'Call preschool'). UUIDs "
+                        "are preferred — use get_action_items to find them."
+                    ),
+                },
             },
             "required": ["page_id"],
         },
@@ -496,16 +533,33 @@ TOOLS = [
     },
     {
         "name": "get_family_profile",
-        "description": "Read the family profile including member info, dietary preferences, routine templates, childcare schedule, recurring agenda topics, and configuration.",
+        "description": (
+            "Read the family profile including member info, dietary "
+            "preferences, routine templates, childcare schedule, "
+            "recurring agenda topics, and configuration."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "update_family_profile",
-        "description": "Update the family profile with new persistent information. Use when a partner mentions a lasting preference, dietary restriction, schedule change, childcare update, or recurring topic.",
+        "description": (
+            "Update the family profile with new persistent information. "
+            "Use when a partner mentions a lasting preference, dietary "
+            "restriction, schedule change, childcare update, or "
+            "recurring topic."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "section": {"type": "string", "description": "Which section to update: 'Preferences', 'Recurring Agenda Topics', 'Members', 'Childcare Schedule', 'Routine Templates', or 'Configuration'."},
+                "section": {
+                    "type": "string",
+                    "description": (
+                        "Which section to update: 'Preferences', "
+                        "'Recurring Agenda Topics', 'Members', "
+                        "'Childcare Schedule', 'Routine Templates', "
+                        "or 'Configuration'."
+                    ),
+                },
                 "content": {"type": "string", "description": "The information to add."},
             },
             "required": ["section", "content"],
@@ -513,7 +567,9 @@ TOOLS = [
     },
     {
         "name": "create_meeting",
-        "description": "Create a new meeting record in Notion for today (or a specific date). Returns the meeting page ID.",
+        "description": (
+            "Create a new meeting record in Notion for today (or a specific date). Returns the meeting page ID."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -524,7 +580,10 @@ TOOLS = [
     },
     {
         "name": "rollover_incomplete_items",
-        "description": "Mark all incomplete 'This Week' action items as rolled over. Call this when generating a new weekly agenda.",
+        "description": (
+            "Mark all incomplete 'This Week' action items as rolled over. "
+            "Call this when generating a new weekly agenda."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
@@ -546,7 +605,10 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "week_start": {"type": "string", "description": "Monday date in YYYY-MM-DD format. Empty for most recent."},
+                "week_start": {
+                    "type": "string",
+                    "description": ("Monday date in YYYY-MM-DD format. Empty for most recent."),
+                },
             },
             "required": [],
         },
@@ -557,8 +619,14 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "month": {"type": "string", "description": "Month in YYYY-MM-DD format (first of month). Defaults to current month."},
-                "category": {"type": "string", "description": "Optional category name to filter to (e.g., 'Dining Out', 'Groceries')."},
+                "month": {
+                    "type": "string",
+                    "description": ("Month in YYYY-MM-DD format (first of month). Defaults to current month."),
+                },
+                "category": {
+                    "type": "string",
+                    "description": ("Optional category name to filter to (e.g., 'Dining Out', 'Groceries')."),
+                },
             },
             "required": [],
         },
@@ -573,7 +641,10 @@ TOOLS = [
                 "payee": {"type": "string", "description": "Payee name to search for (fuzzy match)."},
                 "category": {"type": "string", "description": "Category name to filter by."},
                 "since_date": {"type": "string", "description": "ISO date floor (default: first of current month)."},
-                "uncategorized_only": {"type": "boolean", "description": "If true, return only uncategorized transactions."},
+                "uncategorized_only": {
+                    "type": "boolean",
+                    "description": ("If true, return only uncategorized transactions."),
+                },
             },
             "required": [],
         },
@@ -599,7 +670,10 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "payee": {"type": "string", "description": "Payee/merchant name."},
-                "amount": {"type": "number", "description": "Dollar amount (positive number — system makes it negative for outflow)."},
+                "amount": {
+                    "type": "number",
+                    "description": ("Dollar amount (positive number — system makes it negative for outflow)."),
+                },
                 "category": {"type": "string", "description": "Category name (fuzzy matched)."},
                 "date": {"type": "string", "description": "ISO date (default: today)."},
                 "memo": {"type": "string", "description": "Optional memo/note."},
@@ -637,41 +711,78 @@ TOOLS = [
     # --- Backlog tools (US5) ---
     {
         "name": "get_backlog_items",
-        "description": "Query Erin's personal backlog of one-off tasks (home improvement, personal growth, side work). These are not weekly action items — they persist until done.",
+        "description": (
+            "Query Erin's personal backlog of one-off tasks (home "
+            "improvement, personal growth, side work). These are not "
+            "weekly action items — they persist until done."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "assignee": {"type": "string", "description": "Filter by assignee. Default empty (all)."},
-                "status": {"type": "string", "description": "Filter by status: 'Not Started', 'In Progress', 'Done', or 'open'."},
+                "assignee": {
+                    "type": "string",
+                    "description": "Filter by assignee. Default empty (all).",
+                },
+                "status": {
+                    "type": "string",
+                    "description": ("Filter by status: 'Not Started', 'In Progress', 'Done', or 'open'."),
+                },
             },
             "required": [],
         },
     },
     {
         "name": "add_backlog_item",
-        "description": "Add a one-off task to the backlog (e.g., 'reorganize tupperware', 'clean garage', 'knitting project'). These are personal growth / home improvement tasks worked through at Erin's pace.",
+        "description": (
+            "Add a one-off task to the backlog (e.g., 'reorganize "
+            "tupperware', 'clean garage', 'knitting project'). These are "
+            "personal growth / home improvement tasks worked through "
+            "at Erin's pace."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "description": {"type": "string", "description": "What needs to be done."},
                 "category": {
                     "type": "string",
-                    "description": "Category: 'Home Improvement', 'Personal Growth', 'Side Work', 'Exercise', or 'Other'.",
+                    "description": (
+                        "Category: 'Home Improvement', 'Personal Growth', 'Side Work', 'Exercise', or 'Other'."
+                    ),
                     "default": "Other",
                 },
-                "assignee": {"type": "string", "description": "Who this is for. Default 'Erin'.", "default": "Erin"},
-                "priority": {"type": "string", "description": "'High', 'Medium', or 'Low'. Default 'Medium'.", "default": "Medium"},
+                "assignee": {
+                    "type": "string",
+                    "description": "Who this is for. Default 'Erin'.",
+                    "default": "Erin",
+                },
+                "priority": {
+                    "type": "string",
+                    "description": ("'High', 'Medium', or 'Low'. Default 'Medium'."),
+                    "default": "Medium",
+                },
             },
             "required": ["description"],
         },
     },
     {
         "name": "complete_backlog_item",
-        "description": "Mark a backlog item as Done. Accepts either a Notion page UUID or the task description text (will fuzzy-match against open items). Prefer using the page_id from get_backlog_items when available.",
+        "description": (
+            "Mark a backlog item as Done. Accepts either a Notion page "
+            "UUID or the task description text (will fuzzy-match against "
+            "open items). Prefer using the page_id from get_backlog_items "
+            "when available."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "page_id": {"type": "string", "description": "The Notion page UUID of the backlog item, or its description text. UUIDs are preferred — use get_backlog_items to find them."},
+                "page_id": {
+                    "type": "string",
+                    "description": (
+                        "The Notion page UUID of the backlog item, or "
+                        "its description text. UUIDs are preferred — "
+                        "use get_backlog_items to find them."
+                    ),
+                },
             },
             "required": ["page_id"],
         },
@@ -679,13 +790,24 @@ TOOLS = [
     # --- Routine templates (US5) ---
     {
         "name": "get_routine_templates",
-        "description": "Read Erin's daily routine templates from the family profile. Templates define time blocks for different scenarios (e.g., 'Weekday with Zoey', 'Weekday with Grandma'). Used for daily plan generation.",
+        "description": (
+            "Read Erin's daily routine templates from the family profile. "
+            "Templates define time blocks for different scenarios (e.g., "
+            "'Weekday with Zoey', 'Weekday with Grandma'). Used for "
+            "daily plan generation."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     # --- Calendar write (US5) ---
     {
         "name": "write_calendar_blocks",
-        "description": "Write time blocks to Erin's Google Calendar. Use after generating a daily plan to create events that appear in her Apple Calendar with push notifications. Each block needs: summary, start_time (ISO), end_time (ISO), and color_category.",
+        "description": (
+            "Write time blocks to Erin's Google Calendar. Use after "
+            "generating a daily plan to create events that appear in "
+            "her Apple Calendar with push notifications. Each block "
+            "needs: summary, start_time (ISO), end_time (ISO), "
+            "and color_category."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -694,12 +816,33 @@ TOOLS = [
                     "items": {
                         "type": "object",
                         "properties": {
-                            "summary": {"type": "string", "description": "Event title (e.g., 'Chore block', 'Rest time')"},
-                            "start_time": {"type": "string", "description": "ISO datetime in 24-hour format with TZ offset. 1 PM=13, 2 PM=14, etc. Example: '2026-02-23T14:30:00-08:00' for 2:30 PM PT."},
-                            "end_time": {"type": "string", "description": "ISO datetime in 24-hour format with TZ offset (same rules as start_time)."},
+                            "summary": {
+                                "type": "string",
+                                "description": ("Event title (e.g., 'Chore block', 'Rest time')"),
+                            },
+                            "start_time": {
+                                "type": "string",
+                                "description": (
+                                    "ISO datetime in 24-hour format with "
+                                    "TZ offset. 1 PM=13, 2 PM=14, etc. "
+                                    "Example: '2026-02-23T14:30:00-08:00' "
+                                    "for 2:30 PM PT."
+                                ),
+                            },
+                            "end_time": {
+                                "type": "string",
+                                "description": (
+                                    "ISO datetime in 24-hour format with TZ offset (same rules as start_time)."
+                                ),
+                            },
                             "color_category": {
                                 "type": "string",
-                                "description": "Category for color coding: 'chores', 'rest', 'development', 'exercise', 'side_work', or 'backlog'.",
+                                "description": (
+                                    "Category for color coding: "
+                                    "'chores', 'rest', 'development', "
+                                    "'exercise', 'side_work', "
+                                    "or 'backlog'."
+                                ),
                             },
                         },
                         "required": ["summary", "start_time", "end_time", "color_category"],
@@ -713,15 +856,54 @@ TOOLS = [
     # --- Quick reminder/event tool ---
     {
         "name": "create_quick_event",
-        "description": "Create a reminder or event on the shared family calendar. Both Jason and Erin will see it. Use when someone says 'remind me to...', 'pick up X at Y time', 'don't forget to...', or any time-specific task. Includes a 15-minute popup reminder by default.",
+        "description": (
+            "Create a reminder or event on the shared family calendar. "
+            "Both Jason and Erin will see it. Use when someone says "
+            "'remind me to...', 'pick up X at Y time', 'don't forget "
+            "to...', or any time-specific task. Includes a 15-minute "
+            "popup reminder by default."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "summary": {"type": "string", "description": "Event title. Format as 'Sender → Assignee: task' (e.g., 'Erin → Jason: pick up dog'). If self-reminder, use 'Erin: dentist appointment'."},
-                "start_time": {"type": "string", "description": "ISO datetime in 24-hour format with TZ offset. 1 PM=13, 2 PM=14. Example: '2026-02-24T14:30:00-08:00' for 2:30 PM PT. Use the date shown at the top of the system prompt if not specified."},
-                "end_time": {"type": "string", "description": "ISO datetime in 24-hour format with TZ offset. Defaults to start + 30 min if omitted."},
-                "description": {"type": "string", "description": "Original message text for context (e.g., 'Erin said: remind Jason to pick up the dog at 12:30')."},
-                "reminder_minutes": {"type": "number", "description": "Minutes before event to send popup reminder. Default 15.", "default": 15},
+                "summary": {
+                    "type": "string",
+                    "description": (
+                        "Event title. Format as 'Sender -> Assignee: "
+                        "task' (e.g., 'Erin -> Jason: pick up dog'). "
+                        "If self-reminder, use "
+                        "'Erin: dentist appointment'."
+                    ),
+                },
+                "start_time": {
+                    "type": "string",
+                    "description": (
+                        "ISO datetime in 24-hour format with TZ offset. "
+                        "1 PM=13, 2 PM=14. Example: "
+                        "'2026-02-24T14:30:00-08:00' for 2:30 PM PT. "
+                        "Use the date shown at the top of the system "
+                        "prompt if not specified."
+                    ),
+                },
+                "end_time": {
+                    "type": "string",
+                    "description": (
+                        "ISO datetime in 24-hour format with TZ offset. Defaults to start + 30 min if omitted."
+                    ),
+                },
+                "description": {
+                    "type": "string",
+                    "description": (
+                        "Original message text for context (e.g., "
+                        "'Erin said: remind Jason to pick up the "
+                        "dog at 12:30')."
+                    ),
+                },
+                "reminder_minutes": {
+                    "type": "number",
+                    "description": ("Minutes before event to send popup reminder. Default 15."),
+                    "default": 15,
+                },
             },
             "required": ["summary", "start_time"],
         },
@@ -729,30 +911,53 @@ TOOLS = [
     # --- Grocery tools (US3 + US6) ---
     {
         "name": "get_grocery_history",
-        "description": "Get grocery purchase history from past Whole Foods orders. Use when planning meals to reference what the family actually buys. Can filter by category.",
+        "description": (
+            "Get grocery purchase history from past Whole Foods orders. "
+            "Use when planning meals to reference what the family "
+            "actually buys. Can filter by category."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "category": {"type": "string", "description": "Filter by category: 'Produce', 'Meat', 'Dairy', 'Pantry', 'Frozen', 'Bakery', 'Beverages'. Empty for all."},
+                "category": {
+                    "type": "string",
+                    "description": (
+                        "Filter by category: 'Produce', 'Meat', "
+                        "'Dairy', 'Pantry', 'Frozen', 'Bakery', "
+                        "'Beverages'. Empty for all."
+                    ),
+                },
             },
             "required": [],
         },
     },
     {
         "name": "get_staple_items",
-        "description": "Get frequently purchased grocery items (staples). Suggest these when generating grocery lists — the family probably needs them every week.",
+        "description": (
+            "Get frequently purchased grocery items (staples). Suggest "
+            "these when generating grocery lists — the family probably "
+            "needs them every week."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "push_grocery_list",
-        "description": "Push grocery list items to AnyList for Whole Foods delivery. Clears old items first, then adds the new list. Erin opens AnyList → 'Order Pickup or Delivery' → Whole Foods. If the service is unavailable, returns an error and you should send a formatted list via WhatsApp instead.",
+        "description": (
+            "Push grocery list items to AnyList for Whole Foods delivery. "
+            "Clears old items first, then adds the new list. Erin opens "
+            "AnyList -> 'Order Pickup or Delivery' -> Whole Foods. If "
+            "the service is unavailable, returns an error and you should "
+            "send a formatted list via WhatsApp instead."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of grocery items to add (e.g., ['Chicken breast', 'Rice', 'Stir-fry veggies']).",
+                    "description": (
+                        "List of grocery items to add (e.g., ['Chicken breast', 'Rice', 'Stir-fry veggies'])."
+                    ),
                 },
             },
             "required": ["items"],
@@ -761,18 +966,30 @@ TOOLS = [
     # --- Recipe tools (US1) ---
     {
         "name": "extract_and_save_recipe",
-        "description": "Extract a recipe from a cookbook photo using AI vision and save it to the recipe catalogue. The photo from the current conversation is used automatically — just provide the cookbook name if mentioned.",
+        "description": (
+            "Extract a recipe from a cookbook photo using AI vision and "
+            "save it to the recipe catalogue. The photo from the current "
+            "conversation is used automatically — just provide the "
+            "cookbook name if mentioned."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "cookbook_name": {"type": "string", "description": "Name of the cookbook (e.g., 'The Keto Book'). Defaults to 'Uncategorized'."},
+                "cookbook_name": {
+                    "type": "string",
+                    "description": ("Name of the cookbook (e.g., 'The Keto Book'). Defaults to 'Uncategorized'."),
+                },
             },
             "required": [],
         },
     },
     {
         "name": "search_recipes",
-        "description": "Search the recipe catalogue by name, cookbook, or tags. Returns matching recipes with name, cookbook, tags, prep/cook time, and usage count.",
+        "description": (
+            "Search the recipe catalogue by name, cookbook, or tags. "
+            "Returns matching recipes with name, cookbook, tags, "
+            "prep/cook time, and usage count."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -781,7 +998,11 @@ TOOLS = [
                 "tags": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Filter by tags: Keto, Kid-Friendly, Quick, Vegetarian, Comfort Food, Soup, Salad, Pasta, Meat, Seafood.",
+                    "description": (
+                        "Filter by tags: Keto, Kid-Friendly, Quick, "
+                        "Vegetarian, Comfort Food, Soup, Salad, "
+                        "Pasta, Meat, Seafood."
+                    ),
                 },
             },
             "required": [],
@@ -789,7 +1010,10 @@ TOOLS = [
     },
     {
         "name": "get_recipe_details",
-        "description": "Get full recipe details including ingredients list, step-by-step instructions, photo URL, and all metadata.",
+        "description": (
+            "Get full recipe details including ingredients list, "
+            "step-by-step instructions, photo URL, and all metadata."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -800,7 +1024,12 @@ TOOLS = [
     },
     {
         "name": "recipe_to_grocery_list",
-        "description": "Generate a grocery list from a saved recipe. Cross-references ingredients against grocery purchase history to show what's needed vs what you likely already have. Supports servings scaling.",
+        "description": (
+            "Generate a grocery list from a saved recipe. "
+            "Cross-references ingredients against grocery purchase "
+            "history to show what's needed vs what you likely already "
+            "have. Supports servings scaling."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -822,38 +1051,83 @@ TOOLS = [
     # --- Downshiftology recipe tools (Feature 005) ---
     {
         "name": "search_downshiftology",
-        "description": "Search Downshiftology.com for healthy recipes by course, cuisine, ingredient, dietary preference, or time constraint. Returns a numbered list of matching recipes with names, times, tags, and links.",
+        "description": (
+            "Search Downshiftology.com for healthy recipes by course, "
+            "cuisine, ingredient, dietary preference, or time constraint. "
+            "Returns a numbered list of matching recipes with names, "
+            "times, tags, and links."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Free-text search term (e.g., 'chicken', 'sweet potato')."},
-                "course": {"type": "string", "description": "Course type: dinner, breakfast, appetizer, side-dish, salad, soup, snack, dessert, drinks."},
-                "cuisine": {"type": "string", "description": "Cuisine: american, mexican, italian, mediterranean, asian, french, indian, greek, middle-eastern."},
-                "dietary": {"type": "string", "description": "Dietary preference: keto, paleo, whole30, gluten-free, dairy-free, vegan, vegetarian."},
-                "max_time": {"type": "number", "description": "Maximum total time in minutes (e.g., 30 for quick meals)."},
+                "query": {
+                    "type": "string",
+                    "description": ("Free-text search term (e.g., 'chicken', 'sweet potato')."),
+                },
+                "course": {
+                    "type": "string",
+                    "description": (
+                        "Course type: dinner, breakfast, appetizer, side-dish, salad, soup, snack, dessert, drinks."
+                    ),
+                },
+                "cuisine": {
+                    "type": "string",
+                    "description": (
+                        "Cuisine: american, mexican, italian, "
+                        "mediterranean, asian, french, indian, "
+                        "greek, middle-eastern."
+                    ),
+                },
+                "dietary": {
+                    "type": "string",
+                    "description": (
+                        "Dietary preference: keto, paleo, whole30, gluten-free, dairy-free, vegan, vegetarian."
+                    ),
+                },
+                "max_time": {
+                    "type": "number",
+                    "description": ("Maximum total time in minutes (e.g., 30 for quick meals)."),
+                },
             },
             "required": [],
         },
     },
     {
         "name": "get_downshiftology_details",
-        "description": "Get full details of a Downshiftology recipe from search results, including ingredients, instructions, nutrition, and grocery history match.",
+        "description": (
+            "Get full details of a Downshiftology recipe from search "
+            "results, including ingredients, instructions, nutrition, "
+            "and grocery history match."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "result_number": {"type": "number", "description": "Number from the most recent Downshiftology search results (1-based)."},
+                "result_number": {
+                    "type": "number",
+                    "description": ("Number from the most recent Downshiftology search results (1-based)."),
+                },
             },
             "required": ["result_number"],
         },
     },
     {
         "name": "import_downshiftology_recipe",
-        "description": "Import a Downshiftology recipe into the family's recipe catalogue for meal planning. Checks for duplicates by source URL.",
+        "description": (
+            "Import a Downshiftology recipe into the family's recipe "
+            "catalogue for meal planning. Checks for duplicates "
+            "by source URL."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "result_number": {"type": "number", "description": "Number from most recent search results (e.g., 2)."},
-                "recipe_name": {"type": "string", "description": "Recipe name to search and import (alternative to number)."},
+                "result_number": {
+                    "type": "number",
+                    "description": ("Number from most recent search results (e.g., 2)."),
+                },
+                "recipe_name": {
+                    "type": "string",
+                    "description": ("Recipe name to search and import (alternative to number)."),
+                },
             },
             "required": [],
         },
@@ -861,23 +1135,40 @@ TOOLS = [
     # --- Nudge tools (Feature 003) ---
     {
         "name": "set_quiet_day",
-        "description": "Suppress all proactive nudges (departure reminders, chore suggestions) for the rest of today. Use when Erin says 'quiet day', 'no nudges today', or 'leave me alone today'. She can still message the bot and get responses — only proactive nudges are paused.",
+        "description": (
+            "Suppress all proactive nudges (departure reminders, chore "
+            "suggestions) for the rest of today. Use when Erin says "
+            "'quiet day', 'no nudges today', or 'leave me alone today'. "
+            "She can still message the bot and get responses — only "
+            "proactive nudges are paused."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "complete_chore",
-        "description": "Mark a chore as completed. Updates the Chores database and marks the nudge as done. Use when Erin says 'done', 'finished', 'did it' after a chore suggestion.",
+        "description": (
+            "Mark a chore as completed. Updates the Chores database "
+            "and marks the nudge as done. Use when Erin says 'done', "
+            "'finished', 'did it' after a chore suggestion."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "chore_name": {"type": "string", "description": "Name of the completed chore (matched against Chores DB)."},
+                "chore_name": {
+                    "type": "string",
+                    "description": ("Name of the completed chore (matched against Chores DB)."),
+                },
             },
             "required": ["chore_name"],
         },
     },
     {
         "name": "skip_chore",
-        "description": "Skip a suggested chore (won't be re-suggested today). Use when Erin says 'skip', 'not now', 'pass' to a chore suggestion.",
+        "description": (
+            "Skip a suggested chore (won't be re-suggested today). "
+            "Use when Erin says 'skip', 'not now', 'pass' to a "
+            "chore suggestion."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -888,7 +1179,12 @@ TOOLS = [
     },
     {
         "name": "start_laundry",
-        "description": "Start a laundry session with timed reminders. Creates washer-done nudge and follow-up nudge. Checks calendar for conflicts with dryer timing. Use when Erin says 'started laundry', 'doing a load', etc.",
+        "description": (
+            "Start a laundry session with timed reminders. Creates "
+            "washer-done nudge and follow-up nudge. Checks calendar "
+            "for conflicts with dryer timing. Use when Erin says "
+            "'started laundry', 'doing a load', etc."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -908,24 +1204,39 @@ TOOLS = [
     },
     {
         "name": "advance_laundry",
-        "description": "Move laundry to dryer phase. Creates dryer-done nudge and cancels follow-up. Use when Erin says 'moved to dryer', 'put it in the dryer', etc.",
+        "description": (
+            "Move laundry to dryer phase. Creates dryer-done nudge "
+            "and cancels follow-up. Use when Erin says 'moved to "
+            "dryer', 'put it in the dryer', etc."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "cancel_laundry",
-        "description": "Cancel the active laundry session and all pending laundry reminders. Use when Erin says 'never mind', 'didn't do laundry', or 'cancel laundry'.",
+        "description": (
+            "Cancel the active laundry session and all pending laundry "
+            "reminders. Use when Erin says 'never mind', 'didn't do "
+            "laundry', or 'cancel laundry'."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "set_chore_preference",
-        "description": "Update Erin's preferences for a chore: how often, preferred days, and like/dislike. Use when Erin says things like 'I like to vacuum on Wednesdays', 'I hate cleaning bathrooms', 'vacuum weekly instead of daily'.",
+        "description": (
+            "Update Erin's preferences for a chore: how often, "
+            "preferred days, and like/dislike. Use when Erin says "
+            "things like 'I like to vacuum on Wednesdays', 'I hate "
+            "cleaning bathrooms', 'vacuum weekly instead of daily'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "chore_name": {"type": "string", "description": "Chore to update preferences for."},
                 "preference": {
                     "type": "string",
-                    "description": "'like', 'neutral', or 'dislike'. Use 'like' for 'I enjoy...', 'dislike' for 'I hate...', etc.",
+                    "description": (
+                        "'like', 'neutral', or 'dislike'. Use 'like' for 'I enjoy...', 'dislike' for 'I hate...', etc."
+                    ),
                     "enum": ["like", "neutral", "dislike"],
                 },
                 "preferred_days": {
@@ -944,7 +1255,11 @@ TOOLS = [
     },
     {
         "name": "get_chore_history",
-        "description": "Show what chores Erin has completed recently. Use when she asks 'what have I done this week?', 'chore history', etc.",
+        "description": (
+            "Show what chores Erin has completed recently. Use when "
+            "she asks 'what have I done this week?', 'chore "
+            "history', etc."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -960,22 +1275,40 @@ TOOLS = [
     # --- Proactive tools (US2, US3) ---
     {
         "name": "check_reorder_items",
-        "description": "Check grocery history for staple/regular items due for reorder. Returns items grouped by store with days overdue. Use when asked about grocery needs or to proactively suggest reorders.",
+        "description": (
+            "Check grocery history for staple/regular items due for "
+            "reorder. Returns items grouped by store with days overdue. "
+            "Use when asked about grocery needs or to proactively "
+            "suggest reorders."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "confirm_groceries_ordered",
-        "description": "Mark all pending grocery orders as confirmed (updates Last Ordered date). Call when user says 'groceries ordered', 'placed the order', etc.",
+        "description": (
+            "Mark all pending grocery orders as confirmed (updates "
+            "Last Ordered date). Call when user says 'groceries "
+            "ordered', 'placed the order', etc."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "generate_meal_plan",
-        "description": "Generate a 6-night dinner plan (Mon-Sat) considering saved recipes, family preferences, schedule density, and recent meal history. Returns structured plan with ingredients.",
+        "description": (
+            "Generate a 6-night dinner plan (Mon-Sat) considering "
+            "saved recipes, family preferences, schedule density, and "
+            "recent meal history. Returns structured plan "
+            "with ingredients."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "handle_meal_swap",
-        "description": "Swap a meal in the current plan and recalculate the grocery list. Use when user says 'swap Wednesday for tacos' or similar.",
+        "description": (
+            "Swap a meal in the current plan and recalculate the "
+            "grocery list. Use when user says 'swap Wednesday for "
+            "tacos' or similar."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -993,23 +1326,47 @@ TOOLS = [
     # --- Feature discovery (Feature 006) ---
     {
         "name": "get_help",
-        "description": "Generate a personalized help menu showing all bot capabilities grouped by category with example phrases. Use when someone says 'help', 'what can you do?', 'what are your features?', or similar.",
+        "description": (
+            "Generate a personalized help menu showing all bot "
+            "capabilities grouped by category with example phrases. "
+            "Use when someone says 'help', 'what can you do?', "
+            "'what are your features?', or similar."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     # Amazon-YNAB Sync (Feature 010)
     {
         "name": "amazon_sync_status",
-        "description": "Get the current Amazon-YNAB sync status including: last sync time, transactions processed, match rate, acceptance rate, and whether auto-split mode is enabled. Use when Erin asks about Amazon sync, categorization stats, or 'how is the Amazon sync doing?'.",
+        "description": (
+            "Get the current Amazon-YNAB sync status including: last "
+            "sync time, transactions processed, match rate, acceptance "
+            "rate, and whether auto-split mode is enabled. Use when "
+            "Erin asks about Amazon sync, categorization stats, or "
+            "'how is the Amazon sync doing?'."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "amazon_sync_trigger",
-        "description": "Manually trigger an Amazon-YNAB sync to fetch recent Amazon orders, match them to YNAB transactions, enrich memos with item names, classify items into budget categories, and send split suggestions. Use when Erin says 'sync my Amazon', 'check Amazon orders', or 'categorize Amazon purchases'.",
+        "description": (
+            "Manually trigger an Amazon-YNAB sync to fetch recent "
+            "Amazon orders, match them to YNAB transactions, enrich "
+            "memos with item names, classify items into budget "
+            "categories, and send split suggestions. Use when Erin "
+            "says 'sync my Amazon', 'check Amazon orders', or "
+            "'categorize Amazon purchases'."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "amazon_spending_breakdown",
-        "description": "Get a breakdown of Amazon spending by YNAB category for a given month, with budget comparisons and top purchases. Use when Erin asks 'how are we doing on Amazon spending?', 'Amazon spending breakdown', or 'what are we buying on Amazon?'.",
+        "description": (
+            "Get a breakdown of Amazon spending by YNAB category for "
+            "a given month, with budget comparisons and top purchases. "
+            "Use when Erin asks 'how are we doing on Amazon spending?', "
+            "'Amazon spending breakdown', or 'what are we buying "
+            "on Amazon?'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1020,7 +1377,14 @@ TOOLS = [
     },
     {
         "name": "amazon_set_auto_split",
-        "description": "Enable or disable Amazon auto-split mode. When enabled, Amazon purchases are automatically split into YNAB categories without confirmation. Requires 80%+ acceptance rate over 10+ suggestions. Use when Erin says 'yes' to the auto-split graduation prompt, or 'turn off auto-split'.",
+        "description": (
+            "Enable or disable Amazon auto-split mode. When enabled, "
+            "Amazon purchases are automatically split into YNAB "
+            "categories without confirmation. Requires 80%+ acceptance "
+            "rate over 10+ suggestions. Use when Erin says 'yes' to "
+            "the auto-split graduation prompt, or "
+            "'turn off auto-split'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1031,7 +1395,11 @@ TOOLS = [
     },
     {
         "name": "amazon_undo_split",
-        "description": "Undo a recent Amazon auto-split transaction, reverting it to its original unsplit state. Use when Erin says 'undo' or 'undo 1' after an auto-split notification.",
+        "description": (
+            "Undo a recent Amazon auto-split transaction, reverting "
+            "it to its original unsplit state. Use when Erin says "
+            "'undo' or 'undo 1' after an auto-split notification."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1047,18 +1415,26 @@ TOOLS = [
     # Budget Maintenance (Feature 012: Smart Budget Health)
     {
         "name": "budget_health_check",
-        "description": "Analyze all YNAB budget categories for goal drift, missing goals, stale categories, and merge candidates. Returns a health score and actionable suggestions. Use when user asks 'how are my budget goals?', 'budget health check', or 'any budget issues?'.",
+        "description": (
+            "Analyze all YNAB budget categories for goal drift, "
+            "missing goals, stale categories, and merge candidates. "
+            "Returns a health score and actionable suggestions. Use "
+            "when user asks 'how are my budget goals?', 'budget "
+            "health check', or 'any budget issues?'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "lookback_months": {
                     "type": "integer",
-                    "description": "Number of months to analyze (default 3, max 12). Use 6+ for spiky categories.",
+                    "description": ("Number of months to analyze (default 3, max 12). Use 6+ for spiky categories."),
                     "default": 3,
                 },
                 "drift_threshold": {
                     "type": "number",
-                    "description": "Minimum drift percentage to flag (default 30). Lower values catch smaller misalignments.",
+                    "description": (
+                        "Minimum drift percentage to flag (default 30). Lower values catch smaller misalignments."
+                    ),
                     "default": 30,
                 },
             },
@@ -1067,7 +1443,12 @@ TOOLS = [
     },
     {
         "name": "apply_goal_suggestion",
-        "description": "Update a YNAB category's goal target based on a budget health check suggestion. Use when user approves a specific suggestion like 'yes to restaurants' or 'update restaurants to $1200'.",
+        "description": (
+            "Update a YNAB category's goal target based on a budget "
+            "health check suggestion. Use when user approves a specific "
+            "suggestion like 'yes to restaurants' or 'update "
+            "restaurants to $1200'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1077,11 +1458,17 @@ TOOLS = [
                 },
                 "amount": {
                     "type": "number",
-                    "description": "New goal amount in dollars. If omitted, uses the recommended amount from the last health check.",
+                    "description": (
+                        "New goal amount in dollars. If omitted, uses "
+                        "the recommended amount from the last "
+                        "health check."
+                    ),
                 },
                 "apply_all": {
                     "type": "boolean",
-                    "description": "If true, apply all pending suggestions at once. Ignores category and amount params.",
+                    "description": (
+                        "If true, apply all pending suggestions at once. Ignores category and amount params."
+                    ),
                     "default": False,
                 },
             },
@@ -1090,7 +1477,13 @@ TOOLS = [
     },
     {
         "name": "allocate_bonus",
-        "description": "Generate a plan to allocate a bonus, stock vesting, or extra income across underfunded budget categories. Prioritizes essentials, then savings, then discretionary. Use when user asks 'where should this bonus go?' or 'allocate $X'.",
+        "description": (
+            "Generate a plan to allocate a bonus, stock vesting, or "
+            "extra income across underfunded budget categories. "
+            "Prioritizes essentials, then savings, then discretionary. "
+            "Use when user asks 'where should this bonus go?' or "
+            "'allocate $X'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1108,13 +1501,19 @@ TOOLS = [
     },
     {
         "name": "approve_allocation",
-        "description": "Execute the pending bonus allocation plan, moving money to each category in YNAB. Use when user says 'approve', 'yes', or 'do it' after seeing an allocation plan.",
+        "description": (
+            "Execute the pending bonus allocation plan, moving money "
+            "to each category in YNAB. Use when user says 'approve', "
+            "'yes', or 'do it' after seeing an allocation plan."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "adjustments": {
                     "type": "string",
-                    "description": "Optional free-text adjustments before executing (e.g., 'put $3000 in emergency fund instead').",
+                    "description": (
+                        "Optional free-text adjustments before executing (e.g., 'put $3000 in emergency fund instead')."
+                    ),
                 },
             },
             "required": [],
@@ -1123,17 +1522,38 @@ TOOLS = [
     # Email-YNAB Sync (Feature 011: PayPal, Venmo, Apple)
     {
         "name": "email_sync_trigger",
-        "description": "Manually trigger an email-YNAB sync to fetch recent PayPal, Venmo, and Apple confirmation emails, match them to YNAB transactions, enrich memos with actual merchant/service names, classify into budget categories, and send suggestions. Use when Erin says 'sync my emails', 'check PayPal', 'categorize Venmo', 'what was that Apple charge?', or similar.",
+        "description": (
+            "Manually trigger an email-YNAB sync to fetch recent "
+            "PayPal, Venmo, and Apple confirmation emails, match them "
+            "to YNAB transactions, enrich memos with actual "
+            "merchant/service names, classify into budget categories, "
+            "and send suggestions. Use when Erin says 'sync my "
+            "emails', 'check PayPal', 'categorize Venmo', 'what was "
+            "that Apple charge?', or similar."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "email_sync_status",
-        "description": "Get the current email-YNAB sync status including: last sync time, transactions processed by provider (PayPal/Venmo/Apple), acceptance rate, and whether auto-categorize mode is enabled. Use when Erin asks about email sync, PayPal/Venmo/Apple categorization stats.",
+        "description": (
+            "Get the current email-YNAB sync status including: last "
+            "sync time, transactions processed by provider "
+            "(PayPal/Venmo/Apple), acceptance rate, and whether "
+            "auto-categorize mode is enabled. Use when Erin asks about "
+            "email sync, PayPal/Venmo/Apple categorization stats."
+        ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "email_set_auto_categorize",
-        "description": "Enable or disable email sync auto-categorize mode. When enabled, PayPal/Venmo/Apple purchases are automatically categorized without confirmation. Requires 80%+ acceptance rate over 10+ suggestions and 2 weeks of use. Use when Erin says 'yes' to the auto-categorize graduation prompt, or 'turn off auto-categorize for emails'.",
+        "description": (
+            "Enable or disable email sync auto-categorize mode. When "
+            "enabled, PayPal/Venmo/Apple purchases are automatically "
+            "categorized without confirmation. Requires 80%+ acceptance "
+            "rate over 10+ suggestions and 2 weeks of use. Use when "
+            "Erin says 'yes' to the auto-categorize graduation prompt, "
+            "or 'turn off auto-categorize for emails'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1144,7 +1564,12 @@ TOOLS = [
     },
     {
         "name": "email_undo_categorize",
-        "description": "Undo a recent email sync auto-categorization, reverting the transaction to its original state. Use when Erin says 'undo' or 'undo 1' after an email sync auto-categorize notification.",
+        "description": (
+            "Undo a recent email sync auto-categorization, reverting "
+            "the transaction to its original state. Use when Erin "
+            "says 'undo' or 'undo 1' after an email sync "
+            "auto-categorize notification."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1160,18 +1585,33 @@ TOOLS = [
     # User Preference Persistence (Feature 013)
     {
         "name": "save_preference",
-        "description": "Save a user preference that persists across conversations. Use when the user expresses a lasting rule like 'don't remind me about X', 'stop sending X', 'no more X', or 'check the time before Y'. Do NOT use for one-time requests like 'no tacos tonight'.",
+        "description": (
+            "Save a user preference that persists across "
+            "conversations. Use when the user expresses a lasting "
+            "rule like 'don't remind me about X', 'stop sending X', "
+            "'no more X', or 'check the time before Y'. Do NOT use "
+            "for one-time requests like 'no tacos tonight'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "category": {
                     "type": "string",
-                    "description": "Preference category: 'notification_optout' (suppress proactive nudges), 'topic_filter' (exclude content from briefings), 'communication_style' (change how bot responds), or 'quiet_hours' (time-based suppression).",
+                    "description": (
+                        "Preference category: 'notification_optout' "
+                        "(suppress proactive nudges), 'topic_filter' "
+                        "(exclude content from briefings), "
+                        "'communication_style' (change how bot "
+                        "responds), or 'quiet_hours' "
+                        "(time-based suppression)."
+                    ),
                     "enum": ["notification_optout", "topic_filter", "communication_style", "quiet_hours"],
                 },
                 "description": {
                     "type": "string",
-                    "description": "Human-readable summary of the preference (e.g., 'No grocery reminders unless asked').",
+                    "description": (
+                        "Human-readable summary of the preference (e.g., 'No grocery reminders unless asked')."
+                    ),
                 },
                 "raw_text": {
                     "type": "string",
@@ -1183,7 +1623,11 @@ TOOLS = [
     },
     {
         "name": "list_preferences",
-        "description": "List all stored preferences for the current user. Use when the user asks 'what are my preferences?', 'what have I set?', or 'show my preferences'.",
+        "description": (
+            "List all stored preferences for the current user. Use "
+            "when the user asks 'what are my preferences?', 'what "
+            "have I set?', or 'show my preferences'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -1192,13 +1636,21 @@ TOOLS = [
     },
     {
         "name": "remove_preference",
-        "description": "Remove a stored preference so the bot resumes default behavior. Use when the user says 'start reminding me about X again', 'remove the X preference', 'undo the X opt-out', or 'clear all my preferences'. Use search_text='ALL' to clear all preferences.",
+        "description": (
+            "Remove a stored preference so the bot resumes default "
+            "behavior. Use when the user says 'start reminding me "
+            "about X again', 'remove the X preference', 'undo the "
+            "X opt-out', or 'clear all my preferences'. Use "
+            "search_text='ALL' to clear all preferences."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "search_text": {
                     "type": "string",
-                    "description": "Text to match against stored preferences (fuzzy). Use 'ALL' to clear all preferences.",
+                    "description": (
+                        "Text to match against stored preferences (fuzzy). Use 'ALL' to clear all preferences."
+                    ),
                 },
             },
             "required": ["search_text"],
@@ -1207,7 +1659,14 @@ TOOLS = [
     # Context-Aware Bot (Feature 014)
     {
         "name": "get_daily_context",
-        "description": "Get today's family context: calendar events grouped by person, who has Zoey, communication mode (time-of-day tone), active preferences, and pending backlog count. Call this at the start of any planning, scheduling, daily plan, or recommendation interaction. Do NOT call for simple factual questions.",
+        "description": (
+            "Get today's family context: calendar events grouped by "
+            "person, who has Zoey, communication mode (time-of-day "
+            "tone), active preferences, and pending backlog count. "
+            "Call this at the start of any planning, scheduling, "
+            "daily plan, or recommendation interaction. Do NOT call "
+            "for simple factual questions."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -1216,7 +1675,11 @@ TOOLS = [
     },
     {
         "name": "save_routine",
-        "description": "Save a personal routine checklist. Overwrites if a routine with the same name already exists. Examples: morning skincare, bedtime, meal prep, school pickup.",
+        "description": (
+            "Save a personal routine checklist. Overwrites if a "
+            "routine with the same name already exists. Examples: "
+            "morning skincare, bedtime, meal prep, school pickup."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1235,13 +1698,19 @@ TOOLS = [
     },
     {
         "name": "get_routine",
-        "description": "Get a stored personal routine by name. Returns the ordered checklist. If name is empty or 'all', lists all saved routine names.",
+        "description": (
+            "Get a stored personal routine by name. Returns the "
+            "ordered checklist. If name is empty or 'all', lists "
+            "all saved routine names."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "name": {
                     "type": "string",
-                    "description": "Routine name to retrieve (e.g., 'morning skincare'). Use 'all' to list all routine names.",
+                    "description": (
+                        "Routine name to retrieve (e.g., 'morning skincare'). Use 'all' to list all routine names."
+                    ),
                 },
             },
             "required": ["name"],
@@ -1249,7 +1718,11 @@ TOOLS = [
     },
     {
         "name": "delete_routine",
-        "description": "Delete a stored personal routine by name. Use when the user says 'delete my morning routine' or 'remove my bedtime routine'.",
+        "description": (
+            "Delete a stored personal routine by name. Use when "
+            "the user says 'delete my morning routine' or "
+            "'remove my bedtime routine'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1264,7 +1737,12 @@ TOOLS = [
     # Drive Time Tools (Feature 017)
     {
         "name": "get_drive_times",
-        "description": "Get all stored drive times for common locations. Returns a list of locations and their drive times from home in minutes. Call this during daily plan generation to insert travel buffers.",
+        "description": (
+            "Get all stored drive times for common locations. Returns "
+            "a list of locations and their drive times from home in "
+            "minutes. Call this during daily plan generation to "
+            "insert travel buffers."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -1272,13 +1750,21 @@ TOOLS = [
     },
     {
         "name": "save_drive_time",
-        "description": "Save or update a drive time for a location. Use when the user says something like 'the gym is 5 minutes away' or 'school is 10 minutes from home'.",
+        "description": (
+            "Save or update a drive time for a location. Use when "
+            "the user says something like 'the gym is 5 minutes "
+            "away' or 'school is 10 minutes from home'."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "location": {
                     "type": "string",
-                    "description": "Location name (e.g., 'gym', 'school', 'grandma'). Articles like 'the' are stripped automatically.",
+                    "description": (
+                        "Location name (e.g., 'gym', 'school', "
+                        "'grandma'). Articles like 'the' are "
+                        "stripped automatically."
+                    ),
                 },
                 "minutes": {
                     "type": "integer",
@@ -1324,12 +1810,14 @@ def _handle_write_calendar_blocks(**kw) -> str:
     events_data = []
     for block in blocks:
         color_id = _COLOR_MAP.get(block.get("color_category", "chores"), calendar.COLOR_CHORES)
-        events_data.append({
-            "summary": block["summary"],
-            "start_time": block["start_time"],
-            "end_time": block["end_time"],
-            "color_id": color_id,
-        })
+        events_data.append(
+            {
+                "summary": block["summary"],
+                "start_time": block["start_time"],
+                "end_time": block["end_time"],
+                "color_id": color_id,
+            }
+        )
 
     created = calendar.batch_create_events(events_data, calendar_name="erin")
     return f"Created {created} calendar blocks on Erin's calendar."
@@ -1342,10 +1830,15 @@ def _handle_push_grocery_list(**kw) -> str:
         return "No items to push."
     try:
         from src.tools import anylist_bridge
+
         return anylist_bridge.push_grocery_list(items)
     except Exception as e:
         logger.warning("AnyList push failed: %s", e)
-        return f"AnyList is unavailable ({e}). Please send the grocery list as a formatted WhatsApp message organized by store section instead."
+        return (
+            f"AnyList is unavailable ({e}). Please send the grocery "
+            "list as a formatted WhatsApp message organized by "
+            "store section instead."
+        )
 
 
 def _handle_extract_recipe(**kw) -> dict | str:
@@ -1458,12 +1951,12 @@ def send_sync_message_direct(message: str) -> None:
 
 # Map tool names to functions
 TOOL_FUNCTIONS = {
-    "get_calendar_events": lambda **kw: calendar.get_calendar_events(
-        kw.get("days_ahead", 7), kw.get("calendar_names")
-    ),
+    "get_calendar_events": lambda **kw: calendar.get_calendar_events(kw.get("days_ahead", 7), kw.get("calendar_names")),
     "get_outlook_events": lambda **kw: outlook.get_outlook_events(kw.get("date", "")),
     "get_action_items": lambda **kw: notion.get_action_items(kw.get("assignee", ""), kw.get("status", "")),
-    "add_action_item": lambda **kw: notion.add_action_item(kw["assignee"], kw["description"], kw.get("due_context", "This Week")),
+    "add_action_item": lambda **kw: notion.add_action_item(
+        kw["assignee"], kw["description"], kw.get("due_context", "This Week")
+    ),
     "complete_action_item": lambda **kw: notion.complete_action_item(kw["page_id"]),
     "add_topic": lambda **kw: notion.add_topic(kw["description"]),
     "get_family_profile": lambda **kw: notion.get_family_profile(),
@@ -1480,8 +1973,12 @@ TOOL_FUNCTIONS = {
         kw.get("payee", ""), kw.get("amount", 0), kw.get("date", ""), kw.get("new_category", "")
     ),
     "create_transaction": lambda **kw: ynab.create_transaction(
-        kw.get("payee", ""), kw.get("amount", 0), kw.get("category", ""),
-        kw.get("date", ""), kw.get("memo", ""), kw.get("account", "")
+        kw.get("payee", ""),
+        kw.get("amount", 0),
+        kw.get("category", ""),
+        kw.get("date", ""),
+        kw.get("memo", ""),
+        kw.get("account", ""),
     ),
     "update_category_budget": lambda **kw: ynab.update_category_budget(kw.get("category", ""), kw.get("amount", 0)),
     "move_money": lambda **kw: ynab.move_money(
@@ -1498,8 +1995,11 @@ TOOL_FUNCTIONS = {
     # Calendar write
     "write_calendar_blocks": _handle_write_calendar_blocks,
     "create_quick_event": lambda **kw: calendar.create_quick_event(
-        kw["summary"], kw["start_time"], kw.get("end_time", ""),
-        kw.get("description", ""), int(kw.get("reminder_minutes", 15))
+        kw["summary"],
+        kw["start_time"],
+        kw.get("end_time", ""),
+        kw.get("description", ""),
+        int(kw.get("reminder_minutes", 15)),
     ),
     # Grocery
     "get_grocery_history": lambda **kw: notion.get_grocery_history(kw.get("category", "")),
@@ -1517,8 +2017,11 @@ TOOL_FUNCTIONS = {
     "list_cookbooks": lambda **kw: recipes.list_cookbooks(),
     # Downshiftology
     "search_downshiftology": lambda **kw: downshiftology.search_downshiftology(
-        kw.get("query", ""), kw.get("course", ""), kw.get("cuisine", ""),
-        kw.get("dietary", ""), int(kw.get("max_time", 0))
+        kw.get("query", ""),
+        kw.get("course", ""),
+        kw.get("cuisine", ""),
+        kw.get("dietary", ""),
+        int(kw.get("max_time", 0)),
     ),
     "get_downshiftology_details": lambda **kw: downshiftology.get_downshiftology_details(int(kw["result_number"])),
     "import_downshiftology_recipe": lambda **kw: downshiftology.import_downshiftology_recipe(
@@ -1541,9 +2044,7 @@ TOOL_FUNCTIONS = {
     "check_reorder_items": lambda **kw: proactive.check_reorder_items(),
     "confirm_groceries_ordered": lambda **kw: proactive.handle_order_confirmation(),
     "generate_meal_plan": lambda **kw: proactive.generate_meal_plan(),
-    "handle_meal_swap": lambda **kw: proactive.handle_meal_swap(
-        kw["plan"], kw["day"], kw["new_meal"]
-    ),
+    "handle_meal_swap": lambda **kw: proactive.handle_meal_swap(kw["plan"], kw["day"], kw["new_meal"]),
     # Feature discovery
     "get_help": lambda **kw: discovery.get_help(kw.get("_phone", "")),
     # Amazon-YNAB Sync (Feature 010)
@@ -1559,9 +2060,7 @@ TOOL_FUNCTIONS = {
     "apply_goal_suggestion": lambda **kw: ynab.apply_goal_suggestion(
         kw.get("category", ""), kw.get("amount", 0), kw.get("apply_all", False)
     ),
-    "allocate_bonus": lambda **kw: ynab.allocate_bonus(
-        kw.get("amount", 0), kw.get("description", "")
-    ),
+    "allocate_bonus": lambda **kw: ynab.allocate_bonus(kw.get("amount", 0), kw.get("description", "")),
     "approve_allocation": lambda **kw: ynab.approve_allocation(kw.get("adjustments", "")),
     # Email-YNAB Sync (Feature 011)
     "email_sync_trigger": lambda **kw: _handle_email_sync_trigger(),
@@ -1601,10 +2100,11 @@ def _handle_save_preference(**kw) -> str:
     try:
         pref = preferences.add_preference(phone, category, description, raw_text)
         return (
-            f"Saved preference: \"{pref['description']}\" ({category.replace('_', ' ')}). "
+            f'Saved preference: "{pref["description"]}" ({category.replace("_", " ")}). '
             f"I'll honor this in all future interactions. "
             f"You can remove it anytime by saying something like "
-            f"'remove the {description.lower().split()[0]} preference' or 'start {description.lower().split()[-1]} again'."
+            f"'remove the {description.lower().split()[0]} preference' "
+            f"or 'start {description.lower().split()[-1]} again'."
         )
     except ValueError as e:
         return str(e)
@@ -1653,17 +2153,13 @@ def _handle_remove_preference(**kw) -> str:
         count = preferences.clear_preferences(phone)
         if count == 0:
             return "You don't have any preferences to clear."
-        return (
-            f"Done — I've cleared all {count} of your preferences. "
-            "I'll go back to default behavior for everything."
-        )
+        return f"Done — I've cleared all {count} of your preferences. I'll go back to default behavior for everything."
 
     # Fuzzy match removal
     removed = preferences.remove_preference_by_description(phone, search_text)
     if removed:
         return (
-            f"Done — I've removed the preference matching '{search_text}'. "
-            "I'll resume default behavior for that topic."
+            f"Done — I've removed the preference matching '{search_text}'. I'll resume default behavior for that topic."
         )
     else:
         return (
@@ -1750,7 +2246,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
             "\n\n[SYSTEM: This is the user's FIRST message. Before your normal "
             "response, prepend a brief one-line welcome: 'Welcome to Mom Bot! "
             "I can help with recipes, budgets, calendars, groceries, chores, "
-            "and reminders. Say \"help\" anytime to see everything I can do.' "
+            'and reminders. Say "help" anytime to see everything I can do.\' '
             "Then answer their actual request.]"
         )
 
@@ -1782,13 +2278,28 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                 if block.type == "tool_use":
                     tool_name = block.name
                     tool_input = block.input
-                    logger.info("Tool call [%d/%d]: %s(%s)", iteration, MAX_TOOL_ITERATIONS, tool_name, json.dumps(tool_input))
+                    logger.info(
+                        "Tool call [%d/%d]: %s(%s)",
+                        iteration,
+                        MAX_TOOL_ITERATIONS,
+                        tool_name,
+                        json.dumps(tool_input),
+                    )
 
                     try:
                         func = TOOL_FUNCTIONS.get(tool_name)
                         if func:
                             # Inject phone for tools that need sender context
-                            if tool_name in ("get_help", "save_preference", "list_preferences", "remove_preference", "get_daily_context", "save_routine", "get_routine", "delete_routine"):
+                            if tool_name in (
+                                "get_help",
+                                "save_preference",
+                                "list_preferences",
+                                "remove_preference",
+                                "get_daily_context",
+                                "save_routine",
+                                "get_routine",
+                                "delete_routine",
+                            ):
                                 tool_input["_phone"] = sender_phone
                             result = func(**tool_input)
                             # Track usage for feature discovery suggestions
@@ -1800,11 +2311,13 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                         logger.error("Tool %s failed: %s", tool_name, e)
                         result = f"Error: {tool_name} is currently unavailable. Skip this section."
 
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": str(result),
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": str(result),
+                        }
+                    )
 
             # Add assistant response and tool results to conversation
             messages.append({"role": "assistant", "content": response.content})

@@ -2,24 +2,24 @@
 
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from src.config import ERIN_PHONE
 from src import preferences
+from src.config import ERIN_PHONE
+
 try:
     from src.context import get_communication_mode
 except ImportError:
     get_communication_mode = None  # fallback to QUIET_HOURS constants
-from src.tools.calendar import get_events_for_date_raw, CREATED_BY_TAG
+from src.tools.calendar import CREATED_BY_TAG, get_events_for_date_raw
 from src.tools.notion import (
-    create_nudge,
-    query_pending_nudges,
-    query_nudges_by_type,
-    query_nudges_by_event_id,
-    update_nudge_status,
-    count_sent_today,
     check_quiet_day,
+    count_sent_today,
+    create_nudge,
+    query_nudges_by_event_id,
+    query_pending_nudges,
+    update_nudge_status,
 )
 from src.whatsapp import send_message_with_template_fallback
 
@@ -28,13 +28,20 @@ logger = logging.getLogger(__name__)
 PACIFIC = ZoneInfo("America/Los_Angeles")
 DAILY_CAP = 8
 BATCH_WINDOW_MINUTES = 5
-QUIET_HOURS_START = 7   # 7:00 AM Pacific
-QUIET_HOURS_END = 20    # 8:30 PM Pacific (last scan at 8:15 PM, enforce 20:30 cutoff)
+QUIET_HOURS_START = 7  # 7:00 AM Pacific
+QUIET_HOURS_END = 20  # 8:30 PM Pacific (last scan at 8:15 PM, enforce 20:30 cutoff)
 QUIET_HOURS_END_MINUTE = 30
 
 # Keywords indicating a virtual/remote event (no departure needed)
 VIRTUAL_KEYWORDS = {
-    "call", "virtual", "remote", "online", "zoom", "meet", "teams", "webinar",
+    "call",
+    "virtual",
+    "remote",
+    "online",
+    "zoom",
+    "meet",
+    "teams",
+    "webinar",
 }
 
 
@@ -47,6 +54,7 @@ def _outside_static_quiet_hours(now: datetime) -> bool:
 # ---------------------------------------------------------------------------
 # T006: Virtual event detection
 # ---------------------------------------------------------------------------
+
 
 def is_virtual_event(event: dict) -> bool:
     """Determine if a calendar event is virtual (no departure needed).
@@ -84,6 +92,7 @@ def is_virtual_event(event: dict) -> bool:
 # ---------------------------------------------------------------------------
 # T007: Scan upcoming departures
 # ---------------------------------------------------------------------------
+
 
 def scan_upcoming_departures(hours_ahead: int = 2) -> int:
     """Scan Erin's and family calendars for upcoming events needing departure.
@@ -143,11 +152,13 @@ def scan_upcoming_departures(hours_ahead: int = 2) -> int:
         if time_until <= 15:
             message = f"Heads up — {summary} starts at {time_str} (leaving soon!)"
 
-        context = json.dumps({
-            "event_title": summary,
-            "event_start": event_start.isoformat(),
-            "calendar": source,
-        })
+        context = json.dumps(
+            {
+                "event_title": summary,
+                "event_start": event_start.isoformat(),
+                "calendar": source,
+            }
+        )
 
         create_nudge(
             summary=f"Departure: {summary}",
@@ -213,6 +224,7 @@ def _nudge_matches_preference(nudge: dict, user_prefs: list[dict]) -> bool:
 # ---------------------------------------------------------------------------
 # T008: Process pending nudges
 # ---------------------------------------------------------------------------
+
 
 async def process_pending_nudges() -> dict:
     """Send all due pending nudges via WhatsApp, respecting daily cap and batching.
@@ -344,6 +356,7 @@ async def process_pending_nudges() -> dict:
 # T009: Quiet day
 # ---------------------------------------------------------------------------
 
+
 def set_quiet_day() -> str:
     """Activate quiet day — suppress all proactive nudges for the rest of today.
 
@@ -387,6 +400,7 @@ def set_quiet_day() -> str:
 # ---------------------------------------------------------------------------
 # Snooze/dismiss helpers (called from assistant tool loop)
 # ---------------------------------------------------------------------------
+
 
 def snooze_nudge(nudge_id: str, minutes: int = 10) -> str:
     """Snooze a nudge — mark original as Snoozed and create new one +N minutes."""

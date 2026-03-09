@@ -1,15 +1,16 @@
 """Amazon-YNAB Smart Sync — Gmail email parsing, order matching, classification, and sync orchestration."""
 
 import base64
-import httpx
 import json
 import logging
 import os
-import time
-from dataclasses import dataclass, field, asdict
+import re
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,11 @@ _SYNC_CONFIG_FILE = _DATA_DIR / "amazon_sync_config.json"
 # Data model classes (from data-model.md)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Correction:
     """A record of Erin correcting a category assignment."""
+
     timestamp: str  # ISO datetime
     from_category: str
     to_category: str
@@ -39,6 +42,7 @@ class Correction:
 @dataclass
 class MatchedItem:
     """An Amazon item matched to a YNAB transaction, with its classification."""
+
     title: str
     price: float  # dollars
     quantity: int = 1
@@ -52,9 +56,11 @@ class MatchedItem:
 @dataclass
 class SyncRecord:
     """Tracks a processed YNAB transaction to prevent duplicates."""
+
     ynab_transaction_id: str
     amazon_order_number: str = ""
-    status: str = "unprocessed"  # matched|enriched|split_pending|split_applied|auto_split|skipped|unmatched|refund_applied
+    # matched|enriched|split_pending|split_applied|auto_split|skipped|unmatched|refund_applied
+    status: str = "unprocessed"
     matched_at: str = ""
     enriched_at: str = ""
     split_applied_at: str = ""
@@ -70,6 +76,7 @@ class SyncRecord:
 @dataclass
 class CategoryMapping:
     """Learned association between Amazon item and YNAB budget category."""
+
     item_title_normalized: str
     category_name: str
     category_id: str
@@ -83,6 +90,7 @@ class CategoryMapping:
 @dataclass
 class SyncConfig:
     """Global configuration for the sync feature."""
+
     auto_split_enabled: bool = False
     last_sync: str = ""
     total_suggestions: int = 0
@@ -90,14 +98,16 @@ class SyncConfig:
     modified_accepts: int = 0
     skips: int = 0
     first_suggestion_date: str = ""
-    known_charge_patterns: dict = field(default_factory=lambda: {
-        "prime": "Subscriptions",
-        "kindle": "Entertainment",
-        "audible": "Entertainment",
-        "amazon music": "Entertainment",
-        "amazon fresh": "Groceries",
-        "whole foods": "Groceries",
-    })
+    known_charge_patterns: dict = field(
+        default_factory=lambda: {
+            "prime": "Subscriptions",
+            "kindle": "Entertainment",
+            "audible": "Entertainment",
+            "amazon music": "Entertainment",
+            "amazon fresh": "Groceries",
+            "whole foods": "Groceries",
+        }
+    )
     # Email sync (Feature 011) fields
     email_auto_categorize_enabled: bool = False
     email_last_sync: str = ""
@@ -109,6 +119,7 @@ class SyncConfig:
 # ---------------------------------------------------------------------------
 # Persistence helpers (atomic JSON read/write, same pattern as discovery.py)
 # ---------------------------------------------------------------------------
+
 
 def _load_json(filepath: Path) -> dict:
     """Load JSON from file. Returns empty dict on failure."""
@@ -132,6 +143,7 @@ def _save_json(filepath: Path, data: dict) -> None:
 
 
 # --- Sync Records ---
+
 
 def load_sync_records() -> dict[str, dict]:
     """Load sync records. Key = ynab_transaction_id."""
@@ -162,6 +174,7 @@ def is_transaction_processed(ynab_transaction_id: str) -> bool:
 
 # --- Category Mappings ---
 
+
 def load_category_mappings() -> dict[str, dict]:
     """Load category mappings. Key = item_title_normalized."""
     return _load_json(_CATEGORY_MAPPINGS_FILE)
@@ -189,6 +202,7 @@ def lookup_cached_category(item_title: str) -> Optional[dict]:
 
 
 # --- Sync Config ---
+
 
 def load_sync_config() -> SyncConfig:
     """Load sync config, creating defaults if missing."""
@@ -247,8 +261,7 @@ def _get_gmail_service():
                 f.write(creds.to_json())
         else:
             raise RuntimeError(
-                "Gmail OAuth token not found or invalid. "
-                "Re-run setup_calendar.py to authorize Gmail access."
+                "Gmail OAuth token not found or invalid. Re-run setup_calendar.py to authorize Gmail access."
             )
     return build("gmail", "v1", credentials=creds)
 
@@ -278,9 +291,6 @@ def _extract_html_body(message: dict) -> str:
     return ""
 
 
-import re
-
-
 def _strip_html(html: str) -> str:
     """Strip HTML tags and collapse whitespace to produce clean text for parsing."""
     # Remove style and script blocks entirely
@@ -292,7 +302,13 @@ def _strip_html(html: str) -> str:
     # Remove remaining HTML tags
     text = re.sub(r"<[^>]+>", " ", text)
     # Decode common entities
-    text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&#36;", "$")
+    text = (
+        text.replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&#36;", "$")
+    )
     # Collapse whitespace but preserve newlines
     lines = [" ".join(line.split()) for line in text.split("\n")]
     text = "\n".join(line for line in lines if line.strip())
@@ -308,6 +324,7 @@ def _parse_order_email(html_body: str, email_date: str = "") -> list[dict]:
     Returns empty list if parsing fails.
     """
     from anthropic import Anthropic
+
     from src.config import ANTHROPIC_API_KEY
 
     # Strip HTML to plain text — dramatically reduces noise for Claude
@@ -359,10 +376,10 @@ def _parse_order_email(html_body: str, email_date: str = "") -> list[dict]:
 
         # Parse as JSON array or single object
         if "[" in text:
-            json_str = text[text.index("["):text.rindex("]") + 1]
+            json_str = text[text.index("[") : text.rindex("]") + 1]
             raw_orders = json.loads(json_str)
         elif "{" in text:
-            json_str = text[text.index("{"):text.rindex("}") + 1]
+            json_str = text[text.index("{") : text.rindex("}") + 1]
             raw_orders = [json.loads(json_str)]
         else:
             return []
@@ -423,6 +440,7 @@ def _parse_order_email(html_body: str, email_date: str = "") -> list[dict]:
 # Amazon order fetching via Gmail API (T007)
 # ---------------------------------------------------------------------------
 
+
 def get_amazon_orders(days: int = 30) -> tuple[list[dict], bool]:
     """Fetch Amazon order data from Gmail order confirmation emails.
 
@@ -445,9 +463,7 @@ def get_amazon_orders(days: int = 30) -> tuple[list[dict], bool]:
     query = f"from:auto-confirm@amazon.com after:{since_date}"
 
     try:
-        results = service.users().messages().list(
-            userId="me", q=query, maxResults=50
-        ).execute()
+        results = service.users().messages().list(userId="me", q=query, maxResults=50).execute()
         messages = results.get("messages", [])
 
         if not messages:
@@ -458,9 +474,7 @@ def get_amazon_orders(days: int = 30) -> tuple[list[dict], bool]:
         seen_order_numbers = set()
         for msg_meta in messages:
             try:
-                msg = service.users().messages().get(
-                    userId="me", id=msg_meta["id"], format="full"
-                ).execute()
+                msg = service.users().messages().get(userId="me", id=msg_meta["id"], format="full").execute()
                 html_body = _extract_html_body(msg)
                 if not html_body:
                     continue
@@ -472,6 +486,7 @@ def get_amazon_orders(days: int = 30) -> tuple[list[dict], bool]:
                 if email_date_str:
                     try:
                         from email.utils import parsedate_to_datetime
+
                         dt = parsedate_to_datetime(email_date_str)
                         email_date = dt.date().isoformat()
                     except Exception:
@@ -492,7 +507,9 @@ def get_amazon_orders(days: int = 30) -> tuple[list[dict], bool]:
 
         logger.info(
             "Parsed %d Amazon orders from %d emails (last %d days)",
-            len(orders), len(messages), days,
+            len(orders),
+            len(messages),
+            days,
         )
         return orders, False
 
@@ -506,6 +523,7 @@ def get_amazon_orders(days: int = 30) -> tuple[list[dict], bool]:
 # ---------------------------------------------------------------------------
 # T008: Find unprocessed Amazon transactions in YNAB
 # ---------------------------------------------------------------------------
+
 
 def find_amazon_transactions(days: int = 30) -> list[dict]:
     """Fetch YNAB transactions with Amazon payee, filter out already-processed ones.
@@ -526,16 +544,18 @@ def find_amazon_transactions(days: int = 30) -> list[dict]:
         payee = (t.get("payee_name") or "").lower()
         if "amazon" in payee or "amzn" in payee:
             if not is_transaction_processed(t["id"]):
-                amazon_txns.append({
-                    "id": t["id"],
-                    "amount": t["amount"],  # milliunits
-                    "date": t["date"],
-                    "memo": t.get("memo") or "",
-                    "payee_name": t.get("payee_name") or "",
-                    "category_id": t.get("category_id") or "",
-                    "category_name": t.get("category_name") or "",
-                    "account_id": t.get("account_id") or "",
-                })
+                amazon_txns.append(
+                    {
+                        "id": t["id"],
+                        "amount": t["amount"],  # milliunits
+                        "date": t["date"],
+                        "memo": t.get("memo") or "",
+                        "payee_name": t.get("payee_name") or "",
+                        "category_id": t.get("category_id") or "",
+                        "category_name": t.get("category_name") or "",
+                        "account_id": t.get("account_id") or "",
+                    }
+                )
 
     logger.info("Found %d unprocessed Amazon transactions in YNAB", len(amazon_txns))
     return amazon_txns
@@ -544,6 +564,7 @@ def find_amazon_transactions(days: int = 30) -> list[dict]:
 # ---------------------------------------------------------------------------
 # T009: Match Amazon orders to YNAB transactions
 # ---------------------------------------------------------------------------
+
 
 def match_orders_to_transactions(
     ynab_transactions: list[dict],
@@ -606,11 +627,13 @@ def match_orders_to_transactions(
             if matched_order:
                 break
 
-        results.append({
-            "ynab_transaction": txn,
-            "matched_order": matched_order,
-            "match_type": match_type,
-        })
+        results.append(
+            {
+                "ynab_transaction": txn,
+                "matched_order": matched_order,
+                "match_type": match_type,
+            }
+        )
 
     matched = sum(1 for r in results if r["matched_order"])
     logger.info("Matched %d/%d transactions to Amazon orders", matched, len(results))
@@ -620,6 +643,7 @@ def match_orders_to_transactions(
 # ---------------------------------------------------------------------------
 # T010: Classify item into YNAB budget category
 # ---------------------------------------------------------------------------
+
 
 def classify_item(
     item_title: str,
@@ -645,6 +669,7 @@ def classify_item(
     # 2. LLM classification via Claude Haiku
     try:
         from anthropic import Anthropic
+
         from src.config import ANTHROPIC_API_KEY
 
         client = Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -661,7 +686,8 @@ def classify_item(
             f"Given the family's YNAB budget categories:\n{', '.join(cat_names)}\n\n"
             f"And these past categorization decisions:\n{examples_text}\n\n"
             f'Classify this Amazon item: "{item_title}" (${item_price:.2f})\n\n'
-            'Return ONLY valid JSON: {"category": "exact category name from list above", "confidence": 0.0-1.0, "reasoning": "brief explanation"}'
+            'Return ONLY valid JSON: {"category": "exact category name from list above", '
+            '"confidence": 0.0-1.0, "reasoning": "brief explanation"}'
         )
 
         response = client.messages.create(
@@ -673,7 +699,7 @@ def classify_item(
         text = response.content[0].text.strip()
         # Extract JSON from response
         if "{" in text:
-            json_str = text[text.index("{"):text.rindex("}") + 1]
+            json_str = text[text.index("{") : text.rindex("}") + 1]
             result = json.loads(json_str)
 
             # Match category name to ID
@@ -702,6 +728,7 @@ def classify_item(
 # ---------------------------------------------------------------------------
 # T011: Enrich memos and classify matched transactions
 # ---------------------------------------------------------------------------
+
 
 def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
     """For each matched transaction: update memo, classify items, handle single-item auto-split.
@@ -754,15 +781,17 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
             item_names.append(title[:50])  # Truncate long titles
 
             classification = classify_item(title, price, cat_list, past_mappings)
-            classified_items.append(MatchedItem(
-                title=title,
-                price=float(price),
-                quantity=qty,
-                seller=item.get("seller", "") or "",
-                classified_category=classification["category_name"],
-                classified_category_id=classification["category_id"],
-                confidence=classification["confidence"],
-            ))
+            classified_items.append(
+                MatchedItem(
+                    title=title,
+                    price=float(price),
+                    quantity=qty,
+                    seller=item.get("seller", "") or "",
+                    classified_category=classification["category_name"],
+                    classified_category_id=classification["category_id"],
+                    confidence=classification["confidence"],
+                )
+            )
 
         # Update memo with item names (T005)
         memo_text = ", ".join(item_names)
@@ -783,7 +812,7 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
         # Ensure amounts sum exactly to transaction total
         allocated_sum = sum(ci.allocated_amount for ci in classified_items)
         if classified_items and allocated_sum != txn_total:
-            classified_items[-1].allocated_amount += (txn_total - allocated_sum)
+            classified_items[-1].allocated_amount += txn_total - allocated_sum
 
         # Create sync record
         now = datetime.now().isoformat()
@@ -803,11 +832,16 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
         # Single-item orders: auto-categorize directly (FR-006)
         if len(classified_items) == 1 and classified_items[0].classified_category_id:
             ci = classified_items[0]
-            ynab.split_transaction(txn["id"], [{
-                "amount_milliunits": txn["amount"],  # Keep original sign
-                "category_id": ci.classified_category_id,
-                "memo": ci.title[:200],
-            }])
+            ynab.split_transaction(
+                txn["id"],
+                [
+                    {
+                        "amount_milliunits": txn["amount"],  # Keep original sign
+                        "category_id": ci.classified_category_id,
+                        "memo": ci.title[:200],
+                    }
+                ],
+            )
             record.status = "auto_split"
             record.split_applied_at = now
             logger.info("Auto-categorized single-item order: %s → %s", ci.title, ci.classified_category)
@@ -823,6 +857,7 @@ def enrich_and_classify(matched_transactions: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 # T012: Format suggestion message for WhatsApp
 # ---------------------------------------------------------------------------
+
 
 def format_suggestion_message(enriched_transactions: list[dict]) -> str:
     """Build consolidated WhatsApp message with split suggestions.
@@ -850,7 +885,7 @@ def format_suggestion_message(enriched_transactions: list[dict]) -> str:
         if match["matched_order"] is None:
             unmatched.append(
                 f"• ${abs(txn['amount']) / 1000:.2f} ({txn['date']}) — unmatched\n"
-                f"  Tagged as \"Unmatched Amazon charge\" — what category?"
+                f'  Tagged as "Unmatched Amazon charge" — what category?'
             )
             continue
 
@@ -908,18 +943,17 @@ _PENDING_SUGGESTIONS_FILE = _DATA_DIR / "amazon_pending_suggestions.json"
 
 def set_pending_suggestions(enriched_transactions: list[dict]) -> None:
     """Store pending suggestions to disk so replies can reference them by index."""
-    pending = [
-        m for m in enriched_transactions
-        if m.get("sync_record") and m["sync_record"].status == "split_pending"
-    ]
+    pending = [m for m in enriched_transactions if m.get("sync_record") and m["sync_record"].status == "split_pending"]
     # Serialize: convert MatchedItem dataclasses to dicts, store essentials
     serialized = []
     for m in pending:
-        serialized.append({
-            "ynab_transaction": m["ynab_transaction"],
-            "sync_record_id": m["sync_record"].ynab_transaction_id,
-            "classified_items": [asdict(ci) for ci in m.get("classified_items", [])],
-        })
+        serialized.append(
+            {
+                "ynab_transaction": m["ynab_transaction"],
+                "sync_record_id": m["sync_record"].ynab_transaction_id,
+                "classified_items": [asdict(ci) for ci in m.get("classified_items", [])],
+            }
+        )
     _PENDING_SUGGESTIONS_FILE.write_text(json.dumps(serialized, indent=2))
     logger.info("Saved %d pending suggestions to disk", len(serialized))
 
@@ -937,11 +971,13 @@ def _load_pending_suggestions() -> list[dict]:
             # Reconstruct SyncRecord from saved records
             record = load_sync_record(entry["sync_record_id"])
             if record and record.status == "split_pending":
-                result.append({
-                    "ynab_transaction": entry["ynab_transaction"],
-                    "sync_record": record,
-                    "classified_items": items,
-                })
+                result.append(
+                    {
+                        "ynab_transaction": entry["ynab_transaction"],
+                        "sync_record": record,
+                        "classified_items": items,
+                    }
+                )
         return result
     except Exception as e:
         logger.warning("Failed to load pending suggestions: %s", e)
@@ -992,27 +1028,31 @@ def handle_sync_reply(message_text: str) -> str:
         # Apply suggested split
         subs = []
         for ci in items:
-            subs.append({
-                "amount_milliunits": -abs(ci.allocated_amount),  # negative for outflow
-                "category_id": ci.classified_category_id,
-                "memo": ci.title[:200],
-            })
-        result = ynab.split_transaction(txn["id"], subs)
+            subs.append(
+                {
+                    "amount_milliunits": -abs(ci.allocated_amount),  # negative for outflow
+                    "category_id": ci.classified_category_id,
+                    "memo": ci.title[:200],
+                }
+            )
+        ynab.split_transaction(txn["id"], subs)
         record.status = "split_applied"
         record.split_applied_at = now
         save_sync_record(record)
 
         # Save mappings as user_approved
         for ci in items:
-            save_category_mapping(CategoryMapping(
-                item_title_normalized=ci.title.lower().strip(),
-                category_name=ci.classified_category,
-                category_id=ci.classified_category_id,
-                confidence=max(ci.confidence, 0.9),
-                source="user_approved",
-                times_used=1,
-                last_used=now,
-            ))
+            save_category_mapping(
+                CategoryMapping(
+                    item_title_normalized=ci.title.lower().strip(),
+                    category_name=ci.classified_category,
+                    category_id=ci.classified_category_id,
+                    confidence=max(ci.confidence, 0.9),
+                    source="user_approved",
+                    times_used=1,
+                    last_used=now,
+                )
+            )
 
         # Update acceptance stats
         config.total_suggestions += 1
@@ -1031,7 +1071,7 @@ def handle_sync_reply(message_text: str) -> str:
         if not config.first_suggestion_date:
             config.first_suggestion_date = date.today().isoformat()
         save_sync_config(config)
-        return f"⏭️ Skipped — memo enrichment kept, no split applied."
+        return "⏭️ Skipped — memo enrichment kept, no split applied."
 
     elif action.startswith("adjust"):
         # Parse correction context
@@ -1049,7 +1089,7 @@ def handle_sync_reply(message_text: str) -> str:
         # The actual adjustment is handled by Claude interpreting the natural language
         # correction and calling the appropriate tools. We record the stats here.
         return (
-            f"📝 Noted your adjustment: \"{correction_text}\". "
+            f'📝 Noted your adjustment: "{correction_text}". '
             f"I'll apply the corrected split and remember this for next time."
         )
 
@@ -1059,6 +1099,7 @@ def handle_sync_reply(message_text: str) -> str:
 # ---------------------------------------------------------------------------
 # Sync status (for tool registration)
 # ---------------------------------------------------------------------------
+
 
 def get_sync_status() -> str:
     """Return current sync status and statistics."""
@@ -1090,6 +1131,7 @@ def get_sync_status() -> str:
 # ---------------------------------------------------------------------------
 # T017: Nightly sync orchestrator
 # ---------------------------------------------------------------------------
+
 
 def run_nightly_sync() -> str | None:
     """Full nightly sync pipeline. Returns WhatsApp message or None if nothing to report.
@@ -1173,7 +1215,9 @@ def _run_auto_split(enriched: list[dict], config: SyncConfig) -> str | None:
         # Already auto-categorized (single item) — skip
         if record.status == "auto_split":
             ci = items[0]
-            auto_split_lines.append(f"  • {ci.title[:40]} → {ci.classified_category} (${abs(ci.allocated_amount) / 1000:.2f})")
+            auto_split_lines.append(
+                f"  • {ci.title[:40]} → {ci.classified_category} (${abs(ci.allocated_amount) / 1000:.2f})"
+            )
             continue
 
         # Check if any item has low confidence
@@ -1187,11 +1231,13 @@ def _run_auto_split(enriched: list[dict], config: SyncConfig) -> str | None:
         # All items high confidence — auto-split
         subs = []
         for ci in items:
-            subs.append({
-                "amount_milliunits": -abs(ci.allocated_amount),
-                "category_id": ci.classified_category_id,
-                "memo": ci.title[:200],
-            })
+            subs.append(
+                {
+                    "amount_milliunits": -abs(ci.allocated_amount),
+                    "category_id": ci.classified_category_id,
+                    "memo": ci.title[:200],
+                }
+            )
 
         try:
             ynab.split_transaction(txn["id"], subs)
@@ -1254,6 +1300,7 @@ def _sweep_timed_out_suggestions() -> None:
 # T020: Acceptance rate calculation
 # ---------------------------------------------------------------------------
 
+
 def get_acceptance_rate() -> float:
     """Calculate unmodified acceptance rate (0.0-1.0)."""
     config = load_sync_config()
@@ -1265,6 +1312,7 @@ def get_acceptance_rate() -> float:
 # ---------------------------------------------------------------------------
 # T021: Auto-split graduation check
 # ---------------------------------------------------------------------------
+
 
 def check_auto_split_graduation() -> str | None:
     """Check if acceptance rate qualifies for auto-split graduation.
@@ -1322,6 +1370,7 @@ def set_auto_split(enabled: bool) -> str:
 # T023: Undo flow
 # ---------------------------------------------------------------------------
 
+
 def handle_undo(transaction_index: int) -> str:
     """Undo an auto-split by reverting to original unsplit transaction.
 
@@ -1331,10 +1380,7 @@ def handle_undo(transaction_index: int) -> str:
 
     records = load_sync_records()
     # Get recent auto-split records (for undo referencing)
-    auto_splits = [
-        (txn_id, r) for txn_id, r in records.items()
-        if r.get("status") == "auto_split"
-    ]
+    auto_splits = [(txn_id, r) for txn_id, r in records.items() if r.get("status") == "auto_split"]
 
     if not auto_splits:
         return "No auto-split transactions found to undo."
@@ -1363,7 +1409,11 @@ def handle_undo(transaction_index: int) -> str:
         records[txn_id] = record
         _save_json(_SYNC_RECORDS_FILE, records)
 
-        return f"↩️ Undo complete — reverted split on ${abs(record.get('ynab_amount', 0)) / 1000:.2f} transaction. You can re-categorize manually in YNAB."
+        return (
+            f"↩️ Undo complete — reverted split on "
+            f"${abs(record.get('ynab_amount', 0)) / 1000:.2f} transaction. "
+            f"You can re-categorize manually in YNAB."
+        )
 
     except Exception as e:
         logger.error("Undo failed for %s: %s", txn_id, e)
@@ -1373,6 +1423,7 @@ def handle_undo(transaction_index: int) -> str:
 # ---------------------------------------------------------------------------
 # T029: Refund matching
 # ---------------------------------------------------------------------------
+
 
 def match_refund(txn: dict) -> str | None:
     """Match a refund (positive Amazon transaction) to an original purchase.
@@ -1400,22 +1451,31 @@ def match_refund(txn: dict) -> str | None:
                     if items and len(items) == 1:
                         cat_id = items[0].get("classified_category_id", "")
                         if cat_id:
-                            ynab.split_transaction(txn["id"], [{
-                                "amount_milliunits": txn["amount"],
-                                "category_id": cat_id,
-                                "memo": f"Refund: {items[0].get('title', '')[:150]}",
-                            }])
+                            ynab.split_transaction(
+                                txn["id"],
+                                [
+                                    {
+                                        "amount_milliunits": txn["amount"],
+                                        "category_id": cat_id,
+                                        "memo": f"Refund: {items[0].get('title', '')[:150]}",
+                                    }
+                                ],
+                            )
                     # Record refund
-                    save_sync_record(SyncRecord(
-                        ynab_transaction_id=txn["id"],
-                        amazon_order_number=record.get("amazon_order_number", ""),
-                        status="refund_applied",
-                        matched_at=datetime.now().isoformat(),
-                        ynab_amount=txn["amount"],
-                        ynab_date=txn["date"],
-                        items=items,
-                    ))
-                    return f"↩️ Refund of ${refund_amount / 1000:.2f} matched to original order — applied to same category."
+                    save_sync_record(
+                        SyncRecord(
+                            ynab_transaction_id=txn["id"],
+                            amazon_order_number=record.get("amazon_order_number", ""),
+                            status="refund_applied",
+                            matched_at=datetime.now().isoformat(),
+                            ynab_amount=txn["amount"],
+                            ynab_date=txn["date"],
+                            items=items,
+                        )
+                    )
+                    return (
+                        f"↩️ Refund of ${refund_amount / 1000:.2f} matched to original order — applied to same category."
+                    )
 
     # Try item-level partial refund match
     for txn_id, record in records.items():
@@ -1426,21 +1486,32 @@ def match_refund(txn: dict) -> str | None:
             if item_amt == refund_amount:
                 cat_id = item.get("classified_category_id", "")
                 if cat_id:
-                    ynab.split_transaction(txn["id"], [{
-                        "amount_milliunits": txn["amount"],
-                        "category_id": cat_id,
-                        "memo": f"Partial refund: {item.get('title', '')[:150]}",
-                    }])
-                save_sync_record(SyncRecord(
-                    ynab_transaction_id=txn["id"],
-                    amazon_order_number=record.get("amazon_order_number", ""),
-                    status="refund_applied",
-                    matched_at=datetime.now().isoformat(),
-                    ynab_amount=txn["amount"],
-                    ynab_date=txn["date"],
-                    items=[item],
-                ))
-                return f"↩️ Partial refund of ${refund_amount / 1000:.2f} matched — applied to {item.get('classified_category', 'original category')}."
+                    ynab.split_transaction(
+                        txn["id"],
+                        [
+                            {
+                                "amount_milliunits": txn["amount"],
+                                "category_id": cat_id,
+                                "memo": f"Partial refund: {item.get('title', '')[:150]}",
+                            }
+                        ],
+                    )
+                save_sync_record(
+                    SyncRecord(
+                        ynab_transaction_id=txn["id"],
+                        amazon_order_number=record.get("amazon_order_number", ""),
+                        status="refund_applied",
+                        matched_at=datetime.now().isoformat(),
+                        ynab_amount=txn["amount"],
+                        ynab_date=txn["date"],
+                        items=[item],
+                    )
+                )
+                return (
+                    f"↩️ Partial refund of ${refund_amount / 1000:.2f} "
+                    f"matched — applied to "
+                    f"{item.get('classified_category', 'original category')}."
+                )
 
     return None  # Unmatched refund — caller asks Erin
 
@@ -1448,6 +1519,7 @@ def match_refund(txn: dict) -> str | None:
 # ---------------------------------------------------------------------------
 # T030: Known charge pattern handling
 # ---------------------------------------------------------------------------
+
 
 def handle_known_charge_patterns(txn: dict) -> str | None:
     """Check unmatched Amazon transactions against known charge patterns.
@@ -1472,40 +1544,50 @@ def handle_known_charge_patterns(txn: dict) -> str | None:
                     break
 
             if cat_id:
-                ynab.split_transaction(txn["id"], [{
-                    "amount_milliunits": txn["amount"],
-                    "category_id": cat_id,
-                    "memo": f"Auto: {pattern.title()} charge",
-                }])
+                ynab.split_transaction(
+                    txn["id"],
+                    [
+                        {
+                            "amount_milliunits": txn["amount"],
+                            "category_id": cat_id,
+                            "memo": f"Auto: {pattern.title()} charge",
+                        }
+                    ],
+                )
 
-                save_sync_record(SyncRecord(
-                    ynab_transaction_id=txn["id"],
-                    status="auto_split",
-                    matched_at=datetime.now().isoformat(),
-                    split_applied_at=datetime.now().isoformat(),
-                    ynab_amount=txn["amount"],
-                    ynab_date=txn["date"],
-                    original_memo=txn.get("memo") or "",
-                    original_category_id=txn.get("category_id") or "",
-                ))
+                save_sync_record(
+                    SyncRecord(
+                        ynab_transaction_id=txn["id"],
+                        status="auto_split",
+                        matched_at=datetime.now().isoformat(),
+                        split_applied_at=datetime.now().isoformat(),
+                        ynab_amount=txn["amount"],
+                        ynab_date=txn["date"],
+                        original_memo=txn.get("memo") or "",
+                        original_category_id=txn.get("category_id") or "",
+                    )
+                )
                 return f"✅ Known charge: {pattern.title()} → {category_name}"
 
     # Tag as unmatched
     ynab.update_transaction_memo(txn["id"], "Unmatched Amazon charge")
-    save_sync_record(SyncRecord(
-        ynab_transaction_id=txn["id"],
-        status="unmatched",
-        matched_at=datetime.now().isoformat(),
-        ynab_amount=txn["amount"],
-        ynab_date=txn["date"],
-        original_memo=txn.get("memo") or "",
-    ))
+    save_sync_record(
+        SyncRecord(
+            ynab_transaction_id=txn["id"],
+            status="unmatched",
+            matched_at=datetime.now().isoformat(),
+            ynab_amount=txn["amount"],
+            ynab_date=txn["date"],
+            original_memo=txn.get("memo") or "",
+        )
+    )
     return None  # Truly unmatched — suggestion message will ask Erin
 
 
 # ---------------------------------------------------------------------------
 # T025: Amazon spending breakdown
 # ---------------------------------------------------------------------------
+
 
 def get_amazon_spending_breakdown(month: str = "") -> str:
     """Aggregate sync records by category for the given month, compare against YNAB budgets.
@@ -1574,7 +1656,7 @@ def get_amazon_spending_breakdown(month: str = "") -> str:
             top_items.append((item.get("title", ""), abs(item.get("allocated_amount", 0)) / 1000))
     top_items.sort(key=lambda x: x[1], reverse=True)
     if top_items:
-        lines.append(f"\nTop purchases:")
+        lines.append("\nTop purchases:")
         for title, amt in top_items[:5]:
             lines.append(f"  • ${amt:,.2f} — {title[:50]}")
 
@@ -1584,6 +1666,7 @@ def get_amazon_spending_breakdown(month: str = "") -> str:
 # ---------------------------------------------------------------------------
 # T026: Recurring purchase detection
 # ---------------------------------------------------------------------------
+
 
 def detect_recurring_purchases() -> list[dict]:
     """Scan category mappings and sync records for items that appear monthly.
@@ -1618,13 +1701,16 @@ def detect_recurring_purchases() -> list[dict]:
 
         # Monthly pattern: average interval between 25-35 days
         if 25 <= avg_interval <= 35:
-            recurring.append({
-                "title": entries[0][0].split("|")[0] if "|" in entries[0][0] else title,  # Use original case if available
-                "category": "",
-                "avg_amount": sum(amounts) / len(amounts),
-                "interval_days": round(avg_interval),
-                "occurrences": len(entries),
-            })
+            recurring.append(
+                {
+                    # Use original case if available
+                    "title": entries[0][0].split("|")[0] if "|" in entries[0][0] else title,
+                    "category": "",
+                    "avg_amount": sum(amounts) / len(amounts),
+                    "interval_days": round(avg_interval),
+                    "occurrences": len(entries),
+                }
+            )
             # Fill category from mappings
             cached = lookup_cached_category(title)
             if cached:

@@ -31,10 +31,18 @@ def get_audio_duration(audio_bytes: bytes) -> float:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "quiet", "-show_entries",
-                "format=duration", "-of", "csv=p=0", tmp_path,
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
+                tmp_path,
             ],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         return float(result.stdout.strip()) if result.stdout.strip() else 0.0
     except (subprocess.TimeoutExpired, ValueError):
@@ -54,10 +62,21 @@ def _convert_ogg_to_mp3(audio_bytes: bytes) -> bytes:
     try:
         subprocess.run(
             [
-                "ffmpeg", "-i", ogg_path, "-codec:a", "libmp3lame",
-                "-q:a", "4", mp3_path, "-y", "-loglevel", "error",
+                "ffmpeg",
+                "-i",
+                ogg_path,
+                "-codec:a",
+                "libmp3lame",
+                "-q:a",
+                "4",
+                mp3_path,
+                "-y",
+                "-loglevel",
+                "error",
             ],
-            capture_output=True, check=True, timeout=30,
+            capture_output=True,
+            check=True,
+            timeout=30,
         )
         return Path(mp3_path).read_bytes()
     finally:
