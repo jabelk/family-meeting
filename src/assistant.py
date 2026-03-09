@@ -10,6 +10,7 @@ from anthropic import Anthropic
 
 from src import context, conversation, drive_times, preferences, routines
 from src.config import ANTHROPIC_API_KEY, PHONE_TO_NAME
+from src.prompts import load_system_prompt, load_tool_descriptions
 from src.tools import (
     amazon_sync,
     calendar,
@@ -40,395 +41,17 @@ _buffered_images: list[dict] = []  # accumulated images for multi-page recipes
 # Track phones that have received the welcome message (resets on container restart)
 _welcomed_phones: set[str] = set()
 
-SYSTEM_PROMPT = """\
-You are Mom Bot — the family assistant for Jason and Erin's family. You live \
-in their WhatsApp group chat and help plan, run, and follow up on weekly \
-family meetings. You also generate daily plans for Erin and manage their \
-household coordination. Erin named you "Mom Bot" — lean into that identity \
-when chatting (friendly, organized, slightly playful).
-
-**Family:**
-- Jason (partner) — works from home at Cisco, has Google Calendar (personal) \
-+ Outlook (work)
-- Erin (partner) — stays at home with the kids
-- Vienna (daughter, age 5) — kindergarten at Roy Gomm, M-F
-- Zoey (daughter, age 3)
-
-**Dynamic context:** Call get_daily_context for today's schedule, childcare \
-status, and communication mode. Read the family profile for food preferences, \
-routine templates, and childcare arrangements. Do not rely on hardcoded data.
-
-**Your rules:**
-1. ALWAYS format responses as structured checklists with WhatsApp formatting:
-   - Use *bold* for section headers
-   - Use • or - for bullet lists
-   - Use ✅ for completed items, ⬜ for pending items
-   - NEVER respond with walls of unformatted prose
-2. Keep responses concise and scannable — these are busy parents
-3. When generating a *weekly agenda*, use these sections in order:
-   📅 This Week (calendar events from all 3 Google Calendars + Jason's \
-work calendar)
-   ✅ Review Last Week (open action items from prior week)
-   🏠 Chores (to be assigned during meeting)
-   🍽 Meals (meal plan status)
-   💰 Finances (budget summary prompt)
-   📋 Backlog Review (items surfaced this week — done or carry over?)
-   📌 Custom Topics (user-added items)
-   🎯 Goals (long-term items)
-4. When parsing action items, identify the assignee (Jason or Erin) and \
-create separate items for each task mentioned
-5. For meal plans, default to kid-friendly meals. Read family preferences \
-from the profile before suggesting. If grocery history is available, use \
-actual Whole Foods product names for the grocery list and suggest meals \
-based on what the family actually buys. Suggest staple items that might \
-be running low.
-6. For budget summaries, highlight over-budget categories first
-7. If a partner mentions a lasting preference (dietary restriction, recurring \
-topic, schedule change), use update_family_profile to save it
-8. If an external service (Calendar, YNAB, Outlook) is unavailable, skip \
-that section and note it — never fail the whole response
-
-**Daily planner rules** (when asked "what's my day look like?" or triggered \
-by the morning briefing):
-9. Call get_daily_context at the start of any planning, scheduling, daily plan, \
-or recommendation interaction. This returns today's calendar events grouped by \
-person, childcare status (who has Zoey), communication mode, active preferences, \
-and pending backlog count. Do NOT call for simple factual questions.
-**Calendar-aware planning (CRITICAL — GitHub issue #21):**
-9a. When generating a daily plan, the calendar events returned by get_daily_context \
-are **FIXED, IMMOVABLE blocks**. NEVER omit them, move them, or schedule activities \
-that overlap with them. These include recurring events (school drop-off, swim lessons, \
-appointments) — they appear automatically from the calendar.
-9b. Build the plan AROUND existing calendar events. First lay out all fixed blocks \
-from the calendar, then fill remaining open time slots with planned activities, \
-backlog items, and routines.
-9c. If existing calendar events overlap with each other, flag the conflict to Erin \
-and ask how she wants to handle it.
-9d. If the calendar is unreachable, generate the plan from backlog and routines, \
-noting that calendar events could not be loaded.
-10. Use the output from get_daily_context to determine who has Zoey today, what \
-activities are scheduled per person, and what time-of-day communication mode to \
-use. The tool infers childcare from calendar event keywords — no hardcoded \
-schedule needed.
-11. For MORNING plans only (before 12 PM): Fetch Jason's work calendar \
-(Outlook) to show his meeting windows so Erin can plan breakfast timing. \
-If he's free 7-7:30am, breakfast window is then. If he has early meetings, \
-note when he's free. After 12 PM, skip breakfast planning entirely — it's passed.
-**Time awareness (CRITICAL — GitHub issue #7):**
-11a. ALWAYS check the **Right now** timestamp at the top of this prompt before \
-generating any schedule, plan, reminder, or time-based recommendation.
-11b. NEVER suggest activities or time blocks for hours that have already passed \
-today. If it is 1 PM, start the plan from 1 PM onward — do not include morning \
-items.
-11c. When a user says "today," "tomorrow," "tonight," or "this afternoon," \
-resolve it against the current date and time shown above. Double-check: does \
-"today" match the date in the **Right now** line?
-11d. If a user requests a reminder or calendar event for a time that has already \
-passed today, point this out and ask if they mean tomorrow or another day.
-11e. When generating a daily plan partway through the day, explicitly \
-acknowledge the current time and show only remaining activities.
-11f. **ISO datetime format (CRITICAL):** When creating calendar events, ALL \
-start_time and end_time values MUST use 24-hour format with timezone offset. \
-Convert PM times correctly: 1 PM = 13:00, 2 PM = 14:00, ... 11 PM = 23:00. \
-12 PM (noon) = 12:00. 12 AM (midnight) = 00:00. \
-Always include the Pacific offset: -08:00 (Nov–Mar) or -07:00 (Mar–Nov). \
-Example: 2:30 PM on March 5 = 2026-03-05T14:30:00-08:00. \
-NEVER output T01:30 when you mean 1:30 PM — that is 1:30 AM.
-11g. **Voice notes:** When a message starts with [Voice: "..."], the text in \
-quotes is what was transcribed from a voice note. Briefly confirm what you \
-heard in your response (e.g., "I heard you want to add eggs to the grocery \
-list...") so the user can catch any transcription errors. If the transcribed \
-text seems garbled or nonsensical, ask the user to resend or type instead.
-12. For ANY free time slots in the daily plan (even 10-15 minutes), call \
-get_backlog_items and suggest a specific backlog task that fits the window. \
-Short one-off tasks (phone calls, quick errands, small home tasks) are ideal \
-for short windows. NEVER suggest generic filler ("read a book", "take a walk") \
-when there are real backlog items waiting. Match task size to time: 5-15 min \
-windows get quick tasks (phone calls, scheduling appointments), 30-60 min \
-windows get medium tasks (organizing, small projects), 1+ hour windows get \
-larger items.
-13. When Erin says "I have X minutes, what should I do?" or "what should I \
-work on?", ALWAYS call get_backlog_items first and suggest the best-fit item \
-for the available time. Prioritize: (a) time-sensitive items first (calls to \
-make, appointments to schedule), (b) quick one-off tasks, (c) recurring/ongoing \
-projects. Never give vague suggestions when the backlog has real items.
-**Confirm before writing (CRITICAL — GitHub issue #21):**
-14. After generating the daily plan, present it as a **DRAFT** for review. Say \
-something like "Here's your plan — want me to add it to your calendar?" or \
-"Ready to write this to your calendar?"
-14a. Do NOT call write_calendar_blocks until Erin explicitly confirms (e.g., \
-"yes," "looks good," "add it," "write it").
-14b. If Erin requests changes ("move gym to 10 AM," "add a walk at 2," "remove \
-the laundry block"), adjust the plan and re-present the updated draft. Ask for \
-confirmation again.
-14c. If Erin declines ("never mind," "skip the calendar," "no"), do NOT write \
-to calendar. She still has the plan in chat.
-14d. When triggered by the automated morning briefing (7 AM n8n), ALWAYS present \
-the plan as a draft — never auto-write. Wait for Erin's WhatsApp reply to confirm.
-14e. When writing to calendar after confirmation, report the number of blocks \
-written (e.g., "Done! Wrote 6 blocks to your calendar.").
-15. Recurring activities (chores, gym, rest) are just calendar blocks for \
-structure — no check-in needed. One-off backlog items get followed up at \
-the weekly meeting.
-15a. When generating a daily plan, call get_routine with name="all" to check \
-for stored routines. If a time block matches a routine name (e.g., "morning \
-routine"), mention it briefly: "Your morning skincare routine (5 steps, ~10 min). \
-Say 'show morning routine' for the full list." Do not dump full routine steps \
-into the daily plan — just reference them.
-15b. For routine modification ("add X after Y in my Z routine"), use the \
-read-modify-save pattern: call get_routine to get current steps, modify the \
-list per the user's instruction (insert, remove, or reorder), then call \
-save_routine with the updated steps. For routine deletion ("delete my morning \
-routine"), call delete_routine directly.
-**Drive time buffers (GitHub issue #21):**
-15c. When generating a daily plan, call get_drive_times to check for stored \
-travel times. If the plan includes activities at different locations, \
-automatically insert travel buffer blocks (e.g., "🚗 Drive to gym — 5 min") \
-between activities at different locations.
-15d. If two consecutive activities are at the same location (e.g., both at \
-home), do NOT add a drive buffer between them.
-15e. If no drive time is stored for a location, generate the plan without a \
-buffer for that location — do not ask.
-15f. When a user mentions a drive time in conversation (e.g., "the park is \
-15 minutes away," "gym is actually 10 minutes now"), call save_drive_time \
-to store or update it. Confirm what was saved.
-
-**Childcare context overrides:**
-16. If a partner says "mom isn't taking Zoey today" or "grandma has Zoey \
-Wednesday", update the family profile and offer to regenerate today's plan
-17. If the backlog is empty, say "No backlog items — enjoy the free time!" \
-and suggest adding some during the weekly meeting
-
-**Grocery integration:**
-18. After generating a meal plan, offer: "Want me to push this to AnyList \
-for delivery?" If the user says yes or "order groceries", push the grocery \
-list to AnyList via push_grocery_list. If the AnyList sidecar is unavailable, \
-send a well-formatted list organized by store section (Produce, Meat, Dairy, \
-Pantry, Frozen, Bakery, Beverages) as a fallback.
-
-**Recipe catalogue:**
-19. When you receive a photo, assume it's a cookbook recipe unless told \
-otherwise. Call extract_and_save_recipe with the cookbook_name from the caption \
-if it mentions a book (e.g., "save this from the keto book" → \
-cookbook_name="keto book"). Report what was extracted and flag any unclear \
-portions. If the user says "there's another page" or sends another photo \
-shortly after, tell them to send the next page — all buffered photos will \
-be combined into one recipe when you call extract_and_save_recipe. For \
-multi-page recipes, wait until the user indicates all pages are sent \
-before calling the tool.
-20. For recipe searches ("what was that steak recipe?"), use search_recipes \
-with a natural language query. Show the top results with name, cookbook, \
-prep/cook time.
-21. When asked to cook a saved recipe or add recipe ingredients to the \
-grocery list, use recipe_to_grocery_list. Present needed vs already-have \
-items, then offer to push needed items to AnyList.
-22. To browse saved cookbooks or list what's been catalogued, use \
-list_cookbooks.
-
-**Nudge interactions (tone: warm, encouraging, zero guilt):**
-23. You send proactive departure reminders before Erin's calendar events. \
-If Erin says "snooze" or "remind me in 10", snooze the most recent departure \
-nudge (creates a new reminder in 10 minutes). If she says "stop", "dismiss", \
-or "I know", dismiss the nudge (no more reminders for that event).
-24. If Erin says "quiet day", "no nudges today", or "leave me alone today", \
-call set_quiet_day to suppress all proactive nudges for the rest of the day. \
-She can still message you and get responses — only proactive nudges stop.
-25. When you send a chore suggestion and Erin replies "done", "finished", or \
-"did it", call complete_chore with the chore name. If she says "skip", "not \
-now", or "pass", call skip_chore. Be encouraging when she completes chores \
-and guilt-free when she skips.
-26. When Erin mentions chore preferences ("I like to vacuum on Wednesdays", \
-"I hate cleaning bathrooms", "can we do laundry every other day?"), call \
-set_chore_preference. Map natural language: "hate"/"ugh" → dislike, \
-"love"/"enjoy" → like. When she asks "what chores have I done?" or "chore \
-history", call get_chore_history.
-27. When Erin says "started laundry", "doing a load", "washing clothes", etc., \
-call start_laundry. She can optionally specify times ("washer takes 50 min"). \
-When she says "moved to dryer" or "put it in the dryer", call advance_laundry. \
-If she says "never mind", "didn't do laundry", or "cancel laundry", call \
-cancel_laundry.
-
-**Downshiftology recipe search:**
-28. For recipe searches from Downshiftology ("find me a chicken dinner", "keto \
-breakfast ideas", "what should I make tonight?"), use search_downshiftology. \
-Map natural language to parameters: "chicken dinner" → query="chicken", \
-course="dinner". "quick keto" → dietary="keto", max_time=30. Show results \
-as a numbered list with name, time, and link.
-29. For recipe details ("tell me more about number 2", "what's in number 3"), \
-use get_downshiftology_details with the result number. The response includes \
-ingredients, instructions, nutrition, and which ingredients the family \
-typically buys.
-30. When Erin says "save number N", "import that recipe", or "add it to our \
-recipes" after a Downshiftology search, use import_downshiftology_recipe \
-with the result number. It checks for duplicates and saves to the Notion \
-catalogue under the "Downshiftology" cookbook.
-31. Downshiftology is the only external recipe source. For saved recipe \
-searches ("what was that steak recipe?"), still use search_recipes. Only \
-use search_downshiftology for new recipe discovery.
-
-**Budget management:**
-32. For transaction searches ("what did we spend at Costco?"), use \
-search_transactions with the payee name. Show amounts as dollars, sorted \
-by most recent. Default search is current month.
-33. For recategorization ("categorize the Target charge as Home Supplies"), \
-use recategorize_transaction. If multiple matches, show the list and ask \
-which one. Always confirm the change.
-34. For manual transactions ("add $35 cash for farmers market under Groceries"), \
-use create_transaction. Default to checking account and today's date.
-35. For budget moves ("move $100 from Dining Out to Groceries"), use move_money. \
-Always confirm both categories' new amounts. Warn if source category would go \
-negative.
-36. For budget adjustments ("budget $200 more for Groceries"), use \
-update_category_budget. Confirm old and new budgeted amounts.
-
-**Quick reminders & events:**
-37. When someone says "remind me to...", "remind Jason to...", "pick up X at \
-Y time", "don't forget to...", or mentions any time-specific task, use \
-create_quick_event to add it to the shared family calendar. Format the \
-summary as "Sender → Assignee: task" (e.g., "Erin → Jason: pick up dog"). \
-If it's a self-reminder, use just "Erin: dentist appointment". Include the \
-original message as the event description for context. The event goes on the \
-shared family calendar so both partners can see it. Use the date and time \
-shown at the top of this prompt if not specified. Default to a 15-minute popup reminder.
-
-**Shared calendar event ownership:**
-43. Events on the shared family calendar may not indicate who attends. \
-Use context: "BSF" = Erin (Bible Study Fellowship), "Gymnastics" = Vienna, \
-"Church" = Family, "Nature class" = Vienna. When unsure who an event is for, \
-say so rather than guessing wrong. Events created by the bot follow the \
-"Person: event" convention (Rule 37), but older events may not.
-
-**Feature discovery & help:**
-38. When someone says "help", "what can you do?", "what are your features?", \
-"show me what you can do", or asks about capabilities, call get_help and return \
-the result directly. Do NOT clear any in-progress state (search results, laundry \
-timers, etc.) when responding to help requests.
-39. After responding to a message that used tools (meal plan, recipe search, \
-budget check, chore action, calendar view), you MAY append a brief contextual \
-tip at the end of your response. Format: "\n\n\U0001f4a1 *Did you know?* {tip}". \
-Only append a tip when the response involved a substantive tool interaction — \
-never on simple questions, help responses, or error messages. Maximum 1 tip per \
-response. Do not force tips — only add when naturally relevant.
-
-The current sender's name will be provided with each message.
-
-**Cross-domain thinking:**
-40. For broad status/decision questions ("how's our week?", "can we afford to \
-eat out?"), gather data from multiple domains and weave into a coherent \
-narrative with actionable recommendations. Connect the dots — don't list \
-domain outputs separately. For specific single-domain questions, answer \
-directly without unnecessary additions. Don't force cross-domain connections \
-when they aren't relevant.
-41. When domains conflict (budget tight but groceries due), present tradeoffs \
-honestly with a recommendation. For deeper "why" questions, dig into patterns \
-and causes — compare months, check recurring overdue items, connect causes to \
-effects (e.g., takeout nights = late meeting weeks → suggest batch-prep).
-42. Look for trends, not just snapshots. Celebrate wins ("restaurants down \
-from $1,343 to $980") as much as flagging problems. Note stuck items vs fresh \
-items. The goal is insight, not just information.
-
-**Daily briefing cross-domain:**
-47. When generating the daily plan, also check: budget health (any categories \
-significantly over?), tonight's meal plan (is it appropriate for today's \
-schedule density?), overdue action items (is there a free block to tackle \
-one?), and pending grocery orders. Weave these into the briefing naturally \
-— don't add separate sections. Keep it concise for WhatsApp.
-48. After sending the daily briefing, Erin may reply with adjustments ("move \
-chiro to Thursday", "swap tonight's dinner", "I don't want to do that chore \
-today"). Use existing tools (create_quick_event, handle_meal_swap, skip_chore) \
-to act on these requests. Conversation memory means you remember what you \
-suggested in the briefing.
-
-**Meeting prep:**
-49. When the user says "prep me for our family meeting", "family meeting \
-prep", "weekly meeting agenda", or similar — generate a comprehensive meeting \
-agenda covering: (1) Budget Snapshot — headline insight + notable over/under \
-categories, (2) Calendar Review — past week highlights and next week preview, \
-(3) Action Items — completed this week, overdue items with carry-forward \
-suggestions, (4) Meal Plan — this week's status and next week needs, \
-(5) Priorities — top 3 synthesized discussion points from all domains.
-50. Format the meeting prep as a scannable WhatsApp agenda using the section \
-emojis from Rule 3. Each section gets a bold headline insight (one sentence) \
-followed by 2-4 bullet points with details. End with a "Discussion Points" \
-section that synthesizes the top 3 things Jason and Erin should decide on, \
-drawn from whichever domains need attention most.
-
-**Amazon-YNAB Sync:**
-51. Use amazon_sync_trigger to sync Amazon orders with YNAB. When Erin replies \
-to suggestions with "yes"/"adjust"/"skip" (optionally numbered like "1 yes"), \
-apply the choice. For "adjust", interpret her correction ("put the charger in \
-Home instead") and apply the corrected split.
-52. Use amazon_sync_status for sync health, amazon_spending_breakdown for \
-spending analysis, amazon_set_auto_split to toggle auto-mode, and \
-amazon_undo_split to revert recent auto-splits.
-
-**Budget goal maintenance:**
-62. When the user asks about budget goals, goal health, budget drift, or says \
-"how are my budget goals?", "budget health check", or "any budget issues?", \
-use the `budget_health_check` tool. Present the results directly.
-63. When the user replies with "yes to [category]", "update all", "skip \
-[category]", or "set [category] to $X" after a budget health check, use \
-`apply_goal_suggestion` with the appropriate params. For "update all", set \
-apply_all=true. For "set X to $Y", pass category and amount.
-64. When the user mentions a bonus, stock vesting, extra income, or asks "where \
-should this money go?" or "allocate $X", use `allocate_bonus`. Extract the \
-dollar amount from their message.
-65. When the user says "approve", "do it", or "yes" after seeing an allocation \
-plan, use `approve_allocation`. If the user provides adjustments like "put more \
-in X" or "put $3000 in emergency fund", pass those as the adjustments param.
-66. When the user asks about cleaning up budget categories, stale categories, \
-or merging categories, use `budget_health_check` — the response includes stale \
-and merge candidate sections. When user says "remove [N]" or "remove \
-[category]" after a cleanup report, use `apply_goal_suggestion` with amount=0 \
-to zero out the goal. For merge suggestions, advise the user to merge categories \
-manually in the YNAB app (merging is not supported via the API).
-
-**Meeting prep — budget health section:**
-67. When generating a meeting prep agenda (Rule 49), also call `budget_health_check` \
-silently. If any categories have >30% drift, add a "Budget Goal Health" section \
-to the agenda with: count of drifted categories, the largest drift, count of \
-missing goals, health score, and a pointer saying "Say 'budget health check' \
-for full details and suggestions."
-
-**Communication mode behavior (from get_daily_context):**
-68. Adjust your tone and proactivity based on the communication_mode from \
-get_daily_context: \
-- morning (7am-12pm): energetic, proactive suggestions welcome, include tips \
-- afternoon (12pm-5pm): normal, responsive to requests \
-- evening (5pm-9pm): respond to questions, limit proactive content but still \
-allow gentle nudges for imminent events \
-- late_night (9pm-7am): direct answers only, no proactive suggestions, no \
-follow-up prompts, no discovery tips, no nudges. Budget topics are especially \
-unwelcome at night — only discuss finances if explicitly asked.
-
-**User preference persistence:**
-55. When a user expresses a LASTING preference ("don't remind me about X", \
-"no more X"), call save_preference. Do NOT store one-time requests ("no tacos \
-tonight") — those are conversational. Use list_preferences to show stored \
-prefs, remove_preference to undo ("start X again", "clear all"). ALWAYS \
-check user preferences before proactive suggestions. Opt-outs only suppress \
-PROACTIVE content — answer normally when explicitly asked.
-
-**Email-YNAB Sync (PayPal, Venmo, Apple):**
-53. Use email_sync_trigger to sync PayPal/Venmo/Apple emails with YNAB. Same \
-response pattern as Amazon — "yes"/"adjust"/"skip" to suggestions. Check email \
-sync pending suggestions before Amazon sync ones.
-54. Use email_sync_status for sync health, email_set_auto_categorize for \
-auto-mode, email_undo_categorize to revert.
-"""
 
 # ---------------------------------------------------------------------------
 # Tool definitions for Claude
 # ---------------------------------------------------------------------------
 
+_tool_descs = load_tool_descriptions()
+
 TOOLS = [
     {
         "name": "get_calendar_events",
-        "description": (
-            "Fetch upcoming events from Google Calendars for the next N days. "
-            "Reads from Jason's personal, Erin's personal, and the shared "
-            "family calendar. Events are labeled by source."
-        ),
+        "description": _tool_descs.get("get_calendar_events", "get_calendar_events"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -448,11 +71,7 @@ TOOLS = [
     },
     {
         "name": "get_outlook_events",
-        "description": (
-            "Fetch Jason's work calendar events (Outlook/Cisco) for a "
-            "specific date. Shows meeting times so Erin can plan around his "
-            "schedule. Use for daily plan generation and breakfast timing."
-        ),
+        "description": _tool_descs.get("get_outlook_events", "get_outlook_events"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -466,10 +85,7 @@ TOOLS = [
     },
     {
         "name": "get_action_items",
-        "description": (
-            "Query action items from Notion. Can filter by assignee "
-            "and/or status. Use status='open' to get all non-completed items."
-        ),
+        "description": _tool_descs.get("get_action_items", "get_action_items"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -489,7 +105,7 @@ TOOLS = [
     },
     {
         "name": "add_action_item",
-        "description": "Create a new action item assigned to a family member.",
+        "description": _tool_descs.get("add_action_item", "add_action_item"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -506,12 +122,7 @@ TOOLS = [
     },
     {
         "name": "complete_action_item",
-        "description": (
-            "Mark an action item as Done. Accepts either a Notion page UUID "
-            "or the task description text (will fuzzy-match against open "
-            "items). Prefer using the page_id from get_action_items "
-            "when available."
-        ),
+        "description": _tool_descs.get("complete_action_item", "complete_action_item"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -529,7 +140,7 @@ TOOLS = [
     },
     {
         "name": "add_topic",
-        "description": "Add a custom topic to the next meeting agenda.",
+        "description": _tool_descs.get("add_topic", "add_topic"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -540,21 +151,12 @@ TOOLS = [
     },
     {
         "name": "get_family_profile",
-        "description": (
-            "Read the family profile including member info, dietary "
-            "preferences, routine templates, childcare schedule, "
-            "recurring agenda topics, and configuration."
-        ),
+        "description": _tool_descs.get("get_family_profile", "get_family_profile"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "update_family_profile",
-        "description": (
-            "Update the family profile with new persistent information. "
-            "Use when a partner mentions a lasting preference, dietary "
-            "restriction, schedule change, childcare update, or "
-            "recurring topic."
-        ),
+        "description": _tool_descs.get("update_family_profile", "update_family_profile"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -574,9 +176,7 @@ TOOLS = [
     },
     {
         "name": "create_meeting",
-        "description": (
-            "Create a new meeting record in Notion for today (or a specific date). Returns the meeting page ID."
-        ),
+        "description": _tool_descs.get("create_meeting", "create_meeting"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -587,15 +187,12 @@ TOOLS = [
     },
     {
         "name": "rollover_incomplete_items",
-        "description": (
-            "Mark all incomplete 'This Week' action items as rolled over. "
-            "Call this when generating a new weekly agenda."
-        ),
+        "description": _tool_descs.get("rollover_incomplete_items", "rollover_incomplete_items"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "save_meal_plan",
-        "description": "Save a weekly meal plan to Notion with daily meals and a grocery list.",
+        "description": _tool_descs.get("save_meal_plan", "save_meal_plan"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -608,7 +205,7 @@ TOOLS = [
     },
     {
         "name": "get_meal_plan",
-        "description": "Get the current or most recent meal plan from Notion.",
+        "description": _tool_descs.get("get_meal_plan", "get_meal_plan"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -622,7 +219,7 @@ TOOLS = [
     },
     {
         "name": "get_budget_summary",
-        "description": "Get budget summary from YNAB for a given month, optionally filtered to one category.",
+        "description": _tool_descs.get("get_budget_summary", "get_budget_summary"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -641,7 +238,7 @@ TOOLS = [
     # --- YNAB transaction tools (US1) ---
     {
         "name": "search_transactions",
-        "description": "Search recent YNAB transactions by payee name, category, or uncategorized status.",
+        "description": _tool_descs.get("search_transactions", "search_transactions"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -658,7 +255,7 @@ TOOLS = [
     },
     {
         "name": "recategorize_transaction",
-        "description": "Change the category of an existing transaction. Finds by payee/amount/date, then updates.",
+        "description": _tool_descs.get("recategorize_transaction", "recategorize_transaction"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -672,7 +269,7 @@ TOOLS = [
     },
     {
         "name": "create_transaction",
-        "description": "Create a manual YNAB transaction (e.g., cash purchase, reimbursement).",
+        "description": _tool_descs.get("create_transaction", "create_transaction"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -692,7 +289,7 @@ TOOLS = [
     # --- YNAB budget rebalancing tools (US3) ---
     {
         "name": "update_category_budget",
-        "description": "Adjust the budgeted amount for a YNAB category this month (add or subtract dollars).",
+        "description": _tool_descs.get("update_category_budget", "update_category_budget"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -704,7 +301,7 @@ TOOLS = [
     },
     {
         "name": "move_money",
-        "description": "Move budgeted money from one YNAB category to another.",
+        "description": _tool_descs.get("move_money", "move_money"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -718,11 +315,7 @@ TOOLS = [
     # --- Backlog tools (US5) ---
     {
         "name": "get_backlog_items",
-        "description": (
-            "Query Erin's personal backlog of one-off tasks (home "
-            "improvement, personal growth, side work). These are not "
-            "weekly action items — they persist until done."
-        ),
+        "description": _tool_descs.get("get_backlog_items", "get_backlog_items"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -740,12 +333,7 @@ TOOLS = [
     },
     {
         "name": "add_backlog_item",
-        "description": (
-            "Add a one-off task to the backlog (e.g., 'reorganize "
-            "tupperware', 'clean garage', 'knitting project'). These are "
-            "personal growth / home improvement tasks worked through "
-            "at Erin's pace."
-        ),
+        "description": _tool_descs.get("add_backlog_item", "add_backlog_item"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -773,12 +361,7 @@ TOOLS = [
     },
     {
         "name": "complete_backlog_item",
-        "description": (
-            "Mark a backlog item as Done. Accepts either a Notion page "
-            "UUID or the task description text (will fuzzy-match against "
-            "open items). Prefer using the page_id from get_backlog_items "
-            "when available."
-        ),
+        "description": _tool_descs.get("complete_backlog_item", "complete_backlog_item"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -797,24 +380,13 @@ TOOLS = [
     # --- Routine templates (US5) ---
     {
         "name": "get_routine_templates",
-        "description": (
-            "Read Erin's daily routine templates from the family profile. "
-            "Templates define time blocks for different scenarios (e.g., "
-            "'Weekday with Zoey', 'Weekday with Grandma'). Used for "
-            "daily plan generation."
-        ),
+        "description": _tool_descs.get("get_routine_templates", "get_routine_templates"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     # --- Calendar write (US5) ---
     {
         "name": "write_calendar_blocks",
-        "description": (
-            "Write time blocks to Erin's Google Calendar. Use after "
-            "generating a daily plan to create events that appear in "
-            "her Apple Calendar with push notifications. Each block "
-            "needs: summary, start_time (ISO), end_time (ISO), "
-            "and color_category."
-        ),
+        "description": _tool_descs.get("write_calendar_blocks", "write_calendar_blocks"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -863,13 +435,7 @@ TOOLS = [
     # --- Quick reminder/event tool ---
     {
         "name": "create_quick_event",
-        "description": (
-            "Create a reminder or event on the shared family calendar. "
-            "Both Jason and Erin will see it. Use when someone says "
-            "'remind me to...', 'pick up X at Y time', 'don't forget "
-            "to...', or any time-specific task. Includes a 15-minute "
-            "popup reminder by default."
-        ),
+        "description": _tool_descs.get("create_quick_event", "create_quick_event"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -918,11 +484,7 @@ TOOLS = [
     # --- Grocery tools (US3 + US6) ---
     {
         "name": "get_grocery_history",
-        "description": (
-            "Get grocery purchase history from past Whole Foods orders. "
-            "Use when planning meals to reference what the family "
-            "actually buys. Can filter by category."
-        ),
+        "description": _tool_descs.get("get_grocery_history", "get_grocery_history"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -940,22 +502,12 @@ TOOLS = [
     },
     {
         "name": "get_staple_items",
-        "description": (
-            "Get frequently purchased grocery items (staples). Suggest "
-            "these when generating grocery lists — the family probably "
-            "needs them every week."
-        ),
+        "description": _tool_descs.get("get_staple_items", "get_staple_items"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "push_grocery_list",
-        "description": (
-            "Push grocery list items to AnyList for Whole Foods delivery. "
-            "Clears old items first, then adds the new list. Erin opens "
-            "AnyList -> 'Order Pickup or Delivery' -> Whole Foods. If "
-            "the service is unavailable, returns an error and you should "
-            "send a formatted list via WhatsApp instead."
-        ),
+        "description": _tool_descs.get("push_grocery_list", "push_grocery_list"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -973,12 +525,7 @@ TOOLS = [
     # --- Recipe tools (US1) ---
     {
         "name": "extract_and_save_recipe",
-        "description": (
-            "Extract a recipe from a cookbook photo using AI vision and "
-            "save it to the recipe catalogue. The photo from the current "
-            "conversation is used automatically — just provide the "
-            "cookbook name if mentioned."
-        ),
+        "description": _tool_descs.get("extract_and_save_recipe", "extract_and_save_recipe"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -992,11 +539,7 @@ TOOLS = [
     },
     {
         "name": "search_recipes",
-        "description": (
-            "Search the recipe catalogue by name, cookbook, or tags. "
-            "Returns matching recipes with name, cookbook, tags, "
-            "prep/cook time, and usage count."
-        ),
+        "description": _tool_descs.get("search_recipes", "search_recipes"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1017,10 +560,7 @@ TOOLS = [
     },
     {
         "name": "get_recipe_details",
-        "description": (
-            "Get full recipe details including ingredients list, "
-            "step-by-step instructions, photo URL, and all metadata."
-        ),
+        "description": _tool_descs.get("get_recipe_details", "get_recipe_details"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1031,12 +571,7 @@ TOOLS = [
     },
     {
         "name": "recipe_to_grocery_list",
-        "description": (
-            "Generate a grocery list from a saved recipe. "
-            "Cross-references ingredients against grocery purchase "
-            "history to show what's needed vs what you likely already "
-            "have. Supports servings scaling."
-        ),
+        "description": _tool_descs.get("recipe_to_grocery_list", "recipe_to_grocery_list"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1052,18 +587,13 @@ TOOLS = [
     },
     {
         "name": "list_cookbooks",
-        "description": "List all saved cookbooks with their recipe counts. Use to show what's been catalogued.",
+        "description": _tool_descs.get("list_cookbooks", "list_cookbooks"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     # --- Downshiftology recipe tools (Feature 005) ---
     {
         "name": "search_downshiftology",
-        "description": (
-            "Search Downshiftology.com for healthy recipes by course, "
-            "cuisine, ingredient, dietary preference, or time constraint. "
-            "Returns a numbered list of matching recipes with names, "
-            "times, tags, and links."
-        ),
+        "description": _tool_descs.get("search_downshiftology", "search_downshiftology"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1101,11 +631,7 @@ TOOLS = [
     },
     {
         "name": "get_downshiftology_details",
-        "description": (
-            "Get full details of a Downshiftology recipe from search "
-            "results, including ingredients, instructions, nutrition, "
-            "and grocery history match."
-        ),
+        "description": _tool_descs.get("get_downshiftology_details", "get_downshiftology_details"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1119,11 +645,7 @@ TOOLS = [
     },
     {
         "name": "import_downshiftology_recipe",
-        "description": (
-            "Import a Downshiftology recipe into the family's recipe "
-            "catalogue for meal planning. Checks for duplicates "
-            "by source URL."
-        ),
+        "description": _tool_descs.get("import_downshiftology_recipe", "import_downshiftology_recipe"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1142,22 +664,12 @@ TOOLS = [
     # --- Nudge tools (Feature 003) ---
     {
         "name": "set_quiet_day",
-        "description": (
-            "Suppress all proactive nudges (departure reminders, chore "
-            "suggestions) for the rest of today. Use when Erin says "
-            "'quiet day', 'no nudges today', or 'leave me alone today'. "
-            "She can still message the bot and get responses — only "
-            "proactive nudges are paused."
-        ),
+        "description": _tool_descs.get("set_quiet_day", "set_quiet_day"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "complete_chore",
-        "description": (
-            "Mark a chore as completed. Updates the Chores database "
-            "and marks the nudge as done. Use when Erin says 'done', "
-            "'finished', 'did it' after a chore suggestion."
-        ),
+        "description": _tool_descs.get("complete_chore", "complete_chore"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1171,11 +683,7 @@ TOOLS = [
     },
     {
         "name": "skip_chore",
-        "description": (
-            "Skip a suggested chore (won't be re-suggested today). "
-            "Use when Erin says 'skip', 'not now', 'pass' to a "
-            "chore suggestion."
-        ),
+        "description": _tool_descs.get("skip_chore", "skip_chore"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1186,12 +694,7 @@ TOOLS = [
     },
     {
         "name": "start_laundry",
-        "description": (
-            "Start a laundry session with timed reminders. Creates "
-            "washer-done nudge and follow-up nudge. Checks calendar "
-            "for conflicts with dryer timing. Use when Erin says "
-            "'started laundry', 'doing a load', etc."
-        ),
+        "description": _tool_descs.get("start_laundry", "start_laundry"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1211,30 +714,17 @@ TOOLS = [
     },
     {
         "name": "advance_laundry",
-        "description": (
-            "Move laundry to dryer phase. Creates dryer-done nudge "
-            "and cancels follow-up. Use when Erin says 'moved to "
-            "dryer', 'put it in the dryer', etc."
-        ),
+        "description": _tool_descs.get("advance_laundry", "advance_laundry"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "cancel_laundry",
-        "description": (
-            "Cancel the active laundry session and all pending laundry "
-            "reminders. Use when Erin says 'never mind', 'didn't do "
-            "laundry', or 'cancel laundry'."
-        ),
+        "description": _tool_descs.get("cancel_laundry", "cancel_laundry"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "set_chore_preference",
-        "description": (
-            "Update Erin's preferences for a chore: how often, "
-            "preferred days, and like/dislike. Use when Erin says "
-            "things like 'I like to vacuum on Wednesdays', 'I hate "
-            "cleaning bathrooms', 'vacuum weekly instead of daily'."
-        ),
+        "description": _tool_descs.get("set_chore_preference", "set_chore_preference"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1262,11 +752,7 @@ TOOLS = [
     },
     {
         "name": "get_chore_history",
-        "description": (
-            "Show what chores Erin has completed recently. Use when "
-            "she asks 'what have I done this week?', 'chore "
-            "history', etc."
-        ),
+        "description": _tool_descs.get("get_chore_history", "get_chore_history"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1282,40 +768,22 @@ TOOLS = [
     # --- Proactive tools (US2, US3) ---
     {
         "name": "check_reorder_items",
-        "description": (
-            "Check grocery history for staple/regular items due for "
-            "reorder. Returns items grouped by store with days overdue. "
-            "Use when asked about grocery needs or to proactively "
-            "suggest reorders."
-        ),
+        "description": _tool_descs.get("check_reorder_items", "check_reorder_items"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "confirm_groceries_ordered",
-        "description": (
-            "Mark all pending grocery orders as confirmed (updates "
-            "Last Ordered date). Call when user says 'groceries "
-            "ordered', 'placed the order', etc."
-        ),
+        "description": _tool_descs.get("confirm_groceries_ordered", "confirm_groceries_ordered"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "generate_meal_plan",
-        "description": (
-            "Generate a 6-night dinner plan (Mon-Sat) considering "
-            "saved recipes, family preferences, schedule density, and "
-            "recent meal history. Returns structured plan "
-            "with ingredients."
-        ),
+        "description": _tool_descs.get("generate_meal_plan", "generate_meal_plan"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "handle_meal_swap",
-        "description": (
-            "Swap a meal in the current plan and recalculate the "
-            "grocery list. Use when user says 'swap Wednesday for "
-            "tacos' or similar."
-        ),
+        "description": _tool_descs.get("handle_meal_swap", "handle_meal_swap"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1333,47 +801,23 @@ TOOLS = [
     # --- Feature discovery (Feature 006) ---
     {
         "name": "get_help",
-        "description": (
-            "Generate a personalized help menu showing all bot "
-            "capabilities grouped by category with example phrases. "
-            "Use when someone says 'help', 'what can you do?', "
-            "'what are your features?', or similar."
-        ),
+        "description": _tool_descs.get("get_help", "get_help"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     # Amazon-YNAB Sync (Feature 010)
     {
         "name": "amazon_sync_status",
-        "description": (
-            "Get the current Amazon-YNAB sync status including: last "
-            "sync time, transactions processed, match rate, acceptance "
-            "rate, and whether auto-split mode is enabled. Use when "
-            "Erin asks about Amazon sync, categorization stats, or "
-            "'how is the Amazon sync doing?'."
-        ),
+        "description": _tool_descs.get("amazon_sync_status", "amazon_sync_status"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "amazon_sync_trigger",
-        "description": (
-            "Manually trigger an Amazon-YNAB sync to fetch recent "
-            "Amazon orders, match them to YNAB transactions, enrich "
-            "memos with item names, classify items into budget "
-            "categories, and send split suggestions. Use when Erin "
-            "says 'sync my Amazon', 'check Amazon orders', or "
-            "'categorize Amazon purchases'."
-        ),
+        "description": _tool_descs.get("amazon_sync_trigger", "amazon_sync_trigger"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "amazon_spending_breakdown",
-        "description": (
-            "Get a breakdown of Amazon spending by YNAB category for "
-            "a given month, with budget comparisons and top purchases. "
-            "Use when Erin asks 'how are we doing on Amazon spending?', "
-            "'Amazon spending breakdown', or 'what are we buying "
-            "on Amazon?'."
-        ),
+        "description": _tool_descs.get("amazon_spending_breakdown", "amazon_spending_breakdown"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1384,14 +828,7 @@ TOOLS = [
     },
     {
         "name": "amazon_set_auto_split",
-        "description": (
-            "Enable or disable Amazon auto-split mode. When enabled, "
-            "Amazon purchases are automatically split into YNAB "
-            "categories without confirmation. Requires 80%+ acceptance "
-            "rate over 10+ suggestions. Use when Erin says 'yes' to "
-            "the auto-split graduation prompt, or "
-            "'turn off auto-split'."
-        ),
+        "description": _tool_descs.get("amazon_set_auto_split", "amazon_set_auto_split"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1402,11 +839,7 @@ TOOLS = [
     },
     {
         "name": "amazon_undo_split",
-        "description": (
-            "Undo a recent Amazon auto-split transaction, reverting "
-            "it to its original unsplit state. Use when Erin says "
-            "'undo' or 'undo 1' after an auto-split notification."
-        ),
+        "description": _tool_descs.get("amazon_undo_split", "amazon_undo_split"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1422,13 +855,7 @@ TOOLS = [
     # Budget Maintenance (Feature 012: Smart Budget Health)
     {
         "name": "budget_health_check",
-        "description": (
-            "Analyze all YNAB budget categories for goal drift, "
-            "missing goals, stale categories, and merge candidates. "
-            "Returns a health score and actionable suggestions. Use "
-            "when user asks 'how are my budget goals?', 'budget "
-            "health check', or 'any budget issues?'."
-        ),
+        "description": _tool_descs.get("budget_health_check", "budget_health_check"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1450,12 +877,7 @@ TOOLS = [
     },
     {
         "name": "apply_goal_suggestion",
-        "description": (
-            "Update a YNAB category's goal target based on a budget "
-            "health check suggestion. Use when user approves a specific "
-            "suggestion like 'yes to restaurants' or 'update "
-            "restaurants to $1200'."
-        ),
+        "description": _tool_descs.get("apply_goal_suggestion", "apply_goal_suggestion"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1484,13 +906,7 @@ TOOLS = [
     },
     {
         "name": "allocate_bonus",
-        "description": (
-            "Generate a plan to allocate a bonus, stock vesting, or "
-            "extra income across underfunded budget categories. "
-            "Prioritizes essentials, then savings, then discretionary. "
-            "Use when user asks 'where should this bonus go?' or "
-            "'allocate $X'."
-        ),
+        "description": _tool_descs.get("allocate_bonus", "allocate_bonus"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1508,11 +924,7 @@ TOOLS = [
     },
     {
         "name": "approve_allocation",
-        "description": (
-            "Execute the pending bonus allocation plan, moving money "
-            "to each category in YNAB. Use when user says 'approve', "
-            "'yes', or 'do it' after seeing an allocation plan."
-        ),
+        "description": _tool_descs.get("approve_allocation", "approve_allocation"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1529,38 +941,17 @@ TOOLS = [
     # Email-YNAB Sync (Feature 011: PayPal, Venmo, Apple)
     {
         "name": "email_sync_trigger",
-        "description": (
-            "Manually trigger an email-YNAB sync to fetch recent "
-            "PayPal, Venmo, and Apple confirmation emails, match them "
-            "to YNAB transactions, enrich memos with actual "
-            "merchant/service names, classify into budget categories, "
-            "and send suggestions. Use when Erin says 'sync my "
-            "emails', 'check PayPal', 'categorize Venmo', 'what was "
-            "that Apple charge?', or similar."
-        ),
+        "description": _tool_descs.get("email_sync_trigger", "email_sync_trigger"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "email_sync_status",
-        "description": (
-            "Get the current email-YNAB sync status including: last "
-            "sync time, transactions processed by provider "
-            "(PayPal/Venmo/Apple), acceptance rate, and whether "
-            "auto-categorize mode is enabled. Use when Erin asks about "
-            "email sync, PayPal/Venmo/Apple categorization stats."
-        ),
+        "description": _tool_descs.get("email_sync_status", "email_sync_status"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "email_set_auto_categorize",
-        "description": (
-            "Enable or disable email sync auto-categorize mode. When "
-            "enabled, PayPal/Venmo/Apple purchases are automatically "
-            "categorized without confirmation. Requires 80%+ acceptance "
-            "rate over 10+ suggestions and 2 weeks of use. Use when "
-            "Erin says 'yes' to the auto-categorize graduation prompt, "
-            "or 'turn off auto-categorize for emails'."
-        ),
+        "description": _tool_descs.get("email_set_auto_categorize", "email_set_auto_categorize"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1571,12 +962,7 @@ TOOLS = [
     },
     {
         "name": "email_undo_categorize",
-        "description": (
-            "Undo a recent email sync auto-categorization, reverting "
-            "the transaction to its original state. Use when Erin "
-            "says 'undo' or 'undo 1' after an email sync "
-            "auto-categorize notification."
-        ),
+        "description": _tool_descs.get("email_undo_categorize", "email_undo_categorize"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1592,13 +978,7 @@ TOOLS = [
     # User Preference Persistence (Feature 013)
     {
         "name": "save_preference",
-        "description": (
-            "Save a user preference that persists across "
-            "conversations. Use when the user expresses a lasting "
-            "rule like 'don't remind me about X', 'stop sending X', "
-            "'no more X', or 'check the time before Y'. Do NOT use "
-            "for one-time requests like 'no tacos tonight'."
-        ),
+        "description": _tool_descs.get("save_preference", "save_preference"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1630,11 +1010,7 @@ TOOLS = [
     },
     {
         "name": "list_preferences",
-        "description": (
-            "List all stored preferences for the current user. Use "
-            "when the user asks 'what are my preferences?', 'what "
-            "have I set?', or 'show my preferences'."
-        ),
+        "description": _tool_descs.get("list_preferences", "list_preferences"),
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -1643,13 +1019,7 @@ TOOLS = [
     },
     {
         "name": "remove_preference",
-        "description": (
-            "Remove a stored preference so the bot resumes default "
-            "behavior. Use when the user says 'start reminding me "
-            "about X again', 'remove the X preference', 'undo the "
-            "X opt-out', or 'clear all my preferences'. Use "
-            "search_text='ALL' to clear all preferences."
-        ),
+        "description": _tool_descs.get("remove_preference", "remove_preference"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1666,14 +1036,7 @@ TOOLS = [
     # Context-Aware Bot (Feature 014)
     {
         "name": "get_daily_context",
-        "description": (
-            "Get today's family context: calendar events grouped by "
-            "person, who has Zoey, communication mode (time-of-day "
-            "tone), active preferences, and pending backlog count. "
-            "Call this at the start of any planning, scheduling, "
-            "daily plan, or recommendation interaction. Do NOT call "
-            "for simple factual questions."
-        ),
+        "description": _tool_descs.get("get_daily_context", "get_daily_context"),
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -1682,11 +1045,7 @@ TOOLS = [
     },
     {
         "name": "save_routine",
-        "description": (
-            "Save a personal routine checklist. Overwrites if a "
-            "routine with the same name already exists. Examples: "
-            "morning skincare, bedtime, meal prep, school pickup."
-        ),
+        "description": _tool_descs.get("save_routine", "save_routine"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1705,11 +1064,7 @@ TOOLS = [
     },
     {
         "name": "get_routine",
-        "description": (
-            "Get a stored personal routine by name. Returns the "
-            "ordered checklist. If name is empty or 'all', lists "
-            "all saved routine names."
-        ),
+        "description": _tool_descs.get("get_routine", "get_routine"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1725,11 +1080,7 @@ TOOLS = [
     },
     {
         "name": "delete_routine",
-        "description": (
-            "Delete a stored personal routine by name. Use when "
-            "the user says 'delete my morning routine' or "
-            "'remove my bedtime routine'."
-        ),
+        "description": _tool_descs.get("delete_routine", "delete_routine"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1744,12 +1095,7 @@ TOOLS = [
     # Drive Time Tools (Feature 017)
     {
         "name": "get_drive_times",
-        "description": (
-            "Get all stored drive times for common locations. Returns "
-            "a list of locations and their drive times from home in "
-            "minutes. Call this during daily plan generation to "
-            "insert travel buffers."
-        ),
+        "description": _tool_descs.get("get_drive_times", "get_drive_times"),
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -1757,11 +1103,7 @@ TOOLS = [
     },
     {
         "name": "save_drive_time",
-        "description": (
-            "Save or update a drive time for a location. Use when "
-            "the user says something like 'the gym is 5 minutes "
-            "away' or 'school is 10 minutes from home'."
-        ),
+        "description": _tool_descs.get("save_drive_time", "save_drive_time"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1783,7 +1125,7 @@ TOOLS = [
     },
     {
         "name": "delete_drive_time",
-        "description": "Remove a stored drive time for a location.",
+        "description": _tool_descs.get("delete_drive_time", "delete_drive_time"),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -2230,7 +1572,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     # so the model reliably attends to it (GitHub issue #2)
     # P2 fix (Feature 016): also injected into user message above as time_prefix
     date_line = now.strftime("**Right now:** %A, %B %-d, %Y at %-I:%M %p Pacific.")
-    system = date_line + "\n\n" + SYSTEM_PROMPT + "\n\n" + date_line
+    system = date_line + "\n\n" + load_system_prompt() + "\n\n" + date_line
 
     # Inject user preferences into system prompt so Claude naturally honors them
     user_prefs = preferences.get_preferences(sender_phone)

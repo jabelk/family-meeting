@@ -12,6 +12,8 @@ from typing import Optional
 
 import httpx
 
+from src.prompts import render_template
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -341,29 +343,7 @@ def _parse_order_email(html_body: str, email_date: str = "") -> list[dict]:
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    prompt = (
-        "Extract ALL order details from this Amazon order confirmation email.\n"
-        "IMPORTANT: One email may contain MULTIPLE separate orders, each with its own "
-        "order number and Grand Total. Extract each one.\n\n"
-        "CRITICAL RULES:\n"
-        "- Order numbers are in format ###-#######-####### (e.g., 112-1730641-1221858). "
-        "Extract EXACTLY as shown — do NOT invent numbers.\n"
-        "- grand_total is the 'Grand Total:' amount shown for EACH order. "
-        "This includes tax and shipping — it's what gets charged to the card.\n"
-        "- Item prices may appear as '$ 24 99' meaning $24.99. Convert to decimal.\n"
-        "- If you cannot find a field, set it to null — do NOT guess.\n\n"
-        "Return ONLY a valid JSON array of orders:\n"
-        "[\n"
-        "  {\n"
-        '    "order_number": "###-#######-#######",\n'
-        '    "grand_total": 41.08,\n'
-        '    "items": [\n'
-        '      {"title": "exact product name from email", "price": 24.99, "quantity": 1}\n'
-        "    ]\n"
-        "  }\n"
-        "]\n\n"
-        f"Email text:\n{clean_text}"
-    )
+    prompt = render_template("amazon_order_parsing", clean_text=clean_text)
 
     try:
         response = client.messages.create(
@@ -688,12 +668,12 @@ def classify_item(
             examples.append(f'  "{title}" → {mapping["category_name"]}')
         examples_text = "\n".join(examples) if examples else "  (no past examples yet)"
 
-        prompt = (
-            f"Given the family's YNAB budget categories:\n{', '.join(cat_names)}\n\n"
-            f"And these past categorization decisions:\n{examples_text}\n\n"
-            f'Classify this Amazon item: "{item_title}" (${item_price:.2f})\n\n'
-            'Return ONLY valid JSON: {"category": "exact category name from list above", '
-            '"confidence": 0.0-1.0, "reasoning": "brief explanation"}'
+        prompt = render_template(
+            "amazon_classification",
+            category_list=", ".join(cat_names),
+            examples_text=examples_text,
+            item_title=item_title,
+            item_price=f"{item_price:.2f}",
         )
 
         response = client.messages.create(

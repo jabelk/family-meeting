@@ -14,6 +14,7 @@ from src.config import (
     R2_BUCKET_NAME,
     R2_SECRET_ACCESS_KEY,
 )
+from src.prompts import render_template
 
 logger = logging.getLogger(__name__)
 
@@ -99,26 +100,14 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
 
     # Step 1: Extract recipe with Claude vision
     multi_page = len(images) > 1
-    extraction_prompt = (
-        "Extract the recipe from this cookbook page"
-        + ("s" if multi_page else "")
-        + ". Return ONLY valid JSON with these fields:\n"
-        '{"name": "Recipe Name", "ingredients": [{"name": "item", "quantity": "2", "unit": "cups"}], '
-        '"instructions": ["Step 1...", "Step 2..."], "prep_time": 15, "cook_time": 30, '
-        '"servings": 4, "tags": ["tag1"], "cuisine": "American"}\n\n'
-        "Rules:\n"
-        "- If text is unclear or cut off, include it with [unclear] marker\n"
-    )
     if multi_page:
-        extraction_prompt += "- These images are pages from the SAME recipe — combine them into one complete recipe\n"
+        page_suffix = "s"
+        multi_page_rule = "- These images are pages from the SAME recipe — combine them into one complete recipe"
     else:
-        extraction_prompt += "- If two recipes are visible, extract both as a JSON array\n"
-    extraction_prompt += (
-        '- If the image is NOT a recipe, return: {"error": "not_a_recipe"}\n'
-        "- For ingredients, always include name; quantity and unit can be empty strings if not specified\n"
-        "- Tags should be from: Keto, Kid-Friendly, Quick (<30min), Vegetarian, "
-        "Comfort Food, Soup, Salad, Pasta, Meat, Seafood\n"
-        "- Cuisine should be: American, Mexican, Italian, Asian, Mediterranean, or Other"
+        page_suffix = ""
+        multi_page_rule = "- If two recipes are visible, extract both as a JSON array"
+    extraction_prompt = render_template(
+        "recipe_extraction", page_suffix=page_suffix, multi_page_rule=multi_page_rule
     )
 
     # Build content blocks: one image block per page, then the text prompt
