@@ -3,7 +3,6 @@
 import logging
 import re
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from notion_client import Client
 
@@ -19,6 +18,7 @@ from src.config import (
     NOTION_NUDGE_QUEUE_DB,
     NOTION_RECIPES_DB,
     NOTION_TOKEN,
+    TIMEZONE,
 )
 
 logger = logging.getLogger(__name__)
@@ -588,9 +588,7 @@ def get_backlog_for_nudge(assignee: str = "Erin") -> dict | None:
     # Update Last Surfaced so it rotates
     notion.pages.update(
         page_id=page_id,
-        properties={
-            "Last Surfaced": {"date": {"start": datetime.now(tz=ZoneInfo("America/Los_Angeles")).date().isoformat()}}
-        },
+        properties={"Last Surfaced": {"date": {"start": datetime.now(tz=TIMEZONE).date().isoformat()}}},
     )
 
     return {
@@ -1197,7 +1195,7 @@ def count_sent_today() -> int:
     if not NOTION_NUDGE_QUEUE_DB:
         return 0
 
-    today = datetime.now(tz=ZoneInfo("America/Los_Angeles")).date().isoformat()
+    today = datetime.now(tz=TIMEZONE).date().isoformat()
     results = notion.databases.query(
         database_id=NOTION_NUDGE_QUEUE_DB,
         filter={
@@ -1220,7 +1218,7 @@ def check_quiet_day() -> bool:
     if not NOTION_NUDGE_QUEUE_DB:
         return False
 
-    today = datetime.now(tz=ZoneInfo("America/Los_Angeles")).date().isoformat()
+    today = datetime.now(tz=TIMEZONE).date().isoformat()
     results = notion.databases.query(
         database_id=NOTION_NUDGE_QUEUE_DB,
         filter={

@@ -131,7 +131,7 @@ jobs:
           echo "Waiting 30s for deploy to stabilize..."
           sleep 30
           for i in 1 2 3; do
-            if curl -sf https://mombot.sierracodeco.com/health; then
+            if curl -sf ${{ vars.HEALTH_CHECK_URL || 'https://mombot.sierracodeco.com/health' }}; then
               echo "Health check passed on attempt $i"
               exit 0
             fi

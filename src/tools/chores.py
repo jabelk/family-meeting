@@ -3,8 +3,8 @@
 import json
 import logging
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
 
+from src.config import DEFAULT_CALENDAR, TIMEZONE
 from src.tools.calendar import get_events_for_date_raw
 from src.tools.notion import (
     query_all_chores,
@@ -16,7 +16,7 @@ from src.tools.notion import (
 
 logger = logging.getLogger(__name__)
 
-PACIFIC = ZoneInfo("America/Los_Angeles")
+PACIFIC = TIMEZONE
 
 # Frequency in days for overdue score calculation
 FREQUENCY_DAYS = {
@@ -52,7 +52,7 @@ def detect_free_windows(target_date: date) -> list[dict]:
     Returns list of {start: datetime, end: datetime, duration_minutes: int}
     for gaps >= 15 minutes between 7:00 AM and 8:30 PM.
     """
-    events = get_events_for_date_raw(target_date, calendar_names=["erin", "family"])
+    events = get_events_for_date_raw(target_date, calendar_names=[DEFAULT_CALENDAR, "family"])
 
     # Define day boundaries (7 AM to 8:30 PM Pacific)
     day_start = datetime(

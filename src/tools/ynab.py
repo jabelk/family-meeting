@@ -7,7 +7,6 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -787,7 +786,9 @@ def check_uncategorized_pileup() -> dict | None:
     txns = resp.json()["data"]["transactions"]
 
     # Filter to transactions older than 48 hours
-    cutoff = (datetime.now(tz=ZoneInfo("America/Los_Angeles")) - timedelta(hours=48)).date().isoformat()
+    from src.config import TIMEZONE
+
+    cutoff = (datetime.now(tz=TIMEZONE) - timedelta(hours=48)).date().isoformat()
     old_txns = [t for t in txns if t["date"] <= cutoff]
 
     if len(old_txns) >= 3:

@@ -384,7 +384,7 @@ def get_budget_summary_formatted() -> str:
 
 
 @mcp.tool()
-def generate_daily_plan_tool(target: str = "erin") -> str:
+def generate_daily_plan_tool(target: str = _p2.lower()) -> str:
     f"""Generate a full daily plan for {_p2} (or {_p1}).
 
     This triggers an AI-powered planning process that reads routine templates,

@@ -7,9 +7,8 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
-from src.config import ADMIN_PHONE, ANTHROPIC_API_KEY, UPSTREAM_REMOTE
+from src.config import ADMIN_PHONE, ANTHROPIC_API_KEY, TIMEZONE, UPSTREAM_REMOTE
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +166,7 @@ async def notify_update_available(upstream_sha: str, summary: str, commit_count:
 
 def backup_data() -> str:
     """Create a timestamped backup of the data directory."""
-    now = datetime.now(ZoneInfo("America/Los_Angeles"))
+    now = datetime.now(TIMEZONE)
     backup_name = f"pre-update-{now.strftime('%Y%m%d-%H%M%S')}"
     backup_path = _BACKUP_DIR / backup_name
 
@@ -214,7 +213,7 @@ async def apply_update() -> dict:
     state = _load_state()
     state["pre_update_sha"] = old_sha
     state["deployed_sha"] = new_sha
-    state["last_update_time"] = datetime.now(ZoneInfo("America/Los_Angeles")).isoformat()
+    state["last_update_time"] = datetime.now(TIMEZONE).isoformat()
     state["pre_update_backup_path"] = backup_path
     state["skipped_sha"] = None
     _save_state(state)
@@ -300,7 +299,7 @@ async def rollback_update() -> dict:
 
     if state.get("last_update_time"):
         update_time = datetime.fromisoformat(state["last_update_time"])
-        now = datetime.now(ZoneInfo("America/Los_Angeles"))
+        now = datetime.now(TIMEZONE)
         if now - update_time > timedelta(days=_ROLLBACK_GRACE_DAYS):
             return {"success": False, "reason": "grace_period_expired"}
 
