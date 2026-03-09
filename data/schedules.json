@@ -1,0 +1,89 @@
+{
+  "timezone": "America/Los_Angeles",
+  "jobs": [
+    {
+      "id": "daily_briefing",
+      "endpoint": "briefing/daily",
+      "schedule": {"hour": 7, "minute": 0, "day_of_week": "mon-fri"},
+      "enabled": true
+    },
+    {
+      "id": "nudge_scan",
+      "endpoint": "nudges/scan",
+      "schedule": {"minute": "*/15", "hour": "7-20"},
+      "enabled": true
+    },
+    {
+      "id": "budget_scan",
+      "endpoint": "budget/scan",
+      "schedule": {"hour": 9, "minute": 0},
+      "enabled": true
+    },
+    {
+      "id": "populate_week",
+      "endpoint": "calendar/populate-week",
+      "schedule": {"hour": 19, "minute": 0, "day_of_week": "sun"},
+      "enabled": true
+    },
+    {
+      "id": "meal_plan",
+      "endpoint": "meals/plan-week",
+      "schedule": {"hour": 9, "minute": 0, "day_of_week": "sat"},
+      "enabled": true
+    },
+    {
+      "id": "amazon_sync",
+      "endpoint": "amazon/sync",
+      "schedule": {"hour": 22, "minute": 0},
+      "enabled": true
+    },
+    {
+      "id": "email_sync",
+      "endpoint": "email/sync",
+      "schedule": {"hour": 22, "minute": 5},
+      "enabled": true
+    },
+    {
+      "id": "budget_health",
+      "endpoint": "budget/health-check",
+      "schedule": {"hour": 9, "minute": 0, "day": 1},
+      "enabled": true
+    },
+    {
+      "id": "grandma_prompt",
+      "endpoint": "prompt/grandma-schedule",
+      "schedule": {"hour": 9, "minute": 0, "day_of_week": "mon"},
+      "enabled": true
+    },
+    {
+      "id": "conflict_check",
+      "endpoint": "calendar/conflict-check",
+      "schedule": {"hour": 19, "minute": 30, "day_of_week": "sun"},
+      "enabled": true
+    },
+    {
+      "id": "action_item_reminder",
+      "endpoint": "reminders/action-items",
+      "schedule": {"hour": 12, "minute": 0, "day_of_week": "wed"},
+      "enabled": true
+    },
+    {
+      "id": "grocery_reorder",
+      "endpoint": "grocery/reorder-check",
+      "schedule": {"hour": 10, "minute": 0, "day_of_week": "sat"},
+      "enabled": true
+    },
+    {
+      "id": "grocery_confirmation",
+      "endpoint": "reminders/grocery-confirmation",
+      "schedule": {"hour": 10, "minute": 0},
+      "enabled": true
+    },
+    {
+      "id": "budget_summary",
+      "endpoint": "budget/weekly-summary",
+      "schedule": {"hour": 17, "minute": 0, "day_of_week": "sun"},
+      "enabled": true
+    }
+  ]
+}

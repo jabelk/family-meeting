@@ -16,8 +16,10 @@ credentials.json
 node_modules/
 *.log
 
-# Data (usage counters — persist locally but don't commit)
+# Data (persist locally but don't commit)
 data/*.json
+# Exception: schedules.json is the default template shipped with the repo
+!data/schedules.json
 
 # OS
 .DS_Store

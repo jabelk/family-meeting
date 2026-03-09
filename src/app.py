@@ -1,4 +1,4 @@
-"""FastAPI app — WhatsApp webhook + n8n automation endpoints."""
+"""FastAPI app — WhatsApp webhook + automation endpoints."""
 
 import base64
 import hashlib
@@ -6,12 +6,14 @@ import hmac
 import logging
 import time
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Request, Response, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel
 from src.config import (
     WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET,
     PHONE_TO_NAME, ERIN_PHONE, N8N_WEBHOOK_SECRET,
+    SCHEDULER_ENABLED,
 )
 from src.whatsapp import extract_message, send_message, download_media
 from src.assistant import handle_message, generate_daily_plan, generate_meeting_prep
@@ -25,7 +27,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Family Meeting Assistant")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start/stop in-app scheduler on FastAPI startup/shutdown."""
+    scheduler = None
+    if SCHEDULER_ENABLED:
+        from src.scheduler import create_scheduler
+        scheduler = create_scheduler()
+        scheduler.start()
+        logger.info("In-app scheduler started")
+    else:
+        logger.info("In-app scheduler disabled (SCHEDULER_ENABLED=false)")
+    yield
+    if scheduler:
+        scheduler.shutdown(wait=False)
+        logger.info("In-app scheduler stopped")
+
+
+app = FastAPI(title="Family Meeting Assistant", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------

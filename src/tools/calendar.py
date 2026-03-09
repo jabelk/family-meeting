@@ -1,14 +1,16 @@
 """Google Calendar API wrapper — read from 3 calendars + write to Erin's calendar."""
 
+import json
 import os
 import logging
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from src.config import CALENDAR_IDS
+from src.config import CALENDAR_IDS, GOOGLE_TOKEN_JSON, GOOGLE_CREDENTIALS_JSON
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +36,68 @@ MAX_CALENDAR_DELETES = 50  # refuse to delete more than this in a single call
 MAX_CALENDAR_CREATES = 50  # refuse to create more than this in a single call
 
 
+_VOLUME_TOKEN_PATH = Path("/app/data/token.json")
+
+
 def _get_service():
-    """Build and return an authenticated Google Calendar service."""
+    """Build and return an authenticated Google Calendar service.
+
+    Credential loading priority:
+    1. GOOGLE_TOKEN_JSON env var (Railway / containerized deployments)
+    2. Volume-backed token file at /app/data/token.json (persists refreshed tokens)
+    3. Local token.json file (development)
+    4. Interactive OAuth flow via credentials.json (initial local setup only)
+    """
     creds = None
-    if os.path.exists(TOKEN_PATH):
+
+    # 1. Try env var first (Railway deployment)
+    if GOOGLE_TOKEN_JSON:
+        try:
+            token_data = json.loads(GOOGLE_TOKEN_JSON)
+            creds = Credentials.from_authorized_user_info(token_data, SCOPES)
+            logger.info("Google credentials loaded from GOOGLE_TOKEN_JSON env var")
+        except Exception as e:
+            logger.error("Failed to load GOOGLE_TOKEN_JSON: %s", e)
+
+    # 2. Try volume-backed token file (persists across redeploys)
+    if not creds and _VOLUME_TOKEN_PATH.exists():
+        try:
+            creds = Credentials.from_authorized_user_file(str(_VOLUME_TOKEN_PATH), SCOPES)
+            logger.info("Google credentials loaded from volume token file")
+        except Exception as e:
+            logger.warning("Failed to load volume token file: %s", e)
+
+    # 3. Try local token file (development)
+    if not creds and os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+
+    # Refresh if expired
+    if creds and not creds.valid:
+        if creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            logger.info("Google credentials refreshed successfully")
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(TOKEN_PATH, "w") as f:
-            f.write(creds.to_json())
+            creds = None  # Can't refresh, need new auth
+
+    # 4. Interactive OAuth flow (local development only)
+    if not creds:
+        cred_path = CREDENTIALS_PATH
+        if GOOGLE_CREDENTIALS_JSON:
+            # Write credentials from env var to temp file for the flow
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+                f.write(GOOGLE_CREDENTIALS_JSON)
+                cred_path = f.name
+        flow = InstalledAppFlow.from_client_secrets_file(cred_path, SCOPES)
+        creds = flow.run_local_server(port=0)
+
+    # Persist refreshed/new token to volume (survives redeploys) and local file
+    token_json = creds.to_json()
+    if _VOLUME_TOKEN_PATH.parent.exists():
+        _VOLUME_TOKEN_PATH.write_text(token_json)
+    with open(TOKEN_PATH, "w") as f:
+        f.write(token_json)
+
     return build("calendar", "v3", credentials=creds)
 
 

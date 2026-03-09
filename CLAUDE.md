@@ -82,8 +82,26 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - Flat JSON files in `data/conversation_archives/` on NUC (same Docker volume mount) (018-conversation-log-backup)
 - Python 3.12 (existing codebase) + FastAPI, anthropic SDK (existing), openai SDK (new — for Whisper transcription only), ffmpeg (new — apt package in Docker) (019-whatsapp-voice-messages)
 - N/A — transcribed text flows through existing conversation pipeline (019-whatsapp-voice-messages)
+- Python 3.12 (existing codebase) + Node.js 20 (AnyList sidecar) + FastAPI, anthropic SDK, APScheduler (new), existing deps unchanged (020-railway-cloud-deploy)
+- Railway Volume mounted at `/app/data` (same JSON files, zero migration) (020-railway-cloud-deploy)
 
-## Deployment (NUC)
+## Deployment
+
+### Railway (Cloud)
+
+Railway deployment uses the same Dockerfile. Railway auto-deploys on push to main.
+
+- **Config**: `railway.toml` (build config, healthcheck)
+- **Storage**: Railway Volume mounted at `/app/data` (persistent JSON files)
+- **Scheduling**: In-app APScheduler (`src/scheduler.py`) replaces n8n — loads jobs from `data/schedules.json`
+- **Google OAuth**: `GOOGLE_TOKEN_JSON` env var loaded via `Credentials.from_authorized_user_info()`; refreshed tokens written back to volume
+- **Services**: FastAPI (public domain) + optional AnyList sidecar (private networking via `*.railway.internal`)
+- **Required env vars**: `ANTHROPIC_API_KEY`, `WHATSAPP_*`, `N8N_WEBHOOK_SECRET`
+- **Optional integrations**: Notion, Google Calendar, YNAB, AnyList — app works as standalone chat assistant without them
+- **Hard constraint**: Single uvicorn worker only (APScheduler requirement)
+- **Onboarding**: See `ONBOARDING.md` for self-service setup guide
+
+### NUC (Home Server)
 
 The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.152) via Docker Compose. SSH access is configured via `ssh warp-nuc`.
 
@@ -102,7 +120,7 @@ The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.15
 ./scripts/nuc.sh chat-logs latest    # Pull most recent archive
 ```
 
-**Services**: fastapi (port 8000), anylist-sidecar (port 3000), cloudflared (tunnel). n8n runs separately on the NUC (port 5678).
+**Services**: fastapi (port 8000), anylist-sidecar (port 3000), cloudflared (tunnel). n8n runs separately on the NUC (port 5678) for scheduling (Railway uses in-app APScheduler instead).
 
 **Updating code**: Edit locally, commit, push to main, then `./scripts/nuc.sh deploy`.
 **Updating .env**: Edit locally, then `./scripts/nuc.sh env` (copies .env and restarts fastapi).
@@ -122,6 +140,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 020-railway-cloud-deploy: Railway cloud deployment with in-app APScheduler (replaces n8n), Google OAuth env var loading, optional integrations (Notion/Calendar/YNAB), ONBOARDING.md for self-service setup, railway.toml + schedules.json config
 - 019-whatsapp-voice-messages: Added openai SDK (GPT-4o Mini Transcribe for voice notes), ffmpeg (OGG→MP3 conversion in Docker). Voice notes transcribed and fed to existing Claude tool loop.
 - 018-conversation-log-backup: Added Bash (shell script on NUC) — no Python changes needed + cron (already on NUC Ubuntu 24.04), scp/ssh (already configured)
-- 017-smart-daily-planner: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK (Claude Haiku 4.5), existing tool functions

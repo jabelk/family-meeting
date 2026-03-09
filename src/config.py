@@ -1,5 +1,6 @@
 """Environment variable loading and validation."""
 
+import logging
 import os
 import sys
 from dotenv import load_dotenv
@@ -8,17 +9,22 @@ load_dotenv()
 
 REQUIRED_VARS = [
     "ANTHROPIC_API_KEY",
-    "NOTION_TOKEN",
-    "NOTION_ACTION_ITEMS_DB",
-    "NOTION_MEAL_PLANS_DB",
-    "NOTION_MEETINGS_DB",
-    "NOTION_FAMILY_PROFILE_PAGE",
-    "GOOGLE_CALENDAR_JASON_ID",
-    "GOOGLE_CALENDAR_ERIN_ID",
-    "GOOGLE_CALENDAR_FAMILY_ID",
-    "YNAB_ACCESS_TOKEN",
-    "YNAB_BUDGET_ID",
+    "WHATSAPP_PHONE_NUMBER_ID",
+    "WHATSAPP_ACCESS_TOKEN",
+    "WHATSAPP_VERIFY_TOKEN",
+    "WHATSAPP_APP_SECRET",
+    "N8N_WEBHOOK_SECRET",
 ]
+
+OPTIONAL_GROUPS = {
+    "Notion": ["NOTION_TOKEN", "NOTION_ACTION_ITEMS_DB", "NOTION_MEAL_PLANS_DB",
+               "NOTION_MEETINGS_DB", "NOTION_FAMILY_PROFILE_PAGE"],
+    "Google Calendar": ["GOOGLE_CALENDAR_JASON_ID", "GOOGLE_CALENDAR_ERIN_ID",
+                        "GOOGLE_CALENDAR_FAMILY_ID"],
+    "YNAB": ["YNAB_ACCESS_TOKEN", "YNAB_BUDGET_ID"],
+}
+
+logger = logging.getLogger(__name__)
 
 
 def _load_env():
@@ -28,31 +34,37 @@ def _load_env():
         print("Copy .env.example to .env and fill in all values.", file=sys.stderr)
         sys.exit(1)
 
+    # Log warnings for missing optional integration groups
+    for group, vars_ in OPTIONAL_GROUPS.items():
+        missing_optional = [v for v in vars_ if not os.getenv(v)]
+        if missing_optional:
+            logger.warning("%s integration not configured (missing: %s)", group, ", ".join(missing_optional))
+
 
 _load_env()
 
 # Anthropic
 ANTHROPIC_API_KEY: str = os.environ["ANTHROPIC_API_KEY"]
 
-# WhatsApp (optional — only needed for webhook server)
-WHATSAPP_PHONE_NUMBER_ID: str = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
-WHATSAPP_ACCESS_TOKEN: str = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
-WHATSAPP_VERIFY_TOKEN: str = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
-WHATSAPP_APP_SECRET: str = os.environ.get("WHATSAPP_APP_SECRET", "")
+# WhatsApp (required — core messaging interface)
+WHATSAPP_PHONE_NUMBER_ID: str = os.environ["WHATSAPP_PHONE_NUMBER_ID"]
+WHATSAPP_ACCESS_TOKEN: str = os.environ["WHATSAPP_ACCESS_TOKEN"]
+WHATSAPP_VERIFY_TOKEN: str = os.environ["WHATSAPP_VERIFY_TOKEN"]
+WHATSAPP_APP_SECRET: str = os.environ["WHATSAPP_APP_SECRET"]
 
-# Notion
-NOTION_TOKEN: str = os.environ["NOTION_TOKEN"]
-NOTION_ACTION_ITEMS_DB: str = os.environ["NOTION_ACTION_ITEMS_DB"]
-NOTION_MEAL_PLANS_DB: str = os.environ["NOTION_MEAL_PLANS_DB"]
-NOTION_MEETINGS_DB: str = os.environ["NOTION_MEETINGS_DB"]
-NOTION_FAMILY_PROFILE_PAGE: str = os.environ["NOTION_FAMILY_PROFILE_PAGE"]
+# Notion (optional — configure for task/meal/meeting management)
+NOTION_TOKEN: str = os.environ.get("NOTION_TOKEN", "")
+NOTION_ACTION_ITEMS_DB: str = os.environ.get("NOTION_ACTION_ITEMS_DB", "")
+NOTION_MEAL_PLANS_DB: str = os.environ.get("NOTION_MEAL_PLANS_DB", "")
+NOTION_MEETINGS_DB: str = os.environ.get("NOTION_MEETINGS_DB", "")
+NOTION_FAMILY_PROFILE_PAGE: str = os.environ.get("NOTION_FAMILY_PROFILE_PAGE", "")
 NOTION_BACKLOG_DB: str = os.environ.get("NOTION_BACKLOG_DB", "")
 NOTION_GROCERY_HISTORY_DB: str = os.environ.get("NOTION_GROCERY_HISTORY_DB", "")
 
-# Google Calendar (3 calendars)
-GOOGLE_CALENDAR_JASON_ID: str = os.environ["GOOGLE_CALENDAR_JASON_ID"]
-GOOGLE_CALENDAR_ERIN_ID: str = os.environ["GOOGLE_CALENDAR_ERIN_ID"]
-GOOGLE_CALENDAR_FAMILY_ID: str = os.environ["GOOGLE_CALENDAR_FAMILY_ID"]
+# Google Calendar (optional — configure for calendar integration)
+GOOGLE_CALENDAR_JASON_ID: str = os.environ.get("GOOGLE_CALENDAR_JASON_ID", "")
+GOOGLE_CALENDAR_ERIN_ID: str = os.environ.get("GOOGLE_CALENDAR_ERIN_ID", "")
+GOOGLE_CALENDAR_FAMILY_ID: str = os.environ.get("GOOGLE_CALENDAR_FAMILY_ID", "")
 
 CALENDAR_IDS: dict[str, str] = {
     "jason": GOOGLE_CALENDAR_JASON_ID,
@@ -63,9 +75,9 @@ CALENDAR_IDS: dict[str, str] = {
 # Outlook (optional — Jason's work calendar ICS feed)
 OUTLOOK_CALENDAR_ICS_URL: str = os.environ.get("OUTLOOK_CALENDAR_ICS_URL", "")
 
-# YNAB
-YNAB_ACCESS_TOKEN: str = os.environ["YNAB_ACCESS_TOKEN"]
-YNAB_BUDGET_ID: str = os.environ["YNAB_BUDGET_ID"]
+# YNAB (optional — configure for budget integration)
+YNAB_ACCESS_TOKEN: str = os.environ.get("YNAB_ACCESS_TOKEN", "")
+YNAB_BUDGET_ID: str = os.environ.get("YNAB_BUDGET_ID", "")
 
 # Family phone mapping (optional — only needed for WhatsApp webhook)
 JASON_PHONE: str = os.environ.get("JASON_PHONE", "")
@@ -95,10 +107,17 @@ NOTION_NUDGE_QUEUE_DB: str = os.environ.get("NOTION_NUDGE_QUEUE_DB", "")
 NOTION_CHORES_DB: str = os.environ.get("NOTION_CHORES_DB", "")
 
 # n8n webhook auth (shared secret for /api/v1/* endpoint protection)
-N8N_WEBHOOK_SECRET: str = os.environ.get("N8N_WEBHOOK_SECRET", "")
+N8N_WEBHOOK_SECRET: str = os.environ["N8N_WEBHOOK_SECRET"]
 
 # Gmail API is used for Feature 010 Amazon-YNAB sync (reads Amazon order emails).
 # Auth handled via token.json (shared with Google Calendar OAuth).
 
 # OpenAI (optional — used for voice note transcription, Feature 019)
 OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
+
+# Google OAuth (optional — for loading Calendar credentials from env vars in containers)
+GOOGLE_TOKEN_JSON: str = os.environ.get("GOOGLE_TOKEN_JSON", "")
+GOOGLE_CREDENTIALS_JSON: str = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
+
+# Scheduler (enabled by default; set to "false" to disable in-app APScheduler)
+SCHEDULER_ENABLED: bool = os.environ.get("SCHEDULER_ENABLED", "true").lower() != "false"
