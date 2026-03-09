@@ -24,8 +24,7 @@ def load_system_prompt() -> str:
     files = sorted(SYSTEM_DIR.glob("*.md"))
     if not files:
         raise FileNotFoundError(
-            f"No system prompt files found in {SYSTEM_DIR}. "
-            "Expected numbered .md files (e.g., 01-identity.md)."
+            f"No system prompt files found in {SYSTEM_DIR}. Expected numbered .md files (e.g., 01-identity.md)."
         )
     sections = []
     for f in files:

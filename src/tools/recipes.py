@@ -106,9 +106,7 @@ def extract_and_save_recipe(images: list[dict], cookbook_name: str = "") -> dict
     else:
         page_suffix = ""
         multi_page_rule = "- If two recipes are visible, extract both as a JSON array"
-    extraction_prompt = render_template(
-        "recipe_extraction", page_suffix=page_suffix, multi_page_rule=multi_page_rule
-    )
+    extraction_prompt = render_template("recipe_extraction", page_suffix=page_suffix, multi_page_rule=multi_page_rule)
 
     # Build content blocks: one image block per page, then the text prompt
     content_blocks = []
