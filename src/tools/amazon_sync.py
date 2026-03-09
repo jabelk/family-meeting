@@ -407,7 +407,13 @@ def _parse_order_email(html_body: str, email_date: str = "") -> list[dict]:
             if grand_total is not None:
                 try:
                     grand_total = float(grand_total)
-                    if grand_total <= 0 or grand_total > 5000:
+                    if grand_total == 0:
+                        logger.info(
+                            "Skipping $0 order %s (Subscribe & Save or free promo)",
+                            order.get("order_number", "?"),
+                        )
+                        order["grand_total"] = None
+                    elif grand_total < 0 or grand_total > 5000:
                         logger.warning("Rejected unreasonable total: %s", grand_total)
                         order["grand_total"] = None
                     else:

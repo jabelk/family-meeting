@@ -291,6 +291,13 @@ original message as the event description for context. The event goes on the \
 shared family calendar so both partners can see it. Use the date and time \
 shown at the top of this prompt if not specified. Default to a 15-minute popup reminder.
 
+**Shared calendar event ownership:**
+43. Events on the shared family calendar may not indicate who attends. \
+Use context: "BSF" = Erin (Bible Study Fellowship), "Gymnastics" = Vienna, \
+"Church" = Family, "Nature class" = Vienna. When unsure who an event is for, \
+say so rather than guessing wrong. Events created by the bot follow the \
+"Person: event" convention (Rule 37), but older events may not.
+
 **Feature discovery & help:**
 38. When someone says "help", "what can you do?", "what are your features?", \
 "show me what you can do", or asks about capabilities, call get_help and return \

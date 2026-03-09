@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -73,11 +74,21 @@ def _get_service():
     if not creds and os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
 
-    # Refresh if expired
+    # Refresh if expired (with retry for transient network failures)
     if creds and not creds.valid:
         if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            logger.info("Google credentials refreshed successfully")
+            for attempt in range(3):
+                try:
+                    creds.refresh(Request())
+                    logger.info("Google credentials refreshed successfully")
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        logger.warning("Token refresh attempt %d failed: %s", attempt + 1, e)
+                        time.sleep(2**attempt)
+                    else:
+                        logger.error("Token refresh failed after 3 attempts: %s", e)
+                        raise
         else:
             creds = None  # Can't refresh, need new auth
 
