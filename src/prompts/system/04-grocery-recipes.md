@@ -7,8 +7,8 @@
 21. When asked to cook a saved recipe or add recipe ingredients to the grocery list, use recipe_to_grocery_list. Present needed vs already-have items, then offer to push needed items to AnyList.
 22. To browse saved cookbooks or list what's been catalogued, use list_cookbooks.
 
-**Downshiftology recipe search:**
-28. For recipe searches from Downshiftology ("find me a chicken dinner", "keto breakfast ideas", "what should I make tonight?"), use search_downshiftology. Map natural language to parameters: "chicken dinner" → query="chicken", course="dinner". "quick keto" → dietary="keto", max_time=30. Show results as a numbered list with name, time, and link.
+**{recipe_source} recipe search:**
+28. For recipe searches from {recipe_source} ("find me a chicken dinner", "keto breakfast ideas", "what should I make tonight?"), use search_downshiftology. Map natural language to parameters: "chicken dinner" → query="chicken", course="dinner". "quick keto" → dietary="keto", max_time=30. Show results as a numbered list with name, time, and link.
 29. For recipe details ("tell me more about number 2", "what's in number 3"), use get_downshiftology_details with the result number. The response includes ingredients, instructions, nutrition, and which ingredients the family typically buys.
-30. When Erin says "save number N", "import that recipe", or "add it to our recipes" after a Downshiftology search, use import_downshiftology_recipe with the result number. It checks for duplicates and saves to the Notion catalogue under the "Downshiftology" cookbook.
-31. Downshiftology is the only external recipe source. For saved recipe searches ("what was that steak recipe?"), still use search_recipes. Only use search_downshiftology for new recipe discovery.
+30. When {partner2_name} says "save number N", "import that recipe", or "add it to our recipes" after a {recipe_source} search, use import_downshiftology_recipe with the result number. It checks for duplicates and saves to the Notion catalogue under the "{recipe_source}" cookbook.
+31. {recipe_source} is the only external recipe source. For saved recipe searches ("what was that steak recipe?"), still use search_recipes. Only use search_downshiftology for new recipe discovery.

@@ -6,6 +6,8 @@ import sys
 
 from dotenv import load_dotenv
 
+from src.family_config import load_family_config
+
 load_dotenv()
 
 REQUIRED_VARS = [
@@ -44,11 +46,16 @@ def _load_env():
         print("Copy .env.example to .env and fill in all values.", file=sys.stderr)
         sys.exit(1)
 
-    # Log warnings for missing optional integration groups
+    # Log status of optional integration groups
+    enabled = []
     for group, vars_ in OPTIONAL_GROUPS.items():
         missing_optional = [v for v in vars_ if not os.getenv(v)]
         if missing_optional:
             logger.warning("%s integration not configured (missing: %s)", group, ", ".join(missing_optional))
+        else:
+            enabled.append(group)
+    if enabled:
+        logger.info("Enabled integrations: %s", ", ".join(enabled))
 
 
 _load_env()
@@ -89,15 +96,29 @@ OUTLOOK_CALENDAR_ICS_URL: str = os.environ.get("OUTLOOK_CALENDAR_ICS_URL", "")
 YNAB_ACCESS_TOKEN: str = os.environ.get("YNAB_ACCESS_TOKEN", "")
 YNAB_BUDGET_ID: str = os.environ.get("YNAB_BUDGET_ID", "")
 
+# Family config (loaded from config/family.yaml — see src/family_config.py)
+try:
+    FAMILY_CONFIG: dict = load_family_config()
+except Exception as e:
+    if "pytest" in sys.modules or os.getenv("TESTING"):
+        logger.warning("Family config failed to load (test mode): %s", e)
+        FAMILY_CONFIG = {}
+    else:
+        logger.warning("Family config failed to load: %s — using defaults", e)
+        FAMILY_CONFIG = {}
+
 # Family phone mapping (optional — only needed for WhatsApp webhook)
-JASON_PHONE: str = os.environ.get("JASON_PHONE", "")
-ERIN_PHONE: str = os.environ.get("ERIN_PHONE", "")
+# Phone env vars are named PARTNER1_PHONE, PARTNER2_PHONE (or legacy JASON_PHONE, ERIN_PHONE)
+JASON_PHONE: str = os.environ.get("JASON_PHONE", "") or os.environ.get("PARTNER1_PHONE", "")
+ERIN_PHONE: str = os.environ.get("ERIN_PHONE", "") or os.environ.get("PARTNER2_PHONE", "")
 
 PHONE_TO_NAME: dict[str, str] = {}
+_partner1 = FAMILY_CONFIG.get("partner1_name", "Jason")
+_partner2 = FAMILY_CONFIG.get("partner2_name", "Erin")
 if JASON_PHONE:
-    PHONE_TO_NAME[JASON_PHONE] = "Jason"
+    PHONE_TO_NAME[JASON_PHONE] = _partner1
 if ERIN_PHONE:
-    PHONE_TO_NAME[ERIN_PHONE] = "Erin"
+    PHONE_TO_NAME[ERIN_PHONE] = _partner2
 
 # AnyList (optional — grocery integration)
 ANYLIST_SIDECAR_URL: str = os.environ.get("ANYLIST_SIDECAR_URL", "http://anylist-sidecar:3000")

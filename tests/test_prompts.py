@@ -2,15 +2,28 @@
 
 import pytest
 
-from src.prompts import load_system_prompt, load_tool_descriptions, render_template
+from src.prompts import load_system_prompt, load_tool_descriptions, render_system_prompt, render_template
 
 
 def test_load_system_prompt_returns_nonempty():
     """System prompt loads from section files and contains expected markers."""
     prompt = load_system_prompt()
     assert len(prompt) > 0
-    # Check for expected section content (identity and response rules)
-    assert "Mom Bot" in prompt or "family" in prompt.lower()
+    # Raw template has placeholders
+    assert "{bot_name}" in prompt or "family" in prompt.lower()
+
+
+def test_render_system_prompt_with_config():
+    """Rendered system prompt replaces family config placeholders."""
+    test_config = {
+        "bot_name": "TestBot",
+        "partner1_name": "Alice",
+        "partner2_name": "Bob",
+        "family_name": "The Test Family",
+    }
+    rendered = render_system_prompt(test_config)
+    assert "TestBot" in rendered
+    assert "{bot_name}" not in rendered
 
 
 def test_load_tool_descriptions_returns_77():

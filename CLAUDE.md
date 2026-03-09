@@ -38,20 +38,34 @@ Features are developed through a phased pipeline using slash commands, executed 
 
 All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git and non-git repositories.
 
+## Family Configuration
+
+Family-specific values are externalized in `config/family.yaml` (YAML format, human-edited). The config loader (`src/family_config.py`) validates required fields, computes derived values, and produces a placeholder dict used to render system prompts, tool descriptions, and templates.
+
+**Key files:**
+- `config/family.yaml` — Per-instance family config (names, ages, preferences, integrations)
+- `config/family.yaml.example` — Blank template with comments for new deployments
+- `src/family_config.py` — YAML loader with validation + placeholder dict builder (`load_family_config()`)
+
+**How it works:** System prompts and tool descriptions use `{placeholder}` syntax (e.g., `{partner1_name}`, `{grocery_store}`). At startup, `render_system_prompt(family_config)` and `render_tool_descriptions(family_config)` replace placeholders with config values using `str.format_map()` with a `_PassthroughDict` that passes through unknown keys unchanged.
+
+**Adding a new family-specific value:** Add the field to `config/family.yaml`, add a derived key in `_build_placeholder_dict()` in `src/family_config.py`, then use `{new_key}` in prompt files.
+
 ## Prompt Architecture
 
-All LLM prompts live in `src/prompts/` as external Markdown files, loaded at startup via `@lru_cache`.
+All LLM prompts live in `src/prompts/` as external Markdown files, loaded at startup via `@lru_cache`, then rendered with family config placeholders.
 
 **Directory structure:**
-- `src/prompts/system/` — System prompt sections (8 numbered `.md` files, concatenated in sort order)
+- `src/prompts/system/` — System prompt sections (9 numbered `.md` files, concatenated in sort order)
 - `src/prompts/tools/` — Tool descriptions (12 module-grouped `.md` files, parsed by `## tool_name` headers)
 - `src/prompts/templates/` — Classification/generation prompt templates (10 `.md` files with `{placeholder}` syntax)
-- `src/prompts/__init__.py` — Loader module: `load_system_prompt()`, `load_tool_descriptions()`, `render_template(name, **kwargs)`
+- `src/prompts/__init__.py` — Loader module: `load_system_prompt()`, `render_system_prompt()`, `load_tool_descriptions()`, `render_tool_descriptions()`, `render_template(name, **kwargs)`
 
 **Adding/editing prompts:**
-- System prompt: Add/edit numbered files in `system/` (e.g., `09-new-section.md`). Order matters.
+- System prompt: Add/edit numbered files in `system/` (e.g., `10-new-section.md`). Order matters.
 - Tool descriptions: Add `## tool_name` section in the appropriate module file in `tools/`.
 - Templates: Create `name.md` in `templates/`, use `{placeholder}` for dynamic values. Escape literal braces as `{{` / `}}`.
+- Use `{partner1_name}`, `{partner2_name}`, `{bot_name}`, `{grocery_store}`, etc. for family-specific values — never hardcode names.
 
 ## Key Constraints
 
@@ -61,6 +75,8 @@ All LLM prompts live in `src/prompts/` as external Markdown files, loaded at sta
 - Tasks specify full file paths and mark parallel-safe items with `[P]`
 
 ## Active Technologies
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK, PyYAML (new — for family config loading), existing deps unchanged (028-template-repo-readiness)
+- YAML config file at `config/family.yaml` (human-edited, committed per instance) + existing JSON data files (028-template-repo-readiness)
 
 **Core stack**: Python 3.12 + FastAPI, anthropic SDK (Claude Haiku 4.5 for chat, Claude vision for OCR), uvicorn, httpx, Pydantic
 
@@ -172,9 +188,17 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList push | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_PUSH` | 200 | Raises `ValueError` |
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
+## Health Check
+
+`GET /health` returns per-integration status:
+- **Status**: `healthy` (all OK), `degraded` (required OK, optional failing), `unhealthy` (required failing → 503)
+- **Required integrations**: `whatsapp`, `ai_api` (env var checks)
+- **Optional integrations**: `notion` (API call), `google_calendar` (API call), `ynab` (API call), `anylist` (sidecar ping), `outlook` (env var check)
+- Response includes `family` name, `bot_name`, `uptime_seconds`, and per-integration `configured`/`connected`/`error` details
+
 ## Feature History
 
-Features 001-022 are implemented and deployed. Spec artifacts for each live under `specs/###-feature-name/`. Key milestones:
+Features 001-028 are implemented and deployed. Spec artifacts for each live under `specs/###-feature-name/`. Key milestones:
 - 001: Core assistant (WhatsApp + Notion + Calendar + YNAB + AnyList)
 - 002: Recipe management (Notion + Cloudflare R2 photo storage)
 - 010-012: Financial automation (Amazon/Gmail receipt parsing → YNAB)
@@ -183,3 +207,7 @@ Features 001-022 are implemented and deployed. Spec artifacts for each live unde
 - 020: Railway cloud deployment (APScheduler replaces n8n)
 - 021: CI/CD pipeline (GitHub Actions)
 - 022: Prompt externalization (Markdown files in src/prompts/)
+- 028: Template repo readiness (family config externalization, enhanced health check, onboarding/pricing docs)
+
+## Recent Changes
+- 028-template-repo-readiness: Externalized all hardcoded family references into `config/family.yaml`. Added `src/family_config.py` YAML config loader, `render_system_prompt()`/`render_tool_descriptions()` with placeholder injection, enhanced `/health` endpoint with per-integration status, operator docs (WHATSAPP_SETUP.md, ONBOARDING.md, PRICING.md, SERVICE_AGREEMENT.md)

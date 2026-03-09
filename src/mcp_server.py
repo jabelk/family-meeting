@@ -25,7 +25,13 @@ logger = logging.getLogger(__name__)
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from src.assistant import _handle_push_grocery_list, _handle_write_calendar_blocks, generate_daily_plan  # noqa: E402
+from src.config import FAMILY_CONFIG  # noqa: E402
 from src.tools import calendar, notion, outlook, proactive, recipes, ynab  # noqa: E402
+
+_p1 = FAMILY_CONFIG.get("partner1_name", "Partner1")
+_p2 = FAMILY_CONFIG.get("partner2_name", "Partner2")
+_c2 = FAMILY_CONFIG.get("child2_name", "Child")
+_store = FAMILY_CONFIG.get("grocery_store", "grocery store")
 
 mcp = FastMCP("family-meeting")
 
@@ -36,18 +42,18 @@ mcp = FastMCP("family-meeting")
 
 @mcp.tool()
 def get_calendar_events(days_ahead: int = 7, calendar_names: list[str] | None = None) -> str:
-    """Fetch upcoming events from Google Calendars (Jason personal, Erin personal, Family shared).
+    f"""Fetch upcoming events from Google Calendars ({_p1} personal, {_p2} personal, Family shared).
 
-    Use calendar_names to filter: "jason", "erin", "family".
+    Use calendar_names to filter: "{_p1.lower()}", "{_p2.lower()}", "family".
     """
     return calendar.get_calendar_events(days_ahead, calendar_names)
 
 
 @mcp.tool()
 def get_outlook_events(target_date: str = "") -> str:
-    """Fetch Jason's work calendar events (Outlook/Cisco) for a date.
+    f"""Fetch {_p1}'s work calendar events (Outlook/Cisco) for a date.
 
-    Shows meeting times so Erin can plan around his schedule.
+    Shows meeting times so {_p2} can plan around his schedule.
     Date format: YYYY-MM-DD. Defaults to today.
     """
     return outlook.get_outlook_events(target_date)
@@ -55,7 +61,7 @@ def get_outlook_events(target_date: str = "") -> str:
 
 @mcp.tool()
 def write_calendar_blocks(blocks: list[dict]) -> str:
-    """Write time blocks to Erin's Google Calendar.
+    f"""Write time blocks to {_p2}'s Google Calendar.
 
     Each block needs: summary (str),
     start_time (ISO datetime like "2026-02-23T09:30:00-08:00"),
@@ -73,9 +79,9 @@ def write_calendar_blocks(blocks: list[dict]) -> str:
 
 @mcp.tool()
 def get_action_items(assignee: str = "", status: str = "") -> str:
-    """Query action items from Notion.
+    f"""Query action items from Notion.
 
-    Filter by assignee ("Jason" or "Erin") and/or status
+    Filter by assignee ("{_p1}" or "{_p2}") and/or status
     ("open" for all non-done, or a specific status like
     "Not Started", "In Progress", "Done").
     """
@@ -171,7 +177,7 @@ def get_meal_plan(week_start: str = "") -> str:
 
 @mcp.tool()
 def get_backlog_items(assignee: str = "", status: str = "") -> str:
-    """Query Erin's personal backlog of one-off tasks (home improvement, personal growth, side work).
+    f"""Query {_p2}'s personal backlog of one-off tasks (home improvement, personal growth, side work).
 
     Filter by assignee and/or status ("open" or specific).
     """
@@ -182,7 +188,7 @@ def get_backlog_items(assignee: str = "", status: str = "") -> str:
 def add_backlog_item(
     description: str,
     category: str = "Other",
-    assignee: str = "Erin",
+    assignee: str = _p2,
     priority: str = "Medium",
 ) -> str:
     """Add a one-off task to the backlog (e.g., "reorganize tupperware", "clean garage").
@@ -206,9 +212,9 @@ def complete_backlog_item(page_id: str) -> str:
 
 @mcp.tool()
 def get_routine_templates() -> str:
-    """Read Erin's daily routine templates.
+    f"""Read {_p2}'s daily routine templates.
 
-    Templates define time blocks for scenarios like "Weekday with Zoey"
+    Templates define time blocks for scenarios like "Weekday with {_c2}"
     or "Weekday with Grandma". Used for daily plan generation.
     """
     return notion.get_routine_templates()
@@ -221,7 +227,7 @@ def get_routine_templates() -> str:
 
 @mcp.tool()
 def get_grocery_history(category: str = "") -> str:
-    """Get grocery purchase history from past Whole Foods orders.
+    f"""Get grocery purchase history from past {_store} orders.
 
     Filter by category: "Produce", "Meat", "Dairy", "Pantry",
     "Frozen", "Bakery", "Beverages".
@@ -260,10 +266,10 @@ def get_budget_summary(month: str = "", category: str = "") -> str:
 
 @mcp.tool()
 def push_grocery_list(items: list[str]) -> str:
-    """Push grocery items to AnyList for Whole Foods delivery.
+    f"""Push grocery items to AnyList for {_store} delivery.
 
     Clears the existing list first, then adds new items.
-    Erin opens AnyList -> "Order Pickup or Delivery" -> Whole Foods.
+    {_p2} opens AnyList -> "Order Pickup or Delivery" -> {_store}.
     """
     return _handle_push_grocery_list(items=items)
 
@@ -379,7 +385,7 @@ def get_budget_summary_formatted() -> str:
 
 @mcp.tool()
 def generate_daily_plan_tool(target: str = "erin") -> str:
-    """Generate a full daily plan for Erin (or Jason).
+    f"""Generate a full daily plan for {_p2} (or {_p1}).
 
     This triggers an AI-powered planning process that reads routine templates,
     checks calendars, picks a backlog item, and writes time blocks to

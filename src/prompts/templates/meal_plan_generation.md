@@ -11,9 +11,9 @@ Recent meal plans (avoid repeats):
 
 Rules:
 - Mon-Sat dinners only (Sunday is leftovers/eating out)
-- Simpler meals on busy days (Tue has gymnastics, Fri has nature class)
+- Simpler meals on busy days ({children_activities_summary})
 - Use saved recipes when they're a good fit
-- Kid-friendly focus (Vienna 5, Zoey 3)
+- Kid-friendly focus ({children_summary})
 - No repeats from last 2 weeks
 - Mix of complexities
 

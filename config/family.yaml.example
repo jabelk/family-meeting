@@ -1,0 +1,46 @@
+# Family Assistant Configuration
+# Copy this file to family.yaml and fill in your family's details.
+# Only fields marked REQUIRED must be filled in. All others have sensible defaults.
+
+bot:
+  name: ""                    # REQUIRED: Your assistant's display name (e.g., "Mom Bot", "Home Helper")
+  welcome_message: ""         # Optional: Custom welcome message. Auto-generated from bot name if empty.
+
+family:
+  name: ""                    # REQUIRED: Family display name (e.g., "The Smith Family")
+  timezone: ""                # REQUIRED: IANA timezone (e.g., "America/New_York", "America/Los_Angeles")
+  location: ""                # Optional: City/region for weather and context (e.g., "Austin, TX")
+
+  partners:                   # REQUIRED: At least one partner
+    - name: ""                # REQUIRED: First name
+      role: "partner"         # Optional: Role label
+      work: ""                # Optional: Work description for context (e.g., "works from home at Google")
+      has_work_calendar: false  # Optional: Set to true if this partner has a separate work calendar (Outlook ICS)
+    - name: ""                # Add second partner if applicable
+      role: "partner"
+      work: ""
+      has_work_calendar: false
+
+  children: []                # Optional: Remove or leave empty if no children
+  #  - name: ""              # Child's first name
+  #    age: 0                 # Current age
+  #    details: ""            # School, activities, etc. (e.g., "kindergarten at Lincoln Elementary, M-F")
+
+  caregivers: []              # Optional: Non-partner caregivers (grandparents, nannies)
+  #  - name: ""              # Display name
+  #    role: ""               # Relationship (e.g., "grandma", "nanny")
+  #    keywords: []           # Keywords for childcare detection in calendar events
+
+preferences:
+  grocery_store: ""           # Optional: Preferred grocery store name (e.g., "Whole Foods", "H-E-B", "Trader Joe's")
+  recipe_source: ""           # Optional: External recipe source name (e.g., "Downshiftology"). Leave empty if not using.
+  dietary_restrictions: []    # Optional: Family dietary restrictions (e.g., ["gluten-free", "dairy-free"])
+
+calendar:
+  event_mappings: {}          # Optional: Map event names to family members for context
+  #  "BSF": "Partner2"        # Example: "BSF" events belong to Partner2
+  #  "Soccer": "Child1"       # Example: "Soccer" events belong to Child1
+
+childcare:
+  keywords: []                # Optional: Auto-generated from children + caregiver names if empty
+  caregiver_mappings: {}      # Optional: Auto-generated from caregivers if empty

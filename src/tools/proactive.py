@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import date, timedelta
 
-from src.config import ANTHROPIC_API_KEY
+from src.config import ANTHROPIC_API_KEY, FAMILY_CONFIG
 from src.prompts import render_template
 from src.tools import calendar, notion, outlook, ynab
 
@@ -78,7 +78,8 @@ def check_reorder_items() -> dict:
 
             if days_since >= avg_reorder:
                 store_options = props.get("Store", {}).get("multi_select", [])
-                store = store_options[0]["name"] if store_options else "Whole Foods"
+                _default_store = FAMILY_CONFIG.get("grocery_store", "grocery store")
+                store = store_options[0]["name"] if store_options else _default_store
                 due_items.append(
                     {
                         "id": page["id"],
@@ -237,7 +238,7 @@ def merge_grocery_list(meal_plan: list[dict], include_reorder: bool = True) -> d
                         items_map[key] = {
                             "name": item["name"],
                             "quantity": item.get("quantity", ""),
-                            "store": item.get("store", "Whole Foods"),
+                            "store": item.get("store", FAMILY_CONFIG.get("grocery_store", "grocery store")),
                             "source": day["meal_name"],
                         }
             except Exception as e:
@@ -254,7 +255,7 @@ def merge_grocery_list(meal_plan: list[dict], include_reorder: bool = True) -> d
                 items_map[key] = {
                     "name": name,
                     "quantity": qty,
-                    "store": "Whole Foods",
+                    "store": FAMILY_CONFIG.get("grocery_store", "grocery store"),
                     "source": day["meal_name"],
                 }
 

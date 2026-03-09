@@ -8,6 +8,7 @@ from anthropic import Anthropic
 
 from src.config import (
     ANTHROPIC_API_KEY,
+    FAMILY_CONFIG,
     NOTION_GROCERY_HISTORY_DB,
     R2_ACCESS_KEY_ID,
     R2_ACCOUNT_ID,
@@ -388,7 +389,8 @@ def recipe_to_grocery_list(recipe_id: str, servings_multiplier: float = 1.0) -> 
                 last_ordered_prop = props.get("Last Ordered", {}).get("date")
                 avg_reorder = props.get("Avg Reorder Days", {}).get("number")
                 store_options = props.get("Store", {}).get("multi_select", [])
-                store = store_options[0]["name"] if store_options else "Whole Foods"
+                _default_store = FAMILY_CONFIG.get("grocery_store", "grocery store")
+                store = store_options[0]["name"] if store_options else _default_store
                 history_map[item_name] = {
                     "last_ordered": last_ordered_prop.get("start") if last_ordered_prop else None,
                     "avg_reorder_days": avg_reorder,

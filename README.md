@@ -4,6 +4,8 @@ A WhatsApp-based family assistant powered by Claude that helps busy parents coor
 
 Built by a family of four (two parents, two young kids) to solve the real coordination problems of daily life. Currently running 11 features with 50+ tools across 6 integrated services.
 
+**Template-ready**: All family-specific details are externalized in `config/family.yaml` — change one file and the entire system adapts to a new family. No code changes needed. See [Customizing for Your Family](#customizing-for-your-family) and [docs/ONBOARDING.md](docs/ONBOARDING.md) for setup.
+
 ## How It Works
 
 ```
@@ -92,10 +94,14 @@ Bot:   Dining Out is at $340 of $500 this month with 5 days left —
 
 ```
 family-meeting/
+├── config/
+│   ├── family.yaml          # Family config (names, prefs — edit this!)
+│   └── family.yaml.example  # Blank template for new deployments
 ├── src/
 │   ├── app.py              # FastAPI — webhook + n8n endpoints
 │   ├── assistant.py         # Claude system prompt, 50+ tools, message loop
 │   ├── config.py            # Environment variables
+│   ├── family_config.py     # YAML config loader + placeholder builder
 │   ├── whatsapp.py          # Meta Cloud API send/receive
 │   ├── conversation.py      # Chat memory (24h window)
 │   └── tools/
@@ -151,6 +157,7 @@ family-meeting/
 ```bash
 git clone https://github.com/youruser/family-meeting.git
 cd family-meeting
+cp config/family.yaml.example config/family.yaml  # Edit with your family details
 cp .env.example .env   # Then fill in all values
 ```
 
@@ -270,15 +277,54 @@ docker compose exec n8n-mombot n8n import:workflow --input=/tmp/workflows/daily-
 
 ## Customizing for Your Family
 
-This bot was built for a specific family — you'll need to customize it for yours:
+All family-specific values live in one file: `config/family.yaml`. No code changes needed.
 
-1. **System prompt** (`src/prompts/system/` — external Markdown files): Replace family member names, schedules, preferences, and rules with your own. This is the bot's personality and knowledge base.
+### 1. Edit `config/family.yaml`
 
-2. **Tools**: Enable/disable features by adding/removing tools from the `TOOLS` list and `TOOL_FUNCTIONS` dict in `assistant.py`. Each tool module in `src/tools/` is independent.
+```bash
+cp config/family.yaml.example config/family.yaml
+# Edit with your family's details
+```
 
-3. **Schedules**: Update `data/schedules.json` (Railway) or n8n workflows (NUC) for your timezone and preferred automation times.
+```yaml
+bot:
+  name: "Family Bot"
+family:
+  name: "The Smith Family"
+  timezone: "America/Chicago"
+  location: "Austin, TX"
+  partners:
+    - name: "Alex"
+      work: "software engineer, works from home"
+    - name: "Sam"
+      work: "nurse, 3 days/week at hospital"
+  children:
+    - name: "Max"
+      age: 7
+      details: "2nd grade at Oak Elementary"
+    - name: "Lily"
+      age: 4
+      details: "preschool T/Th"
+  caregivers:
+    - name: "Grandma Pat"
+      role: "grandma"
+      keywords: ["pat", "grandma"]
+preferences:
+  grocery_store: "Costco"
+  recipe_source: "Budget Bytes"
+```
 
-4. **Categories**: YNAB category mappings, recipe tags, chore lists — all configurable through the bot itself via natural language ("I like to vacuum on Wednesdays", "add to backlog: organize garage").
+That's it — the system prompt, tool descriptions, and all Python code adapt automatically.
+
+### 2. Set up integrations (all optional except WhatsApp + AI)
+
+See [docs/ONBOARDING.md](docs/ONBOARDING.md) for the full setup guide. Only WhatsApp and an Anthropic API key are required to start.
+
+### 3. Further customization
+
+- **Tools**: Enable/disable features by adding/removing tools from the `TOOLS` list and `TOOL_FUNCTIONS` dict in `assistant.py`. Each tool module in `src/tools/` is independent.
+- **Schedules**: Update `data/schedules.json` (Railway) or n8n workflows (NUC) for your timezone and preferred automation times.
+- **Categories**: YNAB category mappings, recipe tags, chore lists — all configurable through the bot itself via natural language.
 
 ## How This Was Built — Claude Code + Speckit
 
