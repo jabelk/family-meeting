@@ -477,8 +477,77 @@ TOOLS = [
                     "description": ("Minutes before event to send popup reminder. Default 15."),
                     "default": 15,
                 },
+                "recurrence": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "RRULE strings for recurring events. Examples: "
+                        "['RRULE:FREQ=WEEKLY;BYDAY=MO'] for weekly Monday, "
+                        "['RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU'] for biweekly Tuesday, "
+                        "['RRULE:FREQ=MONTHLY;BYDAY=1FR'] for first Friday of month, "
+                        "['RRULE:FREQ=WEEKLY;BYDAY=TU,TH'] for Tuesdays and Thursdays, "
+                        "['RRULE:FREQ=DAILY'] for every day. "
+                        "Add COUNT=N for N occurrences or UNTIL=YYYYMMDDT235959Z for end date. "
+                        "Omit this parameter entirely for one-time events."
+                    ),
+                },
+                "calendar_name": {
+                    "type": "string",
+                    "enum": ["family", "jason", "erin"],
+                    "description": "Target calendar. Default: family.",
+                    "default": "family",
+                },
             },
             "required": ["summary", "start_time"],
+        },
+    },
+    # --- Delete / manage calendar events ---
+    {
+        "name": "delete_calendar_event",
+        "description": _tool_descs.get("delete_calendar_event", "delete_calendar_event"),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "event_id": {
+                    "type": "string",
+                    "description": (
+                        "Google Calendar event ID. Get this from get_calendar_events or get_events_for_date results."
+                    ),
+                },
+                "calendar_name": {
+                    "type": "string",
+                    "enum": ["family", "jason", "erin"],
+                    "description": "Target calendar. Default: family.",
+                    "default": "family",
+                },
+                "cancel_mode": {
+                    "type": "string",
+                    "enum": ["single", "all_following"],
+                    "description": (
+                        "'single' to cancel just this occurrence. "
+                        "'all_following' to delete the entire recurring series. "
+                        "Default: single."
+                    ),
+                    "default": "single",
+                },
+            },
+            "required": ["event_id"],
+        },
+    },
+    # --- List recurring events ---
+    {
+        "name": "list_recurring_events",
+        "description": _tool_descs.get("list_recurring_events", "list_recurring_events"),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "calendar_name": {
+                    "type": "string",
+                    "enum": ["family", "jason", "erin"],
+                    "description": "Calendar to check. Default: family.",
+                    "default": "family",
+                },
+            },
         },
     },
     # --- Grocery tools (US3 + US6) ---
@@ -1349,6 +1418,16 @@ TOOL_FUNCTIONS = {
         kw.get("end_time", ""),
         kw.get("description", ""),
         int(kw.get("reminder_minutes", 15)),
+        kw.get("recurrence"),
+        kw.get("calendar_name", "family"),
+    ),
+    "delete_calendar_event": lambda **kw: calendar.delete_calendar_event(
+        kw["event_id"],
+        kw.get("calendar_name", "family"),
+        kw.get("cancel_mode", "single"),
+    ),
+    "list_recurring_events": lambda **kw: calendar.list_recurring_events(
+        kw.get("calendar_name", "family"),
     ),
     # Grocery
     "get_grocery_history": lambda **kw: notion.get_grocery_history(kw.get("category", "")),

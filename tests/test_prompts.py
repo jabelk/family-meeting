@@ -13,11 +13,11 @@ def test_load_system_prompt_returns_nonempty():
     assert "Mom Bot" in prompt or "family" in prompt.lower()
 
 
-def test_load_tool_descriptions_returns_71():
-    """All 71 tool descriptions load from external Markdown files."""
+def test_load_tool_descriptions_returns_73():
+    """All 73 tool descriptions load from external Markdown files."""
     descs = load_tool_descriptions()
     assert isinstance(descs, dict)
-    assert len(descs) == 71, f"Expected 71 tool descriptions, got {len(descs)}"
+    assert len(descs) == 73, f"Expected 73 tool descriptions, got {len(descs)}"
 
 
 def test_load_tool_descriptions_has_key_tools():

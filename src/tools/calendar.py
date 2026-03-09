@@ -331,11 +331,13 @@ def create_quick_event(
     end_time: str = "",
     description: str = "",
     reminder_minutes: int = 15,
+    recurrence: list[str] | None = None,
+    calendar_name: str = "family",
 ) -> str:
-    """Create a quick reminder/event on the shared family calendar.
+    """Create a quick reminder/event on a Google Calendar.
 
-    Always writes to the family calendar so both Jason and Erin can see it.
-    Includes a popup reminder notification.
+    Defaults to the family calendar so both Jason and Erin can see it.
+    Supports recurring events via RRULE strings.
 
     Args:
         summary: Event title (e.g., "Erin → Jason: pick up dog")
@@ -343,10 +345,13 @@ def create_quick_event(
         end_time: ISO datetime string (defaults to start_time + 30 min)
         description: Event body text (original message context)
         reminder_minutes: Minutes before event to send reminder (default 15)
+        recurrence: List of RRULE strings for recurring events (e.g.,
+            ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"]). None for one-time events.
+        calendar_name: Target calendar — "family" (default), "jason", or "erin".
     """
-    cal_id = CALENDAR_IDS.get("family")
+    cal_id = CALENDAR_IDS.get(calendar_name)
     if not cal_id:
-        return "Family calendar not configured."
+        return f"Calendar '{calendar_name}' not configured."
 
     if not end_time:
         # Default to 30-minute event
@@ -375,9 +380,12 @@ def create_quick_event(
     }
     if description:
         event_body["description"] = description
+    if recurrence:
+        event_body["recurrence"] = recurrence
 
     event = service.events().insert(calendarId=cal_id, body=event_body).execute()
-    return f"Created reminder on family calendar: {summary} ({event.get('id', '')})"
+    kind = "recurring event" if recurrence else "reminder"
+    return f"Created {kind} on {calendar_name} calendar: {summary} ({event.get('id', '')})"
 
 
 def batch_create_events(events_data: list[dict], calendar_name: str = "erin") -> int:
@@ -471,3 +479,96 @@ def delete_assistant_events(
             logger.warning("Failed to delete event %s: %s", event["id"], e)
     logger.info("Deleted %d assistant events from '%s' (%s to %s)", deleted, calendar_name, start_date, end_date)
     return deleted
+
+
+def delete_calendar_event(
+    event_id: str,
+    calendar_name: str = "family",
+    cancel_mode: str = "single",
+) -> str:
+    """Delete a single occurrence or all future occurrences of a calendar event.
+
+    Args:
+        event_id: Google Calendar event ID.
+        calendar_name: Target calendar — "family" (default), "jason", or "erin".
+        cancel_mode: "single" to delete just this instance, "all_following" to
+            delete the entire recurring event (all future occurrences).
+    """
+    cal_id = CALENDAR_IDS.get(calendar_name)
+    if not cal_id:
+        return f"Calendar '{calendar_name}' not configured."
+
+    service = _get_service()
+
+    try:
+        event = service.events().get(calendarId=cal_id, eventId=event_id).execute()
+    except Exception as e:
+        return f"Could not find event {event_id}: {e}"
+
+    summary = event.get("summary", "Untitled")
+
+    if cancel_mode == "all_following":
+        # Delete the entire event (and all its occurrences)
+        try:
+            service.events().delete(calendarId=cal_id, eventId=event_id).execute()
+            return f"Deleted all occurrences of '{summary}' from {calendar_name} calendar."
+        except Exception as e:
+            return f"Failed to delete event: {e}"
+    else:
+        # Cancel just this single occurrence — set status to cancelled
+        try:
+            service.events().delete(calendarId=cal_id, eventId=event_id).execute()
+            return f"Cancelled this occurrence of '{summary}' from {calendar_name} calendar."
+        except Exception as e:
+            return f"Failed to cancel occurrence: {e}"
+
+
+def list_recurring_events(calendar_name: str = "family") -> str:
+    """List all active recurring event series on a calendar.
+
+    Args:
+        calendar_name: Target calendar — "family" (default), "jason", or "erin".
+    """
+    cal_id = CALENDAR_IDS.get(calendar_name)
+    if not cal_id:
+        return f"Calendar '{calendar_name}' not configured."
+
+    service = _get_service()
+    now = datetime.now(ZoneInfo("America/Los_Angeles")).isoformat()
+
+    try:
+        result = (
+            service.events()
+            .list(
+                calendarId=cal_id,
+                timeMin=now,
+                singleEvents=False,
+                maxResults=250,
+            )
+            .execute()
+        )
+    except Exception as e:
+        return f"Failed to list events: {e}"
+
+    recurring = []
+    for event in result.get("items", []):
+        if "recurrence" in event:
+            recurring.append(
+                {
+                    "id": event["id"],
+                    "summary": event.get("summary", "Untitled"),
+                    "recurrence": event["recurrence"],
+                    "start": event.get("start", {}),
+                }
+            )
+
+    if not recurring:
+        return f"No recurring events found on {calendar_name} calendar."
+
+    lines = [f"Recurring events on {calendar_name} calendar ({len(recurring)} series):"]
+    for ev in recurring:
+        rrule = ev["recurrence"][0] if ev["recurrence"] else "unknown pattern"
+        start = ev["start"].get("dateTime", ev["start"].get("date", "unknown"))
+        lines.append(f"- {ev['summary']} | {rrule} | starts {start} | id: {ev['id']}")
+
+    return "\n".join(lines)
