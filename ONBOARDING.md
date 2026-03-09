@@ -4,7 +4,50 @@ Welcome! This guide walks you through setting up your own MomBot instance — a 
 
 **You'll need**: A computer with Claude Code installed. Claude Code will guide you through each step interactively.
 
-**Time**: About 1-2 hours for the full setup.
+---
+
+## Quick Start (~30 minutes)
+
+Want to get up and running fast? You only need **WhatsApp + Claude AI** for a working assistant. All other integrations (calendar, budget, meal planning, grocery lists) are optional add-ons you can enable later.
+
+### What you get with minimal setup
+
+- AI-powered family chat assistant in WhatsApp
+- Natural language conversations with Claude
+- Preference tracking and daily context
+- Drive time lookups and routine management
+
+### Minimal setup steps
+
+1. **Clone the repo** and configure `config/family.yaml` with your family info
+2. **Set up Railway** (Step 2 below) with only the required env vars
+3. **Set up WhatsApp Business** (Step 3 below)
+4. **Deploy** (Step 4 below)
+
+### Validate your setup
+
+Before deploying, run the validation script to catch configuration errors:
+
+```bash
+python scripts/validate_setup.py --env-file .env --config-file config/family.yaml
+```
+
+This checks:
+- Family config completeness (names, timezone, partners)
+- Required environment variables (API key format, WhatsApp credentials)
+- Integration completeness (flags partially-configured integrations)
+
+A minimal deployment needs only `ANTHROPIC_API_KEY` and `WHATSAPP_*` variables. The bot automatically adapts — tools and prompt sections for unconfigured integrations are excluded, so the bot never references features that aren't set up.
+
+### Adding integrations later
+
+Once your minimal bot is working, add integrations one at a time (Steps 5-8). Re-run the validation script after each to confirm. The bot picks up new integrations on restart — no code changes needed.
+
+---
+
+## Full Setup (~1-2 hours)
+
+Follow all steps below for the complete experience with calendar, Notion, budget, and grocery list integrations.
 
 ---
 

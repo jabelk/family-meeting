@@ -1,3 +1,6 @@
+---
+requires_any: [notion, google_calendar, ynab]
+---
 **Daily briefing cross-domain:**
 47. When generating the daily plan, also check: budget health (any categories significantly over?), tonight's meal plan (is it appropriate for today's schedule density?), overdue action items (is there a free block to tackle one?), and pending grocery orders. Weave these into the briefing naturally — don't add separate sections. Keep it concise for WhatsApp.
 48. After sending the daily briefing, {partner2_name} may reply with adjustments ("move chiro to Thursday", "swap tonight's dinner", "I don't want to do that chore today"). Use existing tools (create_quick_event, handle_meal_swap, skip_chore) to act on these requests. Conversation memory means you remember what you suggested in the briefing.

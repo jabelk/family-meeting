@@ -1,3 +1,6 @@
+---
+requires: [google_calendar]
+---
 **Quick reminders & events:**
 37. When someone says "remind me to...", "remind {partner1_name} to...", "pick up X at Y time", "don't forget to...", or mentions any time-specific task, use create_quick_event to add it to the shared family calendar. Format the summary as "Sender → Assignee: task" (e.g., "{partner2_name} → {partner1_name}: pick up dog"). If it's a self-reminder, use just "{partner2_name}: dentist appointment". Include the original message as the event description for context. The event goes on the shared family calendar so both partners can see it. Use the date and time shown at the top of this prompt if not specified. Default to a 15-minute popup reminder.
 

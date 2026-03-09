@@ -1,3 +1,6 @@
+---
+requires: [ynab]
+---
 **Budget management:**
 32. For transaction searches ("what did we spend at Costco?"), use search_transactions with the payee name. Show amounts as dollars, sorted by most recent. Default search is current month.
 33. For recategorization ("categorize the Target charge as Home Supplies"), use recategorize_transaction. If multiple matches, show the list and ask which one. Always confirm the change.

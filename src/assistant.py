@@ -8,7 +8,16 @@ import httpx
 from anthropic import Anthropic
 
 from src import context, conversation, drive_times, preferences, routines
-from src.config import ALL_CALENDAR_NAMES, ANTHROPIC_API_KEY, DEFAULT_CALENDAR, FAMILY_CONFIG, PHONE_TO_NAME, TIMEZONE
+from src.config import (
+    ALL_CALENDAR_NAMES,
+    ANTHROPIC_API_KEY,
+    DEFAULT_CALENDAR,
+    ENABLED_INTEGRATIONS,
+    FAMILY_CONFIG,
+    PHONE_TO_NAME,
+    TIMEZONE,
+)
+from src.integrations import get_tools_for_integrations
 from src.prompts import render_system_prompt, render_tool_descriptions
 from src.tools import (
     amazon_sync,
@@ -46,9 +55,13 @@ _welcomed_phones: set[str] = set()
 # Tool definitions for Claude
 # ---------------------------------------------------------------------------
 
-_tool_descs = render_tool_descriptions(FAMILY_CONFIG) if FAMILY_CONFIG else {}
+# Compute enabled tools from integration registry
+_enabled_tool_names: set[str] = set(get_tools_for_integrations(ENABLED_INTEGRATIONS))
+_enabled_tools_frozen = frozenset(_enabled_tool_names)
 
-TOOLS = [
+_tool_descs = render_tool_descriptions(FAMILY_CONFIG, enabled_tools=_enabled_tools_frozen) if FAMILY_CONFIG else {}
+
+_ALL_TOOLS = [
     {
         "name": "get_calendar_events",
         "description": _tool_descs.get("get_calendar_events", "get_calendar_events"),
@@ -1264,6 +1277,12 @@ TOOLS = [
     },
 ]
 
+# Filter tools to only include those for enabled integrations
+TOOLS = [t for t in _ALL_TOOLS if t["name"] in _enabled_tool_names]
+logger.info(
+    "Tools: %d/%d enabled (integrations: %s)", len(TOOLS), len(_ALL_TOOLS), ", ".join(sorted(ENABLED_INTEGRATIONS))
+)
+
 # Color mapping for calendar blocks
 _COLOR_MAP = {
     "chores": calendar.COLOR_CHORES,
@@ -1586,6 +1605,9 @@ TOOL_FUNCTIONS = {
     "split_receipt_transaction": lambda **kw: receipt.split_receipt_transaction(kw.get("_phone", "")),
 }
 
+# Filter TOOL_FUNCTIONS to match enabled TOOLS
+TOOL_FUNCTIONS = {k: v for k, v in TOOL_FUNCTIONS.items() if k in _enabled_tool_names}
+
 
 def _handle_save_preference(**kw) -> str:
     """Handle save_preference tool — stores a lasting user preference."""
@@ -1723,7 +1745,13 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     # so the model reliably attends to it (GitHub issue #2)
     # P2 fix (Feature 016): also injected into user message above as time_prefix
     date_line = now.strftime("**Right now:** %A, %B %-d, %Y at %-I:%M %p Pacific.")
-    system = date_line + "\n\n" + render_system_prompt(FAMILY_CONFIG) + "\n\n" + date_line
+    system = (
+        date_line
+        + "\n\n"
+        + render_system_prompt(FAMILY_CONFIG, enabled_integrations=frozenset(ENABLED_INTEGRATIONS))
+        + "\n\n"
+        + date_line
+    )
 
     # Inject user preferences into system prompt so Claude naturally honors them
     user_prefs = preferences.get_preferences(sender_phone)
