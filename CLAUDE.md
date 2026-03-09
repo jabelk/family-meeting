@@ -84,12 +84,14 @@ All bash scripts use strict mode (`set -e -u -o pipefail`) and support both git 
 - N/A — transcribed text flows through existing conversation pipeline (019-whatsapp-voice-messages)
 - Python 3.12 (existing codebase) + Node.js 20 (AnyList sidecar) + FastAPI, anthropic SDK, APScheduler (new), existing deps unchanged (020-railway-cloud-deploy)
 - Railway Volume mounted at `/app/data` (same JSON files, zero migration) (020-railway-cloud-deploy)
+- GitHub Actions YAML + Python 3.12 (existing app) + GitHub Actions (runners), Ruff (linting), pytest (testing), Trivy (security scanning), Railway CLI (deployment), Docker (container builds) (021-ci-cd-pipeline)
+- N/A — pipeline configuration only, no new data storage (021-ci-cd-pipeline)
 
 ## Deployment
 
 ### Railway (Cloud)
 
-Railway deployment uses the same Dockerfile. Railway auto-deploys on push to main.
+Railway deployment uses the same Dockerfile. CI/CD pipeline auto-deploys on push to main after checks pass.
 
 - **Config**: `railway.toml` (build config, healthcheck)
 - **Storage**: Railway Volume mounted at `/app/data` (persistent JSON files)
@@ -125,6 +127,36 @@ The production stack runs on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.15
 **Updating code**: Edit locally, commit, push to main, then `./scripts/nuc.sh deploy`.
 **Updating .env**: Edit locally, then `./scripts/nuc.sh env` (copies .env and restarts fastapi).
 
+## CI/CD Pipeline
+
+GitHub Actions pipeline at `.github/workflows/ci.yml`. Branch protection requires `gate` check to pass.
+
+**PR checks** (on every pull request):
+| Job | Tool | Purpose |
+|-----|------|---------|
+| `changes` | dorny/paths-filter | Skip CI for docs-only changes |
+| `lint-format` | Ruff | `ruff check src/` + `ruff format --check src/` |
+| `test` | pytest | `pytest tests/` (smoke tests) |
+| `security-scan` | Trivy | Filesystem scan for CRITICAL/HIGH CVEs |
+| `gate` | — | Aggregates all job statuses (branch protection target) |
+
+**Deploy jobs** (on push to main, after gate passes):
+| Job | Purpose |
+|-----|---------|
+| `deploy-railway` | `railway up --detach --service fastapi` + health check |
+| `docker-build` | Build + push to `ghcr.io/jabelk/family-meeting:{sha}` |
+
+**Config files**: `pyproject.toml` (Ruff line-length=120, select E/F/I, pytest testpaths), `.github/workflows/cleanup-ghcr.yml` (weekly image cleanup)
+
+**Secrets**: `RAILWAY_TOKEN` (Railway project token), `PAT_PACKAGES` (GitHub PAT with packages:delete for GHCR cleanup)
+
+**Running locally**:
+```bash
+ruff check src/           # Lint
+ruff format --check src/  # Format check
+pytest tests/             # Tests
+```
+
 ## API Safety Thresholds
 
 All destructive operations have hard caps to prevent accidental mass changes. Thresholds are module-level constants — adjust if legitimate use cases exceed them.
@@ -140,6 +172,6 @@ All destructive operations have hard caps to prevent accidental mass changes. Th
 | AnyList clear | `src/tools/anylist_bridge.py` | `MAX_ANYLIST_CLEAR` | 150 | Logs warning |
 
 ## Recent Changes
+- 021-ci-cd-pipeline: Added GitHub Actions YAML + Python 3.12 (existing app) + GitHub Actions (runners), Ruff (linting), pytest (testing), Trivy (security scanning), Railway CLI (deployment), Docker (container builds)
 - 020-railway-cloud-deploy: Railway cloud deployment with in-app APScheduler (replaces n8n), Google OAuth env var loading, optional integrations (Notion/Calendar/YNAB), ONBOARDING.md for self-service setup, railway.toml + schedules.json config
 - 019-whatsapp-voice-messages: Added openai SDK (GPT-4o Mini Transcribe for voice notes), ffmpeg (OGG→MP3 conversion in Docker). Voice notes transcribed and fed to existing Claude tool loop.
-- 018-conversation-log-backup: Added Bash (shell script on NUC) — no Python changes needed + cron (already on NUC Ubuntu 24.04), scp/ssh (already configured)

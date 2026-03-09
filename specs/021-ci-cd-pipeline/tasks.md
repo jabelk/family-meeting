@@ -53,8 +53,8 @@
 - [x] T010 [US1] Write ci.yml test job — setup Python 3.12, pip cache, install requirements.txt + pytest, run `pytest tests/`; condition on app changes at /.github/workflows/ci.yml
 - [x] T011 [US1] Write ci.yml gate job — aggregate all job statuses using `if: always()` and check that no required job failed; this is the single status check for branch protection at /.github/workflows/ci.yml
 - [x] T012 [US1] Add concurrency control to ci.yml — `concurrency: group: ci-${{ github.ref }}, cancel-in-progress: true` at /.github/workflows/ci.yml
-- [ ] T013 [US1] Add RAILWAY_TOKEN secret to GitHub repo via `gh secret set RAILWAY_TOKEN` using the Railway token from Railway dashboard
-- [ ] T014 [US1] Push branch, open PR, verify all CI jobs run and gate reports status on the PR
+- [x] T013 [US1] Add RAILWAY_TOKEN secret to GitHub repo via `gh secret set RAILWAY_TOKEN` using the Railway token from Railway dashboard
+- [x] T014 [US1] Push branch, open PR, verify all CI jobs run and gate reports status on the PR
 
 **Checkpoint**: PRs show CI check results; lint, test, gate jobs all pass
 
@@ -70,8 +70,8 @@
 
 - [x] T015 [US2] Write ci.yml deploy-railway job — install Railway CLI via `npm i -g @railway/cli`, run `railway up --detach` with RAILWAY_TOKEN secret; condition on main push + gate passing; add concurrency group `deploy-railway` with cancel-in-progress false (serial deploys) at /.github/workflows/ci.yml
 - [x] T016 [US2] Add post-deploy health check step to deploy-railway job — `curl -sf https://mombot.sierracodeco.com/health` with retry logic (sleep 30, retry 3 times) at /.github/workflows/ci.yml
-- [ ] T017 [US2] Disable Railway's GitHub auto-deploy integration (if enabled) so deploys are gated on CI — check Railway dashboard settings
-- [ ] T018 [US2] Merge to main and verify: CI runs → deploy-railway job triggers → health check passes → new code is live
+- [x] T017 [US2] Disable Railway's GitHub auto-deploy integration (if enabled) so deploys are gated on CI — check Railway dashboard settings
+- [x] T018 [US2] Merge to main and verify: CI runs → deploy-railway job triggers → health check passes → new code is live
 
 **Checkpoint**: Every merge to main auto-deploys to Railway; health check verified in pipeline
 
@@ -87,7 +87,7 @@
 
 - [x] T019 [US3] Write ci.yml security-scan job — use aquasecurity/trivy-action@master with scan-type=fs, severity=CRITICAL,HIGH, exit-code=1; condition on app changes at /.github/workflows/ci.yml
 - [x] T020 [US3] Add security-scan to gate job's dependency list so vulnerabilities block merge at /.github/workflows/ci.yml
-- [ ] T021 [US3] Push and verify Trivy scan runs on PR and reports findings (if any)
+- [x] T021 [US3] Push and verify Trivy scan runs on PR and reports findings (if any)
 
 **Checkpoint**: PRs with vulnerable dependencies are flagged; clean PRs pass
 
@@ -104,8 +104,8 @@
 - [x] T022 [US4] Write ci.yml docker-build job — use docker/setup-buildx-action, docker/login-action (ghcr.io), docker/build-push-action with tags sha+latest, cache-from/to type=gha; condition on main push + app changes at /.github/workflows/ci.yml
 - [x] T023 [US4] Add packages write permission to ci.yml top-level permissions at /.github/workflows/ci.yml
 - [x] T024 [US4] Create cleanup-ghcr.yml workflow — schedule weekly (Sunday 3 AM UTC), use snok/container-retention-policy@v3.0.0 keeping 20 recent images, deleting >30 days; requires PAT_PACKAGES secret at /.github/workflows/cleanup-ghcr.yml
-- [ ] T025 [US4] Create PAT_PACKAGES GitHub secret — generate a GitHub PAT with packages:delete scope via `gh auth token` or GitHub UI, set via `gh secret set PAT_PACKAGES`
-- [ ] T026 [US4] Push to main and verify image appears in GHCR (check via `gh api user/packages/container/family-meeting/versions`)
+- [x] T025 [US4] Create PAT_PACKAGES GitHub secret — generate a GitHub PAT with packages:delete scope via `gh auth token` or GitHub UI, set via `gh secret set PAT_PACKAGES`
+- [x] T026 [US4] Push to main and verify image appears in GHCR (check via `gh api user/packages/container/family-meeting/versions`)
 
 **Checkpoint**: Every main push creates a tagged Docker image in GHCR; cleanup runs weekly
 
@@ -119,8 +119,8 @@
 
 ### Implementation for User Story 5
 
-- [ ] T027 [US5] Verify scripts/nuc.sh deploy still works after all CI/CD changes — run manually and confirm no conflicts
-- [ ] T028 [US5] (Optional) Add workflow_dispatch trigger to ci.yml with input for deploy target (railway/nuc); add nuc deploy job that SSHs to warp-nuc and runs the deploy script — only if NUC automation is desired at /.github/workflows/ci.yml
+- [ ] T027 [US5] Verify scripts/nuc.sh deploy still works after all CI/CD changes — run manually and confirm no conflicts (SKIPPED — NUC deferred)
+- [ ] T028 [US5] (Optional) Add workflow_dispatch trigger to ci.yml with input for deploy target (railway/nuc); add nuc deploy job that SSHs to warp-nuc and runs the deploy script — only if NUC automation is desired at /.github/workflows/ci.yml (SKIPPED — NUC deferred)
 
 **Checkpoint**: NUC deployment unchanged; optional manual workflow available
 
@@ -130,9 +130,9 @@
 
 **Purpose**: Final verification, branch protection, and documentation
 
-- [ ] T029 Configure branch protection on main via GitHub — require `gate` status check to pass before merge; no force pushes; enforce for admins
-- [ ] T030 [P] Update CLAUDE.md — add CI/CD section documenting pipeline jobs, required secrets, Ruff/pytest config at /CLAUDE.md
-- [ ] T031 Run quickstart.md scenarios 1-7 as validation checklist
+- [x] T029 Configure branch protection on main via GitHub — require `gate` status check to pass before merge; no force pushes; enforce for admins
+- [x] T030 [P] Update CLAUDE.md — add CI/CD section documenting pipeline jobs, required secrets, Ruff/pytest config at /CLAUDE.md
+- [x] T031 Run quickstart.md scenarios 1-7 as validation checklist
 
 ---
 
