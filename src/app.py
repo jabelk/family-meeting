@@ -16,7 +16,7 @@ from src.assistant import generate_daily_plan, generate_meeting_prep, handle_mes
 from src.config import (
     ANTHROPIC_API_KEY,
     ANYLIST_SIDECAR_URL,
-    ERIN_PHONE,
+    DEFAULT_CALENDAR,
     FAMILY_CONFIG,
     GOOGLE_CREDENTIALS_JSON,
     GOOGLE_TOKEN_JSON,
@@ -24,6 +24,7 @@ from src.config import (
     NOTION_TOKEN,
     OUTLOOK_CALENDAR_ICS_URL,
     PHONE_TO_NAME,
+    PRIMARY_PHONE,
     SCHEDULER_ENABLED,
     WHATSAPP_ACCESS_TOKEN,
     WHATSAPP_APP_SECRET,
@@ -122,7 +123,7 @@ async def verify_n8n_auth(x_n8n_auth: str = Header(None)):
 
 
 class DailyBriefingRequest(BaseModel):
-    target: str = "erin"
+    target: str = DEFAULT_CALENDAR
 
 
 class PopulateWeekRequest(BaseModel):
@@ -461,7 +462,7 @@ async def daily_briefing(req: DailyBriefingRequest, background_tasks: Background
     async def _run():
         try:
             reply = generate_daily_plan(target)
-            await send_message(ERIN_PHONE, reply)
+            await send_message(PRIMARY_PHONE, reply)
             logger.info("Daily briefing sent to %s (%d chars)", target, len(reply))
         except Exception:
             logger.exception("Daily briefing failed for %s", target)
@@ -482,7 +483,7 @@ async def meeting_prep_agenda(background_tasks: BackgroundTasks):
     async def _run():
         try:
             agenda = generate_meeting_prep()
-            await send_message(ERIN_PHONE, agenda)
+            await send_message(PRIMARY_PHONE, agenda)
             logger.info("Meeting prep sent (%d chars)", len(agenda))
         except Exception:
             logger.exception("Meeting prep failed")
@@ -507,7 +508,7 @@ async def amazon_sync_endpoint(background_tasks: BackgroundTasks):
 
             message = amazon_sync.run_nightly_sync()
             if message:
-                await send_message(ERIN_PHONE, message)
+                await send_message(PRIMARY_PHONE, message)
                 logger.info("Amazon sync sent (%d chars)", len(message))
             else:
                 logger.info("Amazon sync complete — nothing to report")
@@ -586,15 +587,15 @@ async def populate_week(req: PopulateWeekRequest):
     # Delete old assistant-created events for the week
     start_iso = week_start.replace(tzinfo=timezone.utc).isoformat()
     end_iso = week_end.replace(tzinfo=timezone.utc).isoformat()
-    deleted = delete_assistant_events(start_iso, end_iso, calendar_name="erin")
+    deleted = delete_assistant_events(start_iso, end_iso, calendar_name=DEFAULT_CALENDAR)
     logger.info("Deleted %d old assistant events", deleted)
 
     # Use Claude to generate the week's plan from routine templates
     prompt = (
         f"Generate calendar blocks for the week of {req.week_start} (Monday through Friday). "
         "Read the routine templates and existing calendar events for each day. "
-        "For each day, adapt the appropriate template (check who has Zoey) and "
-        "write the time blocks to Erin's Google Calendar. "
+        f"For each day, adapt the appropriate template (check who has {FAMILY_CONFIG.get('child2_name', 'Child')}) and "
+        f"write the time blocks to {FAMILY_CONFIG.get('partner2_name', 'Partner2')}'s Google Calendar. "
         "Don't send a WhatsApp message — just create the calendar events."
     )
     reply = handle_message("system", prompt)
@@ -656,14 +657,15 @@ async def grandma_schedule_prompt(background_tasks: BackgroundTasks):
     regular webhook flow and Claude processes it naturally.
     """
     logger.info("Grandma schedule prompt triggered")
+    child2 = FAMILY_CONFIG.get("child2_name", "Child")
     message = (
-        "Hi! Quick question for the week — what days is grandma taking Zoey? "
+        f"Hi! Quick question for the week — what days is grandma taking {child2}? "
         "Just let me know and I'll update the daily plans. 🗓️"
     )
 
     async def _send():
         try:
-            await send_message(ERIN_PHONE, message)
+            await send_message(PRIMARY_PHONE, message)
             logger.info("Grandma schedule prompt sent")
         except Exception:
             logger.exception("Failed to send grandma schedule prompt")
@@ -730,9 +732,10 @@ async def nudge_scan():
     try:
         import json as _json
         from datetime import datetime as _dt
-        from zoneinfo import ZoneInfo as _ZI
 
-        _now = _dt.now(tz=_ZI("America/Los_Angeles"))
+        from src.config import TIMEZONE as _TZ
+
+        _now = _dt.now(tz=_TZ)
         windows = detect_free_windows(_now.date())
 
         # Find the next upcoming free window (starts after now)
@@ -827,8 +830,8 @@ async def budget_scan():
     """
     import json as _json
     from datetime import datetime as _dt
-    from zoneinfo import ZoneInfo as _ZI
 
+    from src.config import TIMEZONE as _TZ
     from src.tools.notion import check_quiet_day, count_sent_today, create_nudge, query_nudges_by_type
     from src.tools.nudges import process_pending_nudges
     from src.tools.ynab import (
@@ -839,7 +842,7 @@ async def budget_scan():
     )
 
     logger.info("Budget scan triggered")
-    _now = _dt.now(tz=_ZI("America/Los_Angeles"))
+    _now = _dt.now(tz=_TZ)
 
     result = {
         "insights_created": 0,
@@ -1061,7 +1064,7 @@ async def reorder_check(background_tasks: BackgroundTasks):
 
     async def _send():
         try:
-            await send_message(ERIN_PHONE, message)
+            await send_message(PRIMARY_PHONE, message)
             logger.info("Reorder suggestions sent (%d items)", result["total"])
         except Exception:
             logger.exception("Failed to send reorder suggestions")
@@ -1086,7 +1089,7 @@ async def grocery_confirmation_reminder(background_tasks: BackgroundTasks):
 
     async def _send():
         try:
-            await send_message(ERIN_PHONE, result["message"])
+            await send_message(PRIMARY_PHONE, result["message"])
             logger.info("Grocery confirmation reminder sent")
         except Exception:
             logger.exception("Failed to send grocery confirmation reminder")
@@ -1141,7 +1144,7 @@ async def plan_week_meals(background_tasks: BackgroundTasks):
             lines.append("Reply to swap a meal or 'approve and send to AnyList'!")
             message = "\n".join(lines)
 
-            await send_message(ERIN_PHONE, message)
+            await send_message(PRIMARY_PHONE, message)
             logger.info("Weekly meal plan sent (%d meals, %d grocery items)", len(plan), grocery["total"])
         except Exception:
             logger.exception("Weekly meal plan failed")
@@ -1181,7 +1184,7 @@ async def conflict_check(background_tasks: BackgroundTasks, days_ahead: int = 7)
                 lines.append("")
 
             message = "\n".join(lines)
-            await send_message(ERIN_PHONE, message)
+            await send_message(PRIMARY_PHONE, message)
             logger.info("Conflict report sent (%d conflicts)", len(conflicts))
         except Exception:
             logger.exception("Conflict check failed")
@@ -1211,7 +1214,7 @@ async def action_item_reminder(background_tasks: BackgroundTasks):
 
             if result.get("status") == "all_complete":
                 msg = "✅ *All caught up!* Every action item for this week is done. Nice work!"
-                await send_message(ERIN_PHONE, msg)
+                await send_message(PRIMARY_PHONE, msg)
                 return
 
             if result.get("status") == "error":
@@ -1230,7 +1233,7 @@ async def action_item_reminder(background_tasks: BackgroundTasks):
                 lines.append("")
 
             message = "\n".join(lines)
-            await send_message(ERIN_PHONE, message)
+            await send_message(PRIMARY_PHONE, message)
             logger.info("Action item reminder sent")
         except Exception:
             logger.exception("Action item reminder failed")
@@ -1263,7 +1266,7 @@ async def weekly_budget_summary(background_tasks: BackgroundTasks):
                 return
 
             await send_message_with_template_fallback(
-                ERIN_PHONE,
+                PRIMARY_PHONE,
                 result["message"],
                 template_name="budget_summary",
             )

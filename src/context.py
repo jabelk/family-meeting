@@ -10,10 +10,9 @@ Used by the ``get_daily_context`` tool in ``src/assistant.py``.
 import logging
 import re
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from src import preferences
-from src.config import FAMILY_CONFIG
+from src.config import ALL_CALENDAR_NAMES, FAMILY_CONFIG, TIMEZONE
 from src.tools import notion
 from src.tools.calendar import get_events_for_date
 
@@ -23,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-PACIFIC = ZoneInfo("America/Los_Angeles")
+PACIFIC = TIMEZONE
 
 # Keywords that indicate someone other than the primary caregiver has the child
 CHILDCARE_KEYWORDS: set[str] = set(FAMILY_CONFIG.get("_childcare_keywords", []))
@@ -141,18 +140,20 @@ def get_daily_context(phone: str) -> str:
 
     # --- Calendar events ---
     calendar_available = True
-    jason_events: list[dict] = []
-    erin_events: list[dict] = []
+    _p1_key = FAMILY_CONFIG.get("partner1_name", "partner1").lower()
+    _p2_key = FAMILY_CONFIG.get("partner2_name", "partner2").lower()
+    partner1_events: list[dict] = []
+    partner2_events: list[dict] = []
     family_events: list[dict] = []
 
     try:
-        all_events = get_events_for_date(now, ["jason", "erin", "family"])
+        all_events = get_events_for_date(now, ALL_CALENDAR_NAMES)
         for event in all_events:
             source = event.get("_calendar_source", "")
-            if source == "jason":
-                jason_events.append(event)
-            elif source == "erin":
-                erin_events.append(event)
+            if source == _p1_key:
+                partner1_events.append(event)
+            elif source == _p2_key:
+                partner2_events.append(event)
             elif source == "family":
                 family_events.append(event)
     except Exception as e:
@@ -180,8 +181,8 @@ def get_daily_context(phone: str) -> str:
     else:
         # Partner 1's events
         lines.append(f"\U0001f464 {FAMILY_CONFIG.get('partner1_name', 'Partner1')}'s events today:")
-        if jason_events:
-            for event in jason_events:
+        if partner1_events:
+            for event in partner1_events:
                 lines.append(f"- {_format_event(event)}")
         else:
             lines.append("- No events")
@@ -189,8 +190,8 @@ def get_daily_context(phone: str) -> str:
 
         # Partner 2's events
         lines.append(f"\U0001f464 {FAMILY_CONFIG.get('partner2_name', 'Partner2')}'s events today:")
-        if erin_events:
-            for event in erin_events:
+        if partner2_events:
+            for event in partner2_events:
                 lines.append(f"- {_format_event(event)}")
         else:
             lines.append("- No events")
@@ -206,7 +207,7 @@ def get_daily_context(phone: str) -> str:
         lines.append("")
 
         # Childcare inference
-        childcare_status = _infer_childcare(jason_events + erin_events + family_events, now)
+        childcare_status = _infer_childcare(partner1_events + partner2_events + family_events, now)
         lines.append(f"\U0001f476 {FAMILY_CONFIG.get('child2_name', 'Child')}: {childcare_status}")
         lines.append("")
 

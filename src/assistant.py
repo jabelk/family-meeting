@@ -3,13 +3,12 @@
 import json
 import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import httpx
 from anthropic import Anthropic
 
 from src import context, conversation, drive_times, preferences, routines
-from src.config import ANTHROPIC_API_KEY, FAMILY_CONFIG, PHONE_TO_NAME
+from src.config import ALL_CALENDAR_NAMES, ANTHROPIC_API_KEY, DEFAULT_CALENDAR, FAMILY_CONFIG, PHONE_TO_NAME, TIMEZONE
 from src.prompts import render_system_prompt, render_tool_descriptions
 from src.tools import (
     amazon_sync,
@@ -498,7 +497,7 @@ TOOLS = [
                 },
                 "calendar_name": {
                     "type": "string",
-                    "enum": ["family", "jason", "erin"],
+                    "enum": ALL_CALENDAR_NAMES,
                     "description": "Target calendar. Default: family.",
                     "default": "family",
                 },
@@ -528,7 +527,7 @@ TOOLS = [
                 },
                 "calendar_name": {
                     "type": "string",
-                    "enum": ["family", "jason", "erin"],
+                    "enum": ALL_CALENDAR_NAMES,
                     "description": "Target calendar. Default: family.",
                     "default": "family",
                 },
@@ -555,7 +554,7 @@ TOOLS = [
             "properties": {
                 "calendar_name": {
                     "type": "string",
-                    "enum": ["family", "jason", "erin"],
+                    "enum": ALL_CALENDAR_NAMES,
                     "description": "Calendar to check. Default: family.",
                     "default": "family",
                 },
@@ -1294,8 +1293,9 @@ def _handle_write_calendar_blocks(**kw) -> str:
             }
         )
 
-    created = calendar.batch_create_events(events_data, calendar_name="erin")
-    return f"Created {created} calendar blocks on Erin's calendar."
+    created = calendar.batch_create_events(events_data, calendar_name=DEFAULT_CALENDAR)
+    p2 = FAMILY_CONFIG.get("partner2_name", "Partner2")
+    return f"Created {created} calendar blocks on {p2}'s calendar."
 
 
 def _handle_push_grocery_list(**kw) -> str:
@@ -1400,8 +1400,8 @@ def _handle_email_sync_trigger() -> str:
 
 
 def send_sync_message_direct(message: str) -> None:
-    """Send a message directly to Erin via WhatsApp API (sync, bypasses Claude)."""
-    from src.config import ERIN_PHONE, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID
+    """Send a message directly to the primary phone via WhatsApp API (sync, bypasses Claude)."""
+    from src.config import PRIMARY_PHONE, WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID
     from src.whatsapp import _split_message
 
     url = f"https://graph.facebook.com/v21.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
@@ -1412,7 +1412,7 @@ def send_sync_message_direct(message: str) -> None:
     for chunk in _split_message(message):
         payload = {
             "messaging_product": "whatsapp",
-            "to": ERIN_PHONE,
+            "to": PRIMARY_PHONE,
             "type": "text",
             "text": {"body": chunk},
         }
@@ -1689,7 +1689,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     # Don't clear on text-only messages — user might send photos then a text command
 
     # Compute current time early — used for both user message prefix and system prompt
-    now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
+    now = datetime.now(tz=TIMEZONE)
     time_prefix = now.strftime("[Current time: %A, %B %-d, %Y at %-I:%M %p Pacific]")
 
     if image_data:
@@ -1835,17 +1835,19 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
         return "\n".join(text_parts) if text_parts else "I'm not sure how to help with that."
 
 
-def generate_daily_plan(target: str = "erin") -> str:
+def generate_daily_plan(target: str = DEFAULT_CALENDAR) -> str:
     """Generate a daily plan programmatically (called by n8n cron endpoint).
 
     Constructs a prompt that triggers the full daily plan flow through Claude.
     """
+    p1 = FAMILY_CONFIG.get("partner1_name", "Partner1")
+    p2 = FAMILY_CONFIG.get("partner2_name", "Partner2")
     prompt = (
         f"Generate today's daily plan for {target.title()}. "
         "Start by calling get_daily_context for today's schedule, childcare "
-        "status, and communication mode. Then check routine templates, look at "
-        "Jason's work calendar for meeting windows, pick a backlog item to "
-        "suggest, and write the time blocks to Erin's Google Calendar. "
+        f"status, and communication mode. Then check routine templates, look at "
+        f"{p1}'s work calendar for meeting windows, pick a backlog item to "
+        f"suggest, and write the time blocks to {p2}'s Google Calendar. "
         "Also check: tonight's meal plan (does complexity match schedule "
         "density?), and any overdue action items or pending grocery orders. "
         "Weave cross-domain insights into the briefing naturally — don't add "

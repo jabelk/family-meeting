@@ -12,12 +12,11 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from src.config import FAMILY_CONFIG
+from src.config import DEFAULT_CALENDAR, FAMILY_CONFIG, PRIMARY_PHONE, TIMEZONE, TIMEZONE_STR
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ def _load_schedules() -> dict:
     if _LOCAL_SCHEDULES_PATH.exists():
         return json.loads(_LOCAL_SCHEDULES_PATH.read_text())
     logger.error("No schedules.json found at %s or %s", _SCHEDULES_PATH, _BUNDLED_SCHEDULES_PATH)
-    return {"timezone": "America/Los_Angeles", "jobs": []}
+    return {"timezone": TIMEZONE_STR, "jobs": []}
 
 
 # ---------------------------------------------------------------------------
@@ -57,11 +56,10 @@ def _load_schedules() -> dict:
 
 async def _run_daily_briefing():
     from src.assistant import generate_daily_plan
-    from src.config import ERIN_PHONE
     from src.whatsapp import send_message
 
-    reply = generate_daily_plan("erin")
-    await send_message(ERIN_PHONE, reply)
+    reply = generate_daily_plan(DEFAULT_CALENDAR)
+    await send_message(PRIMARY_PHONE, reply)
 
 
 async def _run_nudge_scan():
@@ -92,7 +90,7 @@ async def _run_nudge_scan():
 
     # Detect free windows and suggest chores
     try:
-        _now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
+        _now = datetime.now(tz=TIMEZONE)
         windows = detect_free_windows(_now.date())
         for window in windows:
             if window["start"] > _now and window["duration_minutes"] >= 15:
@@ -121,7 +119,7 @@ async def _run_nudge_scan():
 
     # Surface a backlog item
     try:
-        _now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
+        _now = datetime.now(tz=TIMEZONE)
         existing_backlog = query_nudges_by_type("backlog", statuses=["Pending", "Sent"])
         backlog = get_backlog_for_nudge() if not existing_backlog else None
         if backlog:
@@ -170,7 +168,7 @@ async def _run_budget_scan():
         logger.info("Quiet day active — skipping budget scan")
         return
 
-    _now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
+    _now = datetime.now(tz=TIMEZONE)
     budget_nudges_created = 0
     MAX_BUDGET_NUDGES = 2
 
@@ -308,7 +306,7 @@ async def _run_populate_week():
     from src.assistant import handle_message
     from src.tools.calendar import delete_assistant_events
 
-    now = datetime.now(tz=ZoneInfo("America/Los_Angeles"))
+    now = datetime.now(tz=TIMEZONE)
     # Next Monday
     days_until_monday = (7 - now.weekday()) % 7
     if days_until_monday == 0:
@@ -317,7 +315,7 @@ async def _run_populate_week():
     week_start = monday.isoformat()
     start_iso = datetime.combine(monday, datetime.min.time(), tzinfo=timezone.utc).isoformat()
     end_iso = datetime.combine(monday + timedelta(days=5), datetime.min.time(), tzinfo=timezone.utc).isoformat()
-    deleted = delete_assistant_events(start_iso, end_iso, calendar_name="erin")
+    deleted = delete_assistant_events(start_iso, end_iso, calendar_name=DEFAULT_CALENDAR)
     logger.info("Deleted %d old assistant events for week of %s", deleted, week_start)
 
     prompt = (
@@ -331,7 +329,6 @@ async def _run_populate_week():
 
 
 async def _run_meal_plan():
-    from src.config import ERIN_PHONE
     from src.tools.proactive import generate_meal_plan, merge_grocery_list
     from src.whatsapp import send_message
 
@@ -361,17 +358,16 @@ async def _run_meal_plan():
         lines.append("")
     lines.append("Reply to swap a meal or 'approve and send to AnyList'!")
 
-    await send_message(ERIN_PHONE, "\n".join(lines))
+    await send_message(PRIMARY_PHONE, "\n".join(lines))
 
 
 async def _run_amazon_sync():
-    from src.config import ERIN_PHONE
     from src.tools import amazon_sync
     from src.whatsapp import send_message
 
     message = amazon_sync.run_nightly_sync()
     if message:
-        await send_message(ERIN_PHONE, message)
+        await send_message(PRIMARY_PHONE, message)
 
 
 async def _run_email_sync():
@@ -387,7 +383,6 @@ async def _run_budget_health():
 
 
 async def _run_grandma_prompt():
-    from src.config import ERIN_PHONE
     from src.whatsapp import send_message
 
     child2 = FAMILY_CONFIG.get("child2_name", "Child")
@@ -395,11 +390,10 @@ async def _run_grandma_prompt():
         f"Hi! Quick question for the week \u2014 what days is grandma taking {child2}? "
         "Just let me know and I'll update the daily plans. \U0001f5d3\ufe0f"
     )
-    await send_message(ERIN_PHONE, message)
+    await send_message(PRIMARY_PHONE, message)
 
 
 async def _run_conflict_check():
-    from src.config import ERIN_PHONE
     from src.tools.proactive import detect_conflicts
     from src.whatsapp import send_message
 
@@ -415,17 +409,16 @@ async def _run_conflict_check():
         lines.append(f"  \u2194 Conflicts with: {c.get('conflict_with', '')}")
         lines.append(f"  \U0001f4a1 {c.get('suggestion', '')}")
         lines.append("")
-    await send_message(ERIN_PHONE, "\n".join(lines))
+    await send_message(PRIMARY_PHONE, "\n".join(lines))
 
 
 async def _run_action_item_reminder():
-    from src.config import ERIN_PHONE
     from src.tools.proactive import check_action_item_progress
     from src.whatsapp import send_message
 
     result = check_action_item_progress()
     if result.get("status") == "all_complete":
-        await send_message(ERIN_PHONE, "\u2705 *All caught up!* Every action item for this week is done. Nice work!")
+        await send_message(PRIMARY_PHONE, "\u2705 *All caught up!* Every action item for this week is done. Nice work!")
         return
     if result.get("status") == "error":
         logger.error("Action item check failed: %s", result.get("message"))
@@ -440,11 +433,10 @@ async def _run_action_item_reminder():
             status_icon = "\U0001f504" if item["status"] == "In Progress" else "\u2b1c"
             lines.append(f"  {status_icon} {item['title']}{rolled}")
         lines.append("")
-    await send_message(ERIN_PHONE, "\n".join(lines))
+    await send_message(PRIMARY_PHONE, "\n".join(lines))
 
 
 async def _run_grocery_reorder():
-    from src.config import ERIN_PHONE
     from src.tools.proactive import check_reorder_items
     from src.whatsapp import send_message
 
@@ -459,21 +451,19 @@ async def _run_grocery_reorder():
             lines.append(f"  \u2022 {item['name']} ({item['days_overdue']}d overdue)")
         lines.append("")
     lines.append("Reply with which items to add to AnyList, or 'add all'!")
-    await send_message(ERIN_PHONE, "\n".join(lines))
+    await send_message(PRIMARY_PHONE, "\n".join(lines))
 
 
 async def _run_grocery_confirmation():
-    from src.config import ERIN_PHONE
     from src.tools.proactive import check_grocery_confirmation
     from src.whatsapp import send_message
 
     result = check_grocery_confirmation()
     if result["status"] == "needs_reminder":
-        await send_message(ERIN_PHONE, result["message"])
+        await send_message(PRIMARY_PHONE, result["message"])
 
 
 async def _run_budget_summary():
-    from src.config import ERIN_PHONE
     from src.tools.proactive import format_budget_summary
     from src.whatsapp import send_message_with_template_fallback
 
@@ -482,7 +472,7 @@ async def _run_budget_summary():
         logger.error("Budget summary failed: %s", result.get("message"))
         return
     await send_message_with_template_fallback(
-        ERIN_PHONE,
+        PRIMARY_PHONE,
         result["message"],
         template_name="budget_summary",
     )
@@ -532,7 +522,9 @@ ENDPOINT_HANDLERS: dict[str, callable] = {
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the APScheduler instance from schedules.json."""
     config = _load_schedules()
-    tz = ZoneInfo(config.get("timezone", "America/Los_Angeles"))
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(config.get("timezone", TIMEZONE_STR))
     scheduler = AsyncIOScheduler(timezone=tz)
 
     enabled_count = 0

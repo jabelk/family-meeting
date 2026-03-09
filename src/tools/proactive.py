@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import date, timedelta
 
-from src.config import ANTHROPIC_API_KEY, FAMILY_CONFIG
+from src.config import ALL_CALENDAR_NAMES, ANTHROPIC_API_KEY, FAMILY_CONFIG
 from src.prompts import render_template
 from src.tools import calendar, notion, outlook, ynab
 
@@ -341,7 +341,7 @@ def detect_conflicts(days_ahead: int = 1) -> list[dict]:
     conflicts = []
 
     # Get events from all calendars
-    cal_events_raw = calendar.get_calendar_events(days_ahead, ["jason", "erin", "family"])
+    cal_events_raw = calendar.get_calendar_events(days_ahead, ALL_CALENDAR_NAMES)
     outlook_events_raw = ""
     for d in range(days_ahead):
         check_date = today + timedelta(days=d)

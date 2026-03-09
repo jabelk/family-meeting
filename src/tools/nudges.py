@@ -3,10 +3,9 @@
 import json
 import logging
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from src import preferences
-from src.config import ERIN_PHONE
+from src.config import DEFAULT_CALENDAR, PRIMARY_PHONE, TIMEZONE
 
 try:
     from src.context import get_communication_mode
@@ -25,7 +24,7 @@ from src.whatsapp import send_message_with_template_fallback
 
 logger = logging.getLogger(__name__)
 
-PACIFIC = ZoneInfo("America/Los_Angeles")
+PACIFIC = TIMEZONE
 DAILY_CAP = 8
 BATCH_WINDOW_MINUTES = 5
 QUIET_HOURS_START = 7  # 7:00 AM Pacific
@@ -108,7 +107,7 @@ def scan_upcoming_departures(hours_ahead: int = 2) -> int:
     cutoff = now + timedelta(hours=hours_ahead)
     today = now.date()
 
-    events = get_events_for_date_raw(today, calendar_names=["erin", "family"])
+    events = get_events_for_date_raw(today, calendar_names=[DEFAULT_CALENDAR, "family"])
     created = 0
 
     for event in events:
@@ -237,7 +236,7 @@ async def process_pending_nudges() -> dict:
     is_late_night = False
     if get_communication_mode is not None:
         try:
-            mode, _ = get_communication_mode(ERIN_PHONE)
+            mode, _ = get_communication_mode(PRIMARY_PHONE)
             is_late_night = mode == "late_night"
         except Exception:
             # Fallback to static quiet hours on any error
@@ -260,7 +259,7 @@ async def process_pending_nudges() -> dict:
 
     # Feature 013: Filter nudges based on user preferences
     # Check Erin's preferences for notification opt-outs and quiet hours
-    user_prefs = preferences.get_preferences(ERIN_PHONE)
+    user_prefs = preferences.get_preferences(PRIMARY_PHONE)
     if user_prefs and pending:
         filtered = []
         for nudge in pending:
@@ -333,7 +332,7 @@ async def process_pending_nudges() -> dict:
 
         # Send via WhatsApp
         try:
-            await send_message_with_template_fallback(ERIN_PHONE, message)
+            await send_message_with_template_fallback(PRIMARY_PHONE, message)
             for n in batch:
                 update_nudge_status(n["id"], "Sent")
                 sent += 1

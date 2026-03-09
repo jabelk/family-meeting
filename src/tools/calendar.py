@@ -1,4 +1,4 @@
-"""Google Calendar API wrapper — read from 3 calendars + write to Erin's calendar."""
+"""Google Calendar API wrapper — read from multiple calendars + write events."""
 
 import json
 import logging
@@ -6,14 +6,20 @@ import os
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from src.config import CALENDAR_IDS, GOOGLE_CREDENTIALS_JSON, GOOGLE_TOKEN_JSON
+from src.config import (
+    CALENDAR_IDS,
+    DEFAULT_CALENDAR,
+    GOOGLE_CREDENTIALS_JSON,
+    GOOGLE_TOKEN_JSON,
+    TIMEZONE,
+    TIMEZONE_STR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +134,7 @@ def get_calendar_events(
 
     Args:
         days_ahead: Number of days to look ahead.
-        calendar_names: List of calendar keys ("jason", "erin", "family").
+        calendar_names: List of calendar keys (from CALENDAR_IDS).
                        Defaults to all 3 calendars.
 
     Returns formatted text list of events labeled by source calendar.
@@ -251,10 +257,10 @@ def get_events_for_date_raw(
     Defaults to Erin's and family calendars.
     """
     if calendar_names is None:
-        calendar_names = ["erin", "family"]
+        calendar_names = [DEFAULT_CALENDAR, "family"]
 
     service = _get_service()
-    pacific = ZoneInfo("America/Los_Angeles")
+    pacific = TIMEZONE
     start_of_day = datetime(target_date.year, target_date.month, target_date.day, tzinfo=pacific)
     end_of_day = start_of_day + timedelta(days=1)
 
@@ -295,7 +301,7 @@ def create_event(
     start_time: str,
     end_time: str,
     color_id: str = COLOR_CHORES,
-    calendar_name: str = "erin",
+    calendar_name: str = DEFAULT_CALENDAR,
 ) -> str:
     """Create a single event on a Google Calendar.
 
@@ -304,7 +310,7 @@ def create_event(
         start_time: ISO datetime string (e.g., "2026-02-23T09:30:00-08:00")
         end_time: ISO datetime string
         color_id: Google Calendar colorId for visual coding
-        calendar_name: Which calendar to write to (default: erin)
+        calendar_name: Which calendar to write to
     """
     cal_id = CALENDAR_IDS.get(calendar_name)
     if not cal_id:
@@ -313,8 +319,8 @@ def create_event(
     service = _get_service()
     event_body = {
         "summary": summary,
-        "start": {"dateTime": start_time, "timeZone": "America/Los_Angeles"},
-        "end": {"dateTime": end_time, "timeZone": "America/Los_Angeles"},
+        "start": {"dateTime": start_time, "timeZone": TIMEZONE_STR},
+        "end": {"dateTime": end_time, "timeZone": TIMEZONE_STR},
         "colorId": color_id,
         "extendedProperties": {"private": {"createdBy": CREATED_BY_TAG}},
     }
@@ -348,7 +354,7 @@ def create_quick_event(
         reminder_minutes: Minutes before event to send reminder (default 15)
         recurrence: List of RRULE strings for recurring events (e.g.,
             ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"]). None for one-time events.
-        calendar_name: Target calendar — "family" (default), "jason", or "erin".
+        calendar_name: Target calendar (from CALENDAR_IDS).
     """
     cal_id = CALENDAR_IDS.get(calendar_name)
     if not cal_id:
@@ -368,8 +374,8 @@ def create_quick_event(
     service = _get_service()
     event_body = {
         "summary": summary,
-        "start": {"dateTime": start_time, "timeZone": "America/Los_Angeles"},
-        "end": {"dateTime": end_time, "timeZone": "America/Los_Angeles"},
+        "start": {"dateTime": start_time, "timeZone": TIMEZONE_STR},
+        "end": {"dateTime": end_time, "timeZone": TIMEZONE_STR},
         "colorId": COLOR_REMINDER,
         "reminders": {
             "useDefault": False,
@@ -391,7 +397,7 @@ def create_quick_event(
     return f"Created {kind} on {calendar_name} calendar: {summary} ({event.get('id', '')})"
 
 
-def batch_create_events(events_data: list[dict], calendar_name: str = "erin") -> int:
+def batch_create_events(events_data: list[dict], calendar_name: str = DEFAULT_CALENDAR) -> int:
     """Create multiple events on a calendar. Returns count of events created.
 
     Each item in events_data should have: summary, start_time, end_time, color_id.
@@ -419,8 +425,8 @@ def batch_create_events(events_data: list[dict], calendar_name: str = "erin") ->
         try:
             event_body = {
                 "summary": evt["summary"],
-                "start": {"dateTime": evt["start_time"], "timeZone": "America/Los_Angeles"},
-                "end": {"dateTime": evt["end_time"], "timeZone": "America/Los_Angeles"},
+                "start": {"dateTime": evt["start_time"], "timeZone": TIMEZONE_STR},
+                "end": {"dateTime": evt["end_time"], "timeZone": TIMEZONE_STR},
                 "colorId": evt.get("color_id", COLOR_CHORES),
                 "extendedProperties": {"private": {"createdBy": CREATED_BY_TAG}},
             }
@@ -435,7 +441,7 @@ def batch_create_events(events_data: list[dict], calendar_name: str = "erin") ->
 def delete_assistant_events(
     start_date: str,
     end_date: str,
-    calendar_name: str = "erin",
+    calendar_name: str = DEFAULT_CALENDAR,
 ) -> int:
     """Delete all assistant-created events in a date range. Returns count deleted.
 
@@ -493,7 +499,7 @@ def delete_calendar_event(
 
     Args:
         event_id: Google Calendar event ID.
-        calendar_name: Target calendar — "family" (default), "jason", or "erin".
+        calendar_name: Target calendar (from CALENDAR_IDS).
         cancel_mode: "single" to delete just this instance, "all_following" to
             delete the entire recurring event (all future occurrences).
     """
@@ -530,14 +536,14 @@ def list_recurring_events(calendar_name: str = "family") -> str:
     """List all active recurring event series on a calendar.
 
     Args:
-        calendar_name: Target calendar — "family" (default), "jason", or "erin".
+        calendar_name: Target calendar (from CALENDAR_IDS).
     """
     cal_id = CALENDAR_IDS.get(calendar_name)
     if not cal_id:
         return f"Calendar '{calendar_name}' not configured."
 
     service = _get_service()
-    now = datetime.now(ZoneInfo("America/Los_Angeles")).isoformat()
+    now = datetime.now(TIMEZONE).isoformat()
 
     try:
         result = (

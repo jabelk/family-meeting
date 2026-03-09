@@ -4,8 +4,8 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
+from src.config import DEFAULT_CALENDAR, TIMEZONE
 from src.tools.calendar import get_events_for_date_raw
 from src.tools.notion import (
     create_nudge,
@@ -15,7 +15,7 @@ from src.tools.notion import (
 
 logger = logging.getLogger(__name__)
 
-PACIFIC = ZoneInfo("America/Los_Angeles")
+PACIFIC = TIMEZONE
 
 # Laundry nudge types for session grouping
 LAUNDRY_TYPES = ["laundry_washer", "laundry_dryer", "laundry_followup"]
@@ -45,7 +45,7 @@ def _check_calendar_conflicts(target_time: datetime) -> str:
     Returns a warning string if there's a conflict, empty string otherwise.
     """
     today = target_time.date()
-    events = get_events_for_date_raw(today, calendar_names=["erin", "family"])
+    events = get_events_for_date_raw(today, calendar_names=[DEFAULT_CALENDAR, "family"])
 
     for event in events:
         start_str = event["start"].get("dateTime")

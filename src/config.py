@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -27,7 +28,9 @@ OPTIONAL_GROUPS = {
         "NOTION_MEETINGS_DB",
         "NOTION_FAMILY_PROFILE_PAGE",
     ],
-    "Google Calendar": ["GOOGLE_CALENDAR_JASON_ID", "GOOGLE_CALENDAR_ERIN_ID", "GOOGLE_CALENDAR_FAMILY_ID"],
+    "Google Calendar": [
+        "GOOGLE_CALENDAR_FAMILY_ID",
+    ],
     "YNAB": ["YNAB_ACCESS_TOKEN", "YNAB_BUDGET_ID"],
     "Updates": ["ADMIN_PHONE", "UPSTREAM_REMOTE"],
 }
@@ -47,9 +50,16 @@ def _load_env():
         sys.exit(1)
 
     # Log status of optional integration groups
+    # Some vars have legacy aliases — check either name
+    _LEGACY_FALLBACKS = {
+        "GOOGLE_CALENDAR_PARTNER1_ID": "GOOGLE_CALENDAR_JASON_ID",
+        "GOOGLE_CALENDAR_PARTNER2_ID": "GOOGLE_CALENDAR_ERIN_ID",
+        "PARTNER1_PHONE": "JASON_PHONE",
+        "PARTNER2_PHONE": "ERIN_PHONE",
+    }
     enabled = []
     for group, vars_ in OPTIONAL_GROUPS.items():
-        missing_optional = [v for v in vars_ if not os.getenv(v)]
+        missing_optional = [v for v in vars_ if not (os.getenv(v) or os.getenv(_LEGACY_FALLBACKS.get(v, "")))]
         if missing_optional:
             logger.warning("%s integration not configured (missing: %s)", group, ", ".join(missing_optional))
         else:
@@ -79,15 +89,14 @@ NOTION_BACKLOG_DB: str = os.environ.get("NOTION_BACKLOG_DB", "")
 NOTION_GROCERY_HISTORY_DB: str = os.environ.get("NOTION_GROCERY_HISTORY_DB", "")
 
 # Google Calendar (optional — configure for calendar integration)
-GOOGLE_CALENDAR_JASON_ID: str = os.environ.get("GOOGLE_CALENDAR_JASON_ID", "")
-GOOGLE_CALENDAR_ERIN_ID: str = os.environ.get("GOOGLE_CALENDAR_ERIN_ID", "")
+# Generic env vars with legacy fallbacks for existing deployments
+GOOGLE_CALENDAR_PARTNER1_ID: str = os.environ.get("GOOGLE_CALENDAR_PARTNER1_ID", "") or os.environ.get(
+    "GOOGLE_CALENDAR_JASON_ID", ""
+)
+GOOGLE_CALENDAR_PARTNER2_ID: str = os.environ.get("GOOGLE_CALENDAR_PARTNER2_ID", "") or os.environ.get(
+    "GOOGLE_CALENDAR_ERIN_ID", ""
+)
 GOOGLE_CALENDAR_FAMILY_ID: str = os.environ.get("GOOGLE_CALENDAR_FAMILY_ID", "")
-
-CALENDAR_IDS: dict[str, str] = {
-    "jason": GOOGLE_CALENDAR_JASON_ID,
-    "erin": GOOGLE_CALENDAR_ERIN_ID,
-    "family": GOOGLE_CALENDAR_FAMILY_ID,
-}
 
 # Outlook (optional — Jason's work calendar ICS feed)
 OUTLOOK_CALENDAR_ICS_URL: str = os.environ.get("OUTLOOK_CALENDAR_ICS_URL", "")
@@ -107,18 +116,36 @@ except Exception as e:
         logger.warning("Family config failed to load: %s — using defaults", e)
         FAMILY_CONFIG = {}
 
+# Timezone (from family config, defaults to America/Los_Angeles)
+TIMEZONE_STR: str = FAMILY_CONFIG.get("timezone", "America/Los_Angeles")
+TIMEZONE: ZoneInfo = ZoneInfo(TIMEZONE_STR)
+
+# Dynamic calendar keys using partner names from config
+_p1 = FAMILY_CONFIG.get("partner1_name", "partner1").lower()
+_p2 = FAMILY_CONFIG.get("partner2_name", "partner2").lower()
+CALENDAR_IDS: dict[str, str] = {
+    _p1: GOOGLE_CALENDAR_PARTNER1_ID,
+    _p2: GOOGLE_CALENDAR_PARTNER2_ID,
+    "family": GOOGLE_CALENDAR_FAMILY_ID,
+}
+ALL_CALENDAR_NAMES: list[str] = list(CALENDAR_IDS.keys())
+DEFAULT_CALENDAR: str = _p2  # primary household manager's calendar
+
 # Family phone mapping (optional — only needed for WhatsApp webhook)
-# Phone env vars are named PARTNER1_PHONE, PARTNER2_PHONE (or legacy JASON_PHONE, ERIN_PHONE)
-JASON_PHONE: str = os.environ.get("JASON_PHONE", "") or os.environ.get("PARTNER1_PHONE", "")
-ERIN_PHONE: str = os.environ.get("ERIN_PHONE", "") or os.environ.get("PARTNER2_PHONE", "")
+# Generic env vars with legacy fallbacks for existing deployments
+PARTNER1_PHONE: str = os.environ.get("PARTNER1_PHONE", "") or os.environ.get("JASON_PHONE", "")
+PARTNER2_PHONE: str = os.environ.get("PARTNER2_PHONE", "") or os.environ.get("ERIN_PHONE", "")
+PRIMARY_PHONE: str = PARTNER2_PHONE  # household manager — receives proactive messages
+
+# Legacy aliases for backward compatibility
+JASON_PHONE: str = PARTNER1_PHONE
+ERIN_PHONE: str = PARTNER2_PHONE
 
 PHONE_TO_NAME: dict[str, str] = {}
-_partner1 = FAMILY_CONFIG.get("partner1_name", "Jason")
-_partner2 = FAMILY_CONFIG.get("partner2_name", "Erin")
-if JASON_PHONE:
-    PHONE_TO_NAME[JASON_PHONE] = _partner1
-if ERIN_PHONE:
-    PHONE_TO_NAME[ERIN_PHONE] = _partner2
+if PARTNER1_PHONE:
+    PHONE_TO_NAME[PARTNER1_PHONE] = FAMILY_CONFIG.get("partner1_name", "Partner1")
+if PARTNER2_PHONE:
+    PHONE_TO_NAME[PARTNER2_PHONE] = FAMILY_CONFIG.get("partner2_name", "Partner2")
 
 # AnyList (optional — grocery integration)
 ANYLIST_SIDECAR_URL: str = os.environ.get("ANYLIST_SIDECAR_URL", "http://anylist-sidecar:3000")
@@ -155,5 +182,5 @@ GOOGLE_CREDENTIALS_JSON: str = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
 SCHEDULER_ENABLED: bool = os.environ.get("SCHEDULER_ENABLED", "true").lower() != "false"
 
 # Upstream update notifications (optional — for template repo instances)
-ADMIN_PHONE: str = os.environ.get("ADMIN_PHONE", "") or ERIN_PHONE
+ADMIN_PHONE: str = os.environ.get("ADMIN_PHONE", "") or PRIMARY_PHONE
 UPSTREAM_REMOTE: str = os.environ.get("UPSTREAM_REMOTE", "upstream")
