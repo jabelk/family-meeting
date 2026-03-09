@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from src.family_config import load_family_config
+from src.integrations import INTEGRATION_REGISTRY, get_enabled_integrations, get_integration_status
 
 load_dotenv()
 
@@ -19,21 +20,6 @@ REQUIRED_VARS = [
     "WHATSAPP_APP_SECRET",
     "N8N_WEBHOOK_SECRET",
 ]
-
-OPTIONAL_GROUPS = {
-    "Notion": [
-        "NOTION_TOKEN",
-        "NOTION_ACTION_ITEMS_DB",
-        "NOTION_MEAL_PLANS_DB",
-        "NOTION_MEETINGS_DB",
-        "NOTION_FAMILY_PROFILE_PAGE",
-    ],
-    "Google Calendar": [
-        "GOOGLE_CALENDAR_FAMILY_ID",
-    ],
-    "YNAB": ["YNAB_ACCESS_TOKEN", "YNAB_BUDGET_ID"],
-    "Updates": ["ADMIN_PHONE", "UPSTREAM_REMOTE"],
-}
 
 logger = logging.getLogger(__name__)
 
@@ -49,26 +35,37 @@ def _load_env():
         print("Copy .env.example to .env and fill in all values.", file=sys.stderr)
         sys.exit(1)
 
-    # Log status of optional integration groups
-    # Some vars have legacy aliases — check either name
-    _LEGACY_FALLBACKS = {
-        "GOOGLE_CALENDAR_PARTNER1_ID": "GOOGLE_CALENDAR_JASON_ID",
-        "GOOGLE_CALENDAR_PARTNER2_ID": "GOOGLE_CALENDAR_ERIN_ID",
-        "PARTNER1_PHONE": "JASON_PHONE",
-        "PARTNER2_PHONE": "ERIN_PHONE",
-    }
+    # Log integration status using centralized registry
     enabled = []
-    for group, vars_ in OPTIONAL_GROUPS.items():
-        missing_optional = [v for v in vars_ if not (os.getenv(v) or os.getenv(_LEGACY_FALLBACKS.get(v, "")))]
-        if missing_optional:
-            logger.warning("%s integration not configured (missing: %s)", group, ", ".join(missing_optional))
+    disabled = []
+    for name, integration in INTEGRATION_REGISTRY.items():
+        if integration.always_enabled or integration.required:
+            continue
+        status = get_integration_status(name)
+        if status == "enabled":
+            enabled.append(integration.display_name)
+        elif status == "partial":
+            set_vars = [v for v in integration.env_vars if os.getenv(v)]
+            missing_vars = [v for v in integration.env_vars if not os.getenv(v)]
+            logger.warning(
+                "%s partially configured (%d/%d vars set, missing: %s)",
+                integration.display_name,
+                len(set_vars),
+                len(integration.env_vars),
+                ", ".join(missing_vars),
+            )
         else:
-            enabled.append(group)
+            disabled.append(integration.display_name)
     if enabled:
         logger.info("Enabled integrations: %s", ", ".join(enabled))
+    if disabled:
+        logger.info("Disabled integrations: %s", ", ".join(disabled))
 
 
 _load_env()
+
+# Compute enabled integrations once at startup
+ENABLED_INTEGRATIONS: set[str] = get_enabled_integrations()
 
 # Anthropic
 ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "")

@@ -1,3 +1,6 @@
+---
+requires: [core]
+---
 **Your rules:**
 1. ALWAYS format responses as structured checklists with WhatsApp formatting:
    - Use *bold* for section headers

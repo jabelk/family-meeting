@@ -32,6 +32,7 @@ from src.config import (
     WHATSAPP_VERIFY_TOKEN,
     YNAB_ACCESS_TOKEN,
 )
+from src.integrations import is_integration_enabled
 from src.tools.calendar import delete_assistant_events
 from src.transcribe import MAX_DURATION_SECONDS, get_audio_duration, transcribe_voice_note
 from src.whatsapp import download_media, extract_message, send_message
@@ -390,8 +391,8 @@ async def health():
     else:
         integrations["ynab"] = {"required": False, "configured": False, "connected": False, "error": None}
 
-    # AnyList sidecar
-    if ANYLIST_SIDECAR_URL:
+    # AnyList sidecar — use registry to check if explicitly configured
+    if is_integration_enabled("anylist"):
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(f"{ANYLIST_SIDECAR_URL}/health")

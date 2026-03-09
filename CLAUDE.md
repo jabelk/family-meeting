@@ -51,21 +51,51 @@ Family-specific values are externalized in `config/family.yaml` (YAML format, hu
 
 **Adding a new family-specific value:** Add the field to `config/family.yaml`, add a derived key in `_build_placeholder_dict()` in `src/family_config.py`, then use `{new_key}` in prompt files.
 
+## Integration Registry
+
+The integration registry (`src/integrations.py`) is the single source of truth for which integrations exist, what env vars they need, and which tools they provide. It drives tool filtering, prompt section filtering, health checks, and the validation script.
+
+**Key concepts:**
+- `INTEGRATION_REGISTRY` — dict mapping integration name → `Integration` dataclass (display_name, required, env_vars, tools, prompt_tag, always_enabled)
+- 9 integrations: `core`, `whatsapp`, `ai_api`, `notion`, `google_calendar`, `outlook`, `ynab`, `anylist`, `recipes`
+- `core` is a pseudo-integration (always_enabled=True, no env vars) — represents base tools available in every deployment
+- `get_enabled_integrations()` — checks `os.environ` directly (not config.py defaults) and returns set of enabled integration names
+- `ENABLED_INTEGRATIONS` in `src/config.py` — computed once at startup from registry
+
+**Adding a new integration:** Add an `Integration` entry to `INTEGRATION_REGISTRY` in `src/integrations.py` with its env vars and tools. Add a frontmatter tag to relevant prompt files. The tool filtering, health endpoint, and validation script automatically pick it up.
+
+**Adding a tool to an existing integration:** Add the tool name to the integration's `tools` tuple in `INTEGRATION_REGISTRY`. It will automatically be included/excluded based on whether that integration is enabled.
+
 ## Prompt Architecture
 
 All LLM prompts live in `src/prompts/` as external Markdown files, loaded at startup via `@lru_cache`, then rendered with family config placeholders.
 
 **Directory structure:**
-- `src/prompts/system/` — System prompt sections (9 numbered `.md` files, concatenated in sort order)
-- `src/prompts/tools/` — Tool descriptions (12 module-grouped `.md` files, parsed by `## tool_name` headers)
+- `src/prompts/system/` — System prompt sections (10 numbered `.md` files, concatenated in sort order, filtered by YAML frontmatter)
+- `src/prompts/tools/` — Tool descriptions (12 module-grouped `.md` files, parsed by `## tool_name` headers, filtered by enabled tools)
 - `src/prompts/templates/` — Classification/generation prompt templates (10 `.md` files with `{placeholder}` syntax)
 - `src/prompts/__init__.py` — Loader module: `load_system_prompt()`, `render_system_prompt()`, `load_tool_descriptions()`, `render_tool_descriptions()`, `render_template(name, **kwargs)`
 
+**Prompt frontmatter convention:** System prompt files use YAML frontmatter to declare which integrations they require:
+```yaml
+---
+requires: [core]           # ALL listed integrations must be enabled
+---
+```
+```yaml
+---
+requires_any: [notion, google_calendar]  # ANY listed integration suffices
+---
+```
+Sections without frontmatter are always included. The `_parse_frontmatter()` and `_should_include_section()` helpers in `src/prompts/__init__.py` handle filtering. Tool descriptions are filtered by tool name (matching `TOOLS` list from `src/assistant.py`).
+
 **Adding/editing prompts:**
-- System prompt: Add/edit numbered files in `system/` (e.g., `10-new-section.md`). Order matters.
+- System prompt: Add/edit numbered files in `system/` (e.g., `10-new-section.md`). Order matters. Add frontmatter if the section is integration-specific.
 - Tool descriptions: Add `## tool_name` section in the appropriate module file in `tools/`.
 - Templates: Create `name.md` in `templates/`, use `{placeholder}` for dynamic values. Escape literal braces as `{{` / `}}`.
 - Use `{partner1_name}`, `{partner2_name}`, `{bot_name}`, `{grocery_store}`, etc. for family-specific values — never hardcode names.
+
+**Pre-deployment validation:** Run `python scripts/validate_setup.py` to check family.yaml + .env configuration, integration completeness, and deployment readiness before deploying.
 
 ## Key Constraints
 
@@ -77,6 +107,8 @@ All LLM prompts live in `src/prompts/` as external Markdown files, loaded at sta
 ## Active Technologies
 - Python 3.12 (existing codebase) + FastAPI, anthropic SDK, PyYAML (new — for family config loading), existing deps unchanged (028-template-repo-readiness)
 - YAML config file at `config/family.yaml` (human-edited, committed per instance) + existing JSON data files (028-template-repo-readiness)
+- Python 3.12 + FastAPI, anthropic SDK, PyYAML (existing) (030-quick-start-onboarding)
+- JSON files in `data/` (unchanged) (030-quick-start-onboarding)
 
 **Core stack**: Python 3.12 + FastAPI, anthropic SDK (Claude Haiku 4.5 for chat, Claude vision for OCR), uvicorn, httpx, Pydantic
 
@@ -210,4 +242,5 @@ Features 001-028 are implemented and deployed. Spec artifacts for each live unde
 - 028: Template repo readiness (family config externalization, enhanced health check, onboarding/pricing docs)
 
 ## Recent Changes
+- 030-quick-start-onboarding: Added `src/integrations.py` integration registry (9 integrations, 77 tools mapped). Dynamic tool/prompt filtering based on configured integrations — minimal deployments (WhatsApp + AI only) exclude unconfigured features. YAML frontmatter on system prompt files (`requires`/`requires_any` tags). Pre-deployment validation script (`scripts/validate_setup.py`). Health endpoint uses registry for integration detection. Quick Start section in ONBOARDING.md.
 - 028-template-repo-readiness: Externalized all hardcoded family references into `config/family.yaml`. Added `src/family_config.py` YAML config loader, `render_system_prompt()`/`render_tool_descriptions()` with placeholder injection, enhanced `/health` endpoint with per-integration status, operator docs (WHATSAPP_SETUP.md, ONBOARDING.md, PRICING.md, SERVICE_AGREEMENT.md)

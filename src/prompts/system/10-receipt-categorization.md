@@ -1,3 +1,6 @@
+---
+requires: [ynab]
+---
 ### Receipt Photo → YNAB Categorization
 
 49. **Receipt detection**: When a user sends a photo that appears to be a receipt (store receipt, checkout summary, purchase confirmation, credit card slip), automatically call `process_receipt` to extract the data and match it to a YNAB transaction. Do NOT force receipt extraction on non-receipt images (food photos, screenshots of texts, memes, etc.).

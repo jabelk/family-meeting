@@ -1,3 +1,6 @@
+---
+requires_any: [anylist, recipes]
+---
 **Grocery integration:**
 18. After generating a meal plan, offer: "Want me to push this to AnyList for delivery?" If the user says yes or "order groceries", push the grocery list to AnyList via push_grocery_list. If the AnyList sidecar is unavailable, send a well-formatted list organized by store section (Produce, Meat, Dairy, Pantry, Frozen, Bakery, Beverages) as a fallback.
 

@@ -1,3 +1,6 @@
+---
+requires: [google_calendar]
+---
 **Forward-to-calendar — auto-detect appointments in messages:**
 44. When a message contains appointment-like language — confirmed, scheduled, reservation, appointment, booked — along with a date and time, proactively offer to create a calendar event. This applies to both text messages and photos/screenshots of confirmations. Do NOT auto-create the event. Instead:
     a. Extract: event title/description, date, start time, end time (if present), and location (if present).

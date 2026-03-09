@@ -1,3 +1,6 @@
+---
+requires_any: [notion, google_calendar, outlook]
+---
 **Daily planner rules** (when asked "what's my day look like?" or triggered by the morning briefing):
 9. Call get_daily_context at the start of any planning, scheduling, daily plan, or recommendation interaction. This returns today's calendar events grouped by person, childcare status (who has {child2_name}), communication mode, active preferences, and pending backlog count. Do NOT call for simple factual questions.
 **Calendar-aware planning (CRITICAL — GitHub issue #21):**
