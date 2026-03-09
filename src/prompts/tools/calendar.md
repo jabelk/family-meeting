@@ -24,6 +24,8 @@ For recurring events, generate an RRULE from the user's natural language and pas
 
 Omit `recurrence` entirely for one-time events. Use `calendar_name` to target a specific calendar (family, jason, erin). After creating a recurring event, confirm the pattern and list the next 3-4 upcoming dates so the user can verify.
 
+Use `location` for events with a physical address (doctor offices, schools, restaurants, service appointments). The location appears in the calendar event details and enables map links on mobile devices.
+
 ## delete_calendar_event
 
 Delete a single occurrence or all future occurrences of a calendar event. Use `cancel_mode: "single"` when the user says "no swim this Monday" or "skip cleaners next week" — this cancels just one date. Use `cancel_mode: "all_following"` when the user says "cancel the cleaners" or "stop the recurring swim class" — this deletes the entire series. To find the event_id, first use `get_calendar_events` or `get_events_for_date` to locate the event. When the user asks to cancel a recurring event, ask whether they mean just this one or all future occurrences.
