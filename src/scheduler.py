@@ -22,17 +22,27 @@ logger = logging.getLogger(__name__)
 _DATA_DIR = Path("/app/data") if Path("/app/data").exists() else Path("data")
 _SCHEDULES_PATH = _DATA_DIR / "schedules.json"
 
-# Fallback if volume doesn't have schedules.json yet
-_DEFAULT_SCHEDULES_PATH = Path("data/schedules.json")
+# Bundled default (outside /app/data volume mount, survives empty volume)
+_BUNDLED_SCHEDULES_PATH = Path("/app/defaults/schedules.json")
+# Local dev fallback
+_LOCAL_SCHEDULES_PATH = Path("data/schedules.json")
 
 
 def _load_schedules() -> dict:
-    """Load schedule config from volume or bundled default."""
+    """Load schedule config from volume, bundled default, or local dev."""
     if _SCHEDULES_PATH.exists():
         return json.loads(_SCHEDULES_PATH.read_text())
-    if _DEFAULT_SCHEDULES_PATH.exists():
-        return json.loads(_DEFAULT_SCHEDULES_PATH.read_text())
-    logger.error("No schedules.json found at %s or %s", _SCHEDULES_PATH, _DEFAULT_SCHEDULES_PATH)
+    # First boot: copy bundled default to volume so it persists
+    if _BUNDLED_SCHEDULES_PATH.exists():
+        logger.info("First boot: copying bundled schedules.json to volume")
+        import shutil
+        _SCHEDULES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(_BUNDLED_SCHEDULES_PATH, _SCHEDULES_PATH)
+        return json.loads(_SCHEDULES_PATH.read_text())
+    # Local development
+    if _LOCAL_SCHEDULES_PATH.exists():
+        return json.loads(_LOCAL_SCHEDULES_PATH.read_text())
+    logger.error("No schedules.json found at %s or %s", _SCHEDULES_PATH, _BUNDLED_SCHEDULES_PATH)
     return {"timezone": "America/Los_Angeles", "jobs": []}
 
 
