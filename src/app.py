@@ -1,4 +1,4 @@
-"""FastAPI app — WhatsApp webhook + automation endpoints."""
+"""FastAPI app — WhatsApp webhook + automation endpoints (CI/CD verified)."""
 
 import base64
 import hashlib
