@@ -110,7 +110,7 @@ def check_reorder_items() -> dict:
 def handle_order_confirmation() -> dict:
     """Mark all pending-order items as ordered (Last Ordered = today, clear Pending Order).
 
-    Called when Erin says "groceries ordered" or similar.
+    Called when Partner 2 says "groceries ordered" or similar.
     """
     pending = notion.get_pending_orders()
     if not pending:

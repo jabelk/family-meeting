@@ -13,6 +13,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from src.family_config import load_family_config
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -88,7 +90,8 @@ def get_drive_times() -> str:
     or a message indicating no drive times are stored.
     """
     if not _drive_times:
-        return "No drive times stored. Erin can add them by saying something like 'the gym is 5 minutes away.'"
+        partner2 = load_family_config()["partner2_name"]
+        return f"No drive times stored. {partner2} can add them by saying something like 'the gym is 5 minutes away.'"
 
     lines = ["Stored drive times (from home):"]
     for location, info in sorted(_drive_times.items()):

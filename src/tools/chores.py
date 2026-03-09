@@ -47,7 +47,7 @@ def _reset_skipped_if_new_day() -> None:
 
 
 def detect_free_windows(target_date: date) -> list[dict]:
-    """Find free windows in Erin's day by comparing calendar events against time boundaries.
+    """Find free windows in Partner 2's day by comparing calendar events against time boundaries.
 
     Returns list of {start: datetime, end: datetime, duration_minutes: int}
     for gaps >= 15 minutes between 7:00 AM and 8:30 PM.

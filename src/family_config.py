@@ -12,33 +12,6 @@ logger = logging.getLogger(__name__)
 
 _CONFIG_PATH = Path(os.environ.get("FAMILY_CONFIG_PATH", "config/family.yaml"))
 
-# Default config matching the original hardcoded values (backward compatibility)
-_DEFAULT_CONFIG = {
-    "bot": {"name": "Mom Bot", "welcome_message": ""},
-    "family": {
-        "name": "The Belk Family",
-        "timezone": "America/Los_Angeles",
-        "location": "Reno, NV",
-        "partners": [
-            {"name": "Jason", "role": "partner", "work": "works from home at Cisco", "has_work_calendar": True},
-            {"name": "Erin", "role": "partner", "work": "stays at home with the kids", "has_work_calendar": False},
-        ],
-        "children": [
-            {"name": "Vienna", "age": 5, "details": "kindergarten at Roy Gomm, M-F"},
-            {"name": "Zoey", "age": 3, "details": ""},
-        ],
-        "caregivers": [{"name": "Sandy", "role": "grandma", "keywords": ["sandy", "grandma"]}],
-    },
-    "preferences": {"grocery_store": "Whole Foods", "recipe_source": "Downshiftology", "dietary_restrictions": []},
-    "calendar": {
-        "event_mappings": {"BSF": "Erin", "Gymnastics": "Vienna", "Church": "Family", "Nature class": "Vienna"}
-    },
-    "childcare": {
-        "keywords": ["zoey", "sandy", "preschool", "milestones", "grandma"],
-        "caregiver_mappings": {"sandy": "Sandy", "milestones": "preschool"},
-    },
-}
-
 
 def _validate_config(raw: dict) -> None:
     """Validate required fields exist and are valid."""
@@ -59,8 +32,10 @@ def _validate_config(raw: dict) -> None:
         raise ValueError(f"config/family.yaml: invalid timezone '{tz}'")
 
     partners = family.get("partners") or []
-    if not partners:
-        raise ValueError("config/family.yaml: 'family.partners' must contain at least 1 entry")
+    if len(partners) < 2:
+        raise ValueError(
+            "config/family.yaml: 'family.partners' must contain at least 2 entries (both partners are required)"
+        )
     for i, p in enumerate(partners):
         if not p.get("name"):
             raise ValueError(f"config/family.yaml: 'family.partners[{i}].name' is required")
@@ -170,15 +145,17 @@ def _build_placeholder_dict(raw: dict) -> dict:
 def load_family_config() -> dict:
     """Load and validate family config, returning the placeholder dict.
 
-    Falls back to default config if family.yaml is missing (backward compatibility).
+    Raises FileNotFoundError if config/family.yaml is missing.
+    Raises ValueError if required fields are absent or invalid.
     """
-    if _CONFIG_PATH.exists():
-        logger.info("Loading family config from %s", _CONFIG_PATH)
-        with open(_CONFIG_PATH) as f:
-            raw = yaml.safe_load(f) or {}
-        _validate_config(raw)
-    else:
-        logger.warning("Family config not found at %s — using default config", _CONFIG_PATH)
-        raw = _DEFAULT_CONFIG
+    if not _CONFIG_PATH.exists():
+        raise FileNotFoundError(
+            f"Missing {_CONFIG_PATH} — copy config/family.yaml.example and fill in your family's details."
+        )
+
+    logger.info("Loading family config from %s", _CONFIG_PATH)
+    with open(_CONFIG_PATH) as f:
+        raw = yaml.safe_load(f) or {}
+    _validate_config(raw)
 
     return _build_placeholder_dict(raw)

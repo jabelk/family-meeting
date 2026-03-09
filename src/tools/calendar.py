@@ -254,7 +254,7 @@ def get_events_for_date_raw(
 
     Returns raw Google Calendar event dicts with all fields (conferenceData,
     description, creator, extendedProperties, etc.) needed for nudge processing.
-    Defaults to Erin's and family calendars.
+    Defaults to Partner 2's and family calendars.
     """
     if calendar_names is None:
         calendar_names = [DEFAULT_CALENDAR, "family"]
@@ -292,7 +292,7 @@ def get_events_for_date_raw(
 
 
 # ---------------------------------------------------------------------------
-# Write: create events on Erin's calendar
+# Write: create events on Partner 2's calendar
 # ---------------------------------------------------------------------------
 
 
@@ -343,11 +343,11 @@ def create_quick_event(
 ) -> str:
     """Create a quick reminder/event on a Google Calendar.
 
-    Defaults to the family calendar so both Jason and Erin can see it.
+    Defaults to the family calendar so both partners can see it.
     Supports recurring events via RRULE strings.
 
     Args:
-        summary: Event title (e.g., "Erin → Jason: pick up dog")
+        summary: Event title (e.g., "Partner 2 → Partner 1: pick up dog")
         start_time: ISO datetime string
         end_time: ISO datetime string (defaults to start_time + 30 min)
         description: Event body text (original message context)

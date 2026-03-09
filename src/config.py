@@ -95,7 +95,7 @@ GOOGLE_CALENDAR_PARTNER2_ID: str = os.environ.get("GOOGLE_CALENDAR_PARTNER2_ID",
 )
 GOOGLE_CALENDAR_FAMILY_ID: str = os.environ.get("GOOGLE_CALENDAR_FAMILY_ID", "")
 
-# Outlook (optional — Jason's work calendar ICS feed)
+# Outlook (optional — Partner 1's work calendar ICS feed)
 OUTLOOK_CALENDAR_ICS_URL: str = os.environ.get("OUTLOOK_CALENDAR_ICS_URL", "")
 
 # YNAB (optional — configure for budget integration)

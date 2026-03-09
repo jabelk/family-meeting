@@ -11,6 +11,7 @@ from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+from src.config import FAMILY_CONFIG
 from src.prompts import render_template
 from src.tools.amazon_sync import (
     _DATA_DIR,
@@ -771,7 +772,7 @@ def format_email_suggestion_message(enriched_transactions: list[dict]) -> str:
 
     idx = 1
 
-    # Pending items (need Erin's approval)
+    # Pending items (need Partner 2's approval)
     for entry in pending_items:
         txn = entry["ynab_transaction"]
         email_txn = entry.get("matched_email", {})
@@ -833,7 +834,7 @@ def run_email_sync() -> str | None:
     """Run the email sync for all providers. Returns short status string or None if nothing to do.
 
     Checks YNAB first (fast), skips if no unprocessed transactions.
-    Sends suggestion message directly to Erin via WhatsApp.
+    Sends suggestion message directly to Partner 2 via WhatsApp.
     """
     all_enriched = []
     providers_processed = []
@@ -921,7 +922,7 @@ def run_email_sync() -> str | None:
     if auto_count:
         parts.append(f"{auto_count} auto-categorized.")
     if pending_count:
-        parts.append(f"{pending_count} sent to Erin for review.")
+        parts.append(f"{pending_count} sent to {FAMILY_CONFIG.get('partner2_name', 'Partner 2')} for review.")
     if unmatched_count:
         parts.append(f"{unmatched_count} unmatched (no email found).")
 
@@ -978,7 +979,7 @@ def _load_email_pending_suggestions() -> list[dict]:
 
 
 def handle_email_sync_reply(message_text: str) -> str:
-    """Handle Erin's reply to an email sync suggestion.
+    """Handle Partner 2's reply to an email sync suggestion.
 
     Supports: "N yes", "N adjust — [correction]", "N skip"
     """

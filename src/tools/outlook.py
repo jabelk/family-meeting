@@ -1,4 +1,7 @@
-"""Outlook / work calendar reader — ICS feed or iOS Shortcut pushed data."""
+"""Outlook / work calendar reader — ICS feed or iOS Shortcut pushed data.
+
+Reads Partner 1's work calendar from either pushed iOS Shortcut data or an ICS feed.
+"""
 
 import json
 import logging
@@ -10,6 +13,7 @@ import icalendar
 import recurring_ical_events
 
 from src.config import OUTLOOK_CALENDAR_ICS_URL
+from src.family_config import load_family_config
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +110,9 @@ def save_work_calendar(events_by_date: dict[str, list[dict]]) -> None:
 
 def _format_pushed_events(dt: date, events: list[dict]) -> str:
     """Format pushed work calendar events into display text."""
+    partner1 = load_family_config()["partner1_name"]
     if not events:
-        return f"Jason has no work meetings on {dt.strftime('%A, %b %d')}."
+        return f"{partner1} has no work meetings on {dt.strftime('%A, %b %d')}."
 
     lines = []
     for event in events:
@@ -127,12 +132,12 @@ def _format_pushed_events(dt: date, events: list[dict]) -> str:
             lines.append(f"- {title}")
 
     lines.sort()
-    header = f"Jason's work meetings on {dt.strftime('%A, %b %d')}:"
+    header = f"{partner1}'s work meetings on {dt.strftime('%A, %b %d')}:"
     return header + "\n" + "\n".join(lines)
 
 
 def get_outlook_events(target_date: str = "") -> str:
-    """Fetch Jason's work calendar events for a given date.
+    """Fetch Partner 1's work calendar events for a given date.
 
     Args:
         target_date: ISO date string (e.g., "2026-02-23"). Defaults to today.
@@ -160,8 +165,9 @@ def get_outlook_events(target_date: str = "") -> str:
             end = start + timedelta(days=1)
             events = recurring_ical_events.of(cal).between(start, end)
 
+            partner1 = load_family_config()["partner1_name"]
             if not events:
-                return f"Jason has no work meetings on {dt.strftime('%A, %b %d')}."
+                return f"{partner1} has no work meetings on {dt.strftime('%A, %b %d')}."
 
             lines = []
             for event in events:
@@ -181,16 +187,17 @@ def get_outlook_events(target_date: str = "") -> str:
                     lines.append(f"- All day: {summary}")
 
             lines.sort()
-            header = f"Jason's work meetings on {dt.strftime('%A, %b %d')}:"
+            header = f"{partner1}'s work meetings on {dt.strftime('%A, %b %d')}:"
             return header + "\n" + "\n".join(lines)
         except Exception as e:
             logger.warning("Failed to fetch/parse Outlook ICS feed: %s", e)
 
-    return "Jason's work calendar is not available — you may want to ask him about his meetings."
+    partner1 = load_family_config()["partner1_name"]
+    return f"{partner1}'s work calendar is not available — you may want to ask them about their meetings."
 
 
 def get_outlook_busy_windows(target_date: str = "") -> list[tuple[str, str, str]]:
-    """Get Jason's busy windows as structured data for daily plan generation.
+    """Get Partner 1's busy windows as structured data for daily plan generation.
 
     Returns list of (summary, start_time, end_time) tuples.
     Priority: pushed data (iOS Shortcut) → ICS URL (if configured) → empty list.

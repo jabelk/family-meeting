@@ -76,7 +76,10 @@ _ALL_TOOLS = [
                 "calendar_names": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Which calendars to read: 'jason', 'erin', 'family'. Default all three.",
+                    "description": (
+                        f"Which calendars to read: '{FAMILY_CONFIG.get('partner1_name_lower', 'partner1')}', "
+                        f"'{FAMILY_CONFIG.get('partner2_name_lower', 'partner2')}', 'family'. Default all."
+                    ),
                 },
             },
             "required": [],
@@ -126,7 +129,14 @@ _ALL_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "assignee": {"type": "string", "description": "Who this is assigned to (Jason or Erin)."},
+                "assignee": {
+                    "type": "string",
+                    "description": (
+                        f"Who this is assigned to "
+                        f"({FAMILY_CONFIG.get('partner1_name', 'Partner1')} or "
+                        f"{FAMILY_CONFIG.get('partner2_name', 'Partner2')})."
+                    ),
+                },
                 "description": {"type": "string", "description": "What needs to be done."},
                 "due_context": {
                     "type": "string",
@@ -460,9 +470,10 @@ _ALL_TOOLS = [
                     "type": "string",
                     "description": (
                         "Event title. Format as 'Sender -> Assignee: "
-                        "task' (e.g., 'Erin -> Jason: pick up dog'). "
+                        f"task' (e.g., '{FAMILY_CONFIG.get('partner2_name', 'Partner2')} -> "
+                        f"{FAMILY_CONFIG.get('partner1_name', 'Partner1')}: pick up dog'). "
                         "If self-reminder, use "
-                        "'Erin: dentist appointment'."
+                        f"'{FAMILY_CONFIG.get('partner2_name', 'Partner2')}: dentist appointment'."
                     ),
                 },
                 "start_time": {
@@ -485,7 +496,8 @@ _ALL_TOOLS = [
                     "type": "string",
                     "description": (
                         "Original message text for context (e.g., "
-                        "'Erin said: remind Jason to pick up the "
+                        f"'{FAMILY_CONFIG.get('partner2_name', 'Partner2')} said: remind "
+                        f"{FAMILY_CONFIG.get('partner1_name', 'Partner1')} to pick up the "
                         "dog at 12:30')."
                     ),
                 },
@@ -1360,7 +1372,7 @@ def _handle_extract_recipe(**kw) -> dict | str:
 def _handle_amazon_sync_trigger() -> str:
     """Handle manual Amazon sync trigger from WhatsApp.
 
-    Sends the detailed suggestion message directly to Erin via WhatsApp
+    Sends the detailed suggestion message directly to Partner 2 via WhatsApp
     (bypassing Claude's summarization), then returns a short status to Claude.
     """
     try:
@@ -1371,7 +1383,7 @@ def _handle_amazon_sync_trigger() -> str:
 
         orders, auth_failed = amazon_sync.get_amazon_orders()
         if auth_failed:
-            return "Amazon sync paused — Gmail OAuth token expired. Ask Jason to re-run setup_calendar.py on the NUC."
+            return "Amazon sync paused — Gmail OAuth token expired. Ask the operator to re-run setup_calendar.py."
         if not orders:
             return "No Amazon orders found in the last 30 days."
 
@@ -1380,7 +1392,7 @@ def _handle_amazon_sync_trigger() -> str:
         message = amazon_sync.format_suggestion_message(enriched)
         amazon_sync.set_pending_suggestions(enriched)
 
-        # Send detailed suggestion message directly to Erin (don't let Claude summarize)
+        # Send detailed suggestion message directly to Partner 2 (don't let Claude summarize)
         if message:
             send_sync_message_direct(message)
 
@@ -1393,7 +1405,7 @@ def _handle_amazon_sync_trigger() -> str:
         if auto_count:
             parts.append(f"{auto_count} auto-categorized.")
         if pending_count:
-            parts.append(f"{pending_count} sent to Erin for review.")
+            parts.append(f"{pending_count} sent to {FAMILY_CONFIG.get('partner2_name', 'Partner2')} for review.")
         if unmatched_count:
             parts.append(f"{unmatched_count} unmatched (no email found).")
         return " ".join(parts)
@@ -1405,7 +1417,7 @@ def _handle_amazon_sync_trigger() -> str:
 def _handle_email_sync_trigger() -> str:
     """Handle manual email sync trigger from WhatsApp.
 
-    Sends the detailed suggestion message directly to Erin via WhatsApp
+    Sends the detailed suggestion message directly to Partner 2 via WhatsApp
     (bypassing Claude's summarization), then returns a short status to Claude.
     """
     try:
@@ -1642,7 +1654,7 @@ def _handle_list_preferences(**kw) -> str:
             "You don't have any stored preferences. "
             "You can set them by telling me things like "
             "'don't remind me about groceries unless I ask' or "
-            "'no Jason appointment reminders' or "
+            f"'no {FAMILY_CONFIG.get('partner1_name', 'Partner1')} appointment reminders' or "
             "'check the time before making recommendations'."
         )
 

@@ -12,7 +12,7 @@ def _valid_raw():
         "family": {
             "name": "The Test Family",
             "timezone": "America/New_York",
-            "partners": [{"name": "Alice", "work": "engineer"}],
+            "partners": [{"name": "Alice", "work": "engineer"}, {"name": "Bob", "work": "designer"}],
             "children": [{"name": "Charlie", "age": 4, "details": "preschool"}],
             "caregivers": [],
         },
@@ -49,7 +49,14 @@ def test_validate_config_invalid_timezone():
 def test_validate_config_no_partners():
     raw = _valid_raw()
     raw["family"]["partners"] = []
-    with pytest.raises(ValueError, match="partners"):
+    with pytest.raises(ValueError, match="at least 2 entries"):
+        _validate_config(raw)
+
+
+def test_validate_config_single_partner():
+    raw = _valid_raw()
+    raw["family"]["partners"] = [{"name": "Alice", "work": "engineer"}]
+    with pytest.raises(ValueError, match="at least 2 entries"):
         _validate_config(raw)
 
 
@@ -60,20 +67,12 @@ def test_build_placeholder_dict_basic():
     assert d["bot_name"] == "TestBot"
     assert d["family_name"] == "The Test Family"
     assert d["partner1_name"] == "Alice"
-    assert d["partner2_name"] == ""  # Only one partner
+    assert d["partner2_name"] == "Bob"
+    assert d["partner1_work"] == "engineer"
+    assert d["partner2_work"] == "designer"
     assert d["child1_name"] == "Charlie"
     assert d["grocery_store"] == "Trader Joe's"
     assert "Charlie (age 4)" in d["children_summary"]
-
-
-def test_build_placeholder_dict_two_partners():
-    raw = _valid_raw()
-    raw["family"]["partners"].append({"name": "Bob", "work": "teacher"})
-    d = _build_placeholder_dict(raw)
-    assert d["partner1_name"] == "Alice"
-    assert d["partner2_name"] == "Bob"
-    assert d["partner1_work"] == "engineer"
-    assert d["partner2_work"] == "teacher"
 
 
 def test_build_placeholder_dict_no_children():
