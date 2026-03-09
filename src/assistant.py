@@ -23,6 +23,7 @@ from src.tools import (
     nudges,
     outlook,
     proactive,
+    receipt,
     recipes,
     ynab,
 )
@@ -1213,6 +1214,51 @@ TOOLS = [
             "required": ["location"],
         },
     },
+    # Receipt → YNAB categorization (Feature 027)
+    {
+        "name": "process_receipt",
+        "description": _tool_descs.get("process_receipt", "process_receipt"),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "confirm_receipt_categorization",
+        "description": _tool_descs.get("confirm_receipt_categorization", "confirm_receipt_categorization"),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category_override": {
+                    "type": "string",
+                    "description": (
+                        "Different category name if user rejects the suggestion. "
+                        "Leave empty to confirm the suggested category."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "retry_receipt_match",
+        "description": _tool_descs.get("retry_receipt_match", "retry_receipt_match"),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "split_receipt_transaction",
+        "description": _tool_descs.get("split_receipt_transaction", "split_receipt_transaction"),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 # Color mapping for calendar blocks
@@ -1520,6 +1566,17 @@ TOOL_FUNCTIONS = {
     "get_drive_times": lambda **kw: drive_times.get_drive_times(),
     "save_drive_time": lambda **kw: drive_times.save_drive_time(kw["location"], kw["minutes"]),
     "delete_drive_time": lambda **kw: drive_times.delete_drive_time(kw["location"]),
+    # Receipt → YNAB categorization (Feature 027)
+    "process_receipt": lambda **kw: receipt.process_receipt(
+        _current_image_data["base64"] if _current_image_data else "",
+        _current_image_data["mime_type"] if _current_image_data else "",
+        kw.get("_phone", ""),
+    ),
+    "confirm_receipt_categorization": lambda **kw: receipt.confirm_receipt_categorization(
+        kw.get("_phone", ""), kw.get("category_override", "")
+    ),
+    "retry_receipt_match": lambda **kw: receipt.retry_receipt_match(kw.get("_phone", "")),
+    "split_receipt_transaction": lambda **kw: receipt.split_receipt_transaction(kw.get("_phone", "")),
 }
 
 
@@ -1735,6 +1792,10 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                                 "save_routine",
                                 "get_routine",
                                 "delete_routine",
+                                "process_receipt",
+                                "confirm_receipt_categorization",
+                                "retry_receipt_match",
+                                "split_receipt_transaction",
                             ):
                                 tool_input["_phone"] = sender_phone
                             result = func(**tool_input)
