@@ -193,6 +193,8 @@ def generate_meal_plan() -> dict:
         recipe_count=len(all_recipes),
         recipes_summary=recipes_summary,
         recent_plans=recent_plans[:2] if recent_plans else "None",
+        children_summary=FAMILY_CONFIG.get("children_summary", ""),
+        children_activities_summary=FAMILY_CONFIG.get("children_activities_summary", ""),
     )
 
     response = client.messages.create(
