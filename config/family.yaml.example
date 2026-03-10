@@ -44,3 +44,10 @@ calendar:
 childcare:
   keywords: []                # Optional: Auto-generated from children + caregiver names if empty
   caregiver_mappings: {}      # Optional: Auto-generated from caregivers if empty
+
+# Voice access via Siri Shortcuts (optional)
+# Generate tokens with: python -c "import secrets; print('sc_p1_' + secrets.token_hex(32))"
+# Set PARTNER1_API_TOKEN and PARTNER2_API_TOKEN in your .env file
+# See docs/siri-shortcut-setup.md for full setup instructions
+voice_access:
+  enabled: false              # Set to true after configuring tokens in .env

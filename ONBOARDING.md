@@ -221,6 +221,22 @@ Adds grocery list management via WhatsApp. Requires a separate Railway service.
 
 ---
 
+## Step 9 (Optional): Siri Voice Access
+
+Add hands-free voice access via Apple Shortcuts. Say "Hey Siri, run our house" to talk to the assistant without opening WhatsApp.
+
+1. Generate a Bearer token for each partner:
+   ```bash
+   python3 -c "import secrets; print('sc_p1_' + secrets.token_hex(32))"
+   python3 -c "import secrets; print('sc_p2_' + secrets.token_hex(32))"
+   ```
+2. Add `PARTNER1_API_TOKEN` and `PARTNER2_API_TOKEN` to your Railway environment variables
+3. Create Apple Shortcuts on each phone following the setup guide: [docs/siri-shortcut-setup.md](docs/siri-shortcut-setup.md)
+
+**What you get**: 5 Siri Shortcuts (general voice command + 4 presets for calendar, grocery, dinner, reminders), Back Tap / Action Button triggers, and cross-channel context with WhatsApp.
+
+---
+
 ## Customizing Your Schedule
 
 The bot runs automated jobs (daily briefings, budget scans, etc.) on a configurable schedule. Edit `data/schedules.json` on the volume to customize timing or disable jobs you don't need.

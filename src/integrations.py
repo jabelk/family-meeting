@@ -192,6 +192,14 @@ INTEGRATION_REGISTRY: dict[str, Integration] = {
         ),
         prompt_tag="recipes",
     ),
+    "voice_access": Integration(
+        name="voice_access",
+        display_name="Voice Access (Siri)",
+        required=False,
+        env_vars=("PARTNER1_API_TOKEN", "PARTNER2_API_TOKEN"),
+        tools=(),  # Voice is a transport, not a tool provider
+        prompt_tag="voice_access",
+    ),
 }
 
 
