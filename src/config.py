@@ -165,6 +165,17 @@ NOTION_CHORES_DB: str = os.environ.get("NOTION_CHORES_DB", "")
 # Named N8N_WEBHOOK_SECRET for historical reasons; used on both Railway and NUC deployments.
 N8N_WEBHOOK_SECRET: str = os.environ.get("N8N_WEBHOOK_SECRET", "")
 
+# Voice access (optional — Siri Shortcut Bearer tokens for each partner)
+PARTNER1_API_TOKEN: str = os.environ.get("PARTNER1_API_TOKEN", "")
+PARTNER2_API_TOKEN: str = os.environ.get("PARTNER2_API_TOKEN", "")
+
+# Map tokens → phone numbers at startup (only for configured partners)
+SHORTCUT_TOKEN_MAP: dict[str, str] = {}
+if PARTNER1_API_TOKEN and PARTNER1_PHONE:
+    SHORTCUT_TOKEN_MAP[PARTNER1_API_TOKEN] = PARTNER1_PHONE
+if PARTNER2_API_TOKEN and PARTNER2_PHONE:
+    SHORTCUT_TOKEN_MAP[PARTNER2_API_TOKEN] = PARTNER2_PHONE
+
 # Gmail API is used for Feature 010 Amazon-YNAB sync (reads Amazon order emails).
 # Auth handled via token.json (shared with Google Calendar OAuth).
 

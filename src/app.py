@@ -26,6 +26,7 @@ from src.config import (
     PHONE_TO_NAME,
     PRIMARY_PHONE,
     SCHEDULER_ENABLED,
+    SHORTCUT_TOKEN_MAP,
     WHATSAPP_ACCESS_TOKEN,
     WHATSAPP_APP_SECRET,
     WHATSAPP_PHONE_NUMBER_ID,
@@ -116,6 +117,30 @@ async def verify_n8n_auth(x_n8n_auth: str = Header(None)):
         raise HTTPException(status_code=503, detail="n8n authentication not configured")
     if x_n8n_auth != N8N_WEBHOOK_SECRET:
         raise HTTPException(status_code=401, detail="Invalid or missing X-N8N-Auth header")
+
+
+# ---------------------------------------------------------------------------
+# Auth dependency for voice/Siri Shortcut endpoints (Feature 032)
+# ---------------------------------------------------------------------------
+
+
+async def verify_shortcut_auth(request: Request) -> str:
+    """Verify Authorization Bearer token for voice endpoints.
+
+    Maps token to phone number via SHORTCUT_TOKEN_MAP.
+    Returns the sender's phone number.
+    Raises 401 if token is missing/invalid.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    token = auth_header[7:]  # strip "Bearer "
+    phone = SHORTCUT_TOKEN_MAP.get(token)
+    if not phone:
+        raise HTTPException(status_code=401, detail="Invalid API token")
+
+    return phone
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +440,15 @@ async def health():
         "configured": outlook_configured,
         "connected": outlook_configured,
         "error": None,
+    }
+
+    # Voice access (Siri Shortcuts — just check if tokens configured)
+    voice_configured = bool(SHORTCUT_TOKEN_MAP)
+    integrations["voice_access"] = {
+        "required": False,
+        "configured": voice_configured,
+        "connected": voice_configured,
+        "error": None if voice_configured else None,
     }
 
     # --- Determine overall status ---
@@ -1277,3 +1311,122 @@ async def weekly_budget_summary(background_tasks: BackgroundTasks):
 
     background_tasks.add_task(_run)
     return {"status": "generating"}
+
+
+# ---------------------------------------------------------------------------
+# Feature 032: Siri Voice Access
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/voice/message")
+async def voice_message(request: Request):
+    """General-purpose voice endpoint — accepts natural language from Siri.
+
+    Authentication: Bearer token maps to partner identity.
+    Returns voice-optimized JSON response (always HTTP 200 for Shortcuts compatibility).
+    """
+    from src.voice import VoiceRequest, VoiceResponse, run_with_voice_timeout
+
+    # Auth — get sender phone from Bearer token
+    sender_phone = await verify_shortcut_auth(request)
+
+    # Rate limit (reuse existing per-phone pattern)
+    if not _check_rate_limit(sender_phone):
+        logger.warning("Voice rate limit exceeded for %s", PHONE_TO_NAME.get(sender_phone, sender_phone))
+        return VoiceResponse(
+            success=False,
+            error="Too many requests. Try again in a moment.",
+        ).model_dump()
+
+    body = await request.json()
+    voice_req = VoiceRequest(**body)
+
+    if not voice_req.text:
+        return VoiceResponse(success=False, error="No voice input received.").model_dump()
+
+    sender_name = PHONE_TO_NAME.get(sender_phone, "Unknown")
+    logger.info("Voice message from %s: %s", sender_name, voice_req.text[:100])
+
+    # Annotate the message with channel info for conversation logging
+    channel_tag = "[Voice: siri]"
+    annotated_text = f"{channel_tag} {voice_req.text}"
+
+    result = await run_with_voice_timeout(
+        handler_func=handle_message,
+        sender_phone=sender_phone,
+        message_text=annotated_text,
+        send_whatsapp_func=send_message,
+    )
+
+    return result.model_dump()
+
+
+@app.post("/api/v1/voice/preset")
+async def voice_preset(request: Request):
+    """Preset quick-action voice endpoint — optimized handlers for common tasks.
+
+    Routes to specific handlers based on preset_action field.
+    Uses handle_message with a targeted prompt for each action.
+    """
+    from src.voice import VoiceRequest, VoiceResponse, run_with_voice_timeout
+
+    # Auth
+    sender_phone = await verify_shortcut_auth(request)
+
+    # Rate limit
+    if not _check_rate_limit(sender_phone):
+        return VoiceResponse(
+            success=False,
+            error="Too many requests. Try again in a moment.",
+        ).model_dump()
+
+    body = await request.json()
+    voice_req = VoiceRequest(**body)
+
+    valid_presets = {"calendar", "grocery_add", "dinner", "remind"}
+    if not voice_req.preset_action or voice_req.preset_action not in valid_presets:
+        return VoiceResponse(
+            success=False,
+            error="Unknown preset action.",
+        ).model_dump()
+
+    sender_name = PHONE_TO_NAME.get(sender_phone, "Unknown")
+    action = voice_req.preset_action
+    logger.info("Voice preset '%s' from %s: %s", action, sender_name, (voice_req.text or "")[:100])
+
+    # Build optimized prompts per preset action
+    if action == "calendar":
+        prompt = (
+            "[Voice: preset:calendar] Give me a brief voice-friendly summary of today's schedule. "
+            "Format it for speaking aloud — use natural language, not bullet points. "
+            "Start with how many things are on the calendar, then list them."
+        )
+    elif action == "grocery_add":
+        if not voice_req.text:
+            return VoiceResponse(success=False, error="What would you like to add?").model_dump()
+        prompt = (
+            f"[Voice: preset:grocery_add] Add these items to the grocery list: {voice_req.text}. "
+            "Confirm what was added in a brief spoken response."
+        )
+    elif action == "dinner":
+        prompt = (
+            "[Voice: preset:dinner] What's for dinner tonight? "
+            "Check the meal plan for today. Give a brief spoken answer — "
+            "just the meal name and any prep notes. If no plan exists, suggest something."
+        )
+    else:  # remind
+        if not voice_req.text:
+            return VoiceResponse(success=False, error="What would you like to be reminded about?").model_dump()
+        prompt = (
+            f"[Voice: preset:remind] Create a calendar event for this reminder: {voice_req.text}. "
+            "Parse the date and time from the request. Confirm the event details in a brief spoken response."
+        )
+
+    result = await run_with_voice_timeout(
+        handler_func=handle_message,
+        sender_phone=sender_phone,
+        message_text=prompt,
+        send_whatsapp_func=send_message,
+    )
+
+    return result.model_dump()
