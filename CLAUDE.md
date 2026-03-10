@@ -109,6 +109,9 @@ Sections without frontmatter are always included. The `_parse_frontmatter()` and
 - YAML config file at `config/family.yaml` (human-edited, committed per instance) + existing JSON data files (028-template-repo-readiness)
 - Python 3.12 + FastAPI, anthropic SDK, PyYAML (existing) (030-quick-start-onboarding)
 - JSON files in `data/` (unchanged) (030-quick-start-onboarding)
+- Python 3.12 (existing) + FastAPI, anthropic SDK, PyYAML (existing — no new deps) (031-generic-template-repo)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK, existing deps — no new Python dependencies (032-siri-voice-access)
+- JSON files in `data/` (existing pattern for conversation logs) (032-siri-voice-access)
 
 **Core stack**: Python 3.12 + FastAPI, anthropic SDK (Claude Haiku 4.5 for chat, Claude vision for OCR), uvicorn, httpx, Pydantic
 
@@ -132,7 +135,7 @@ Sections without frontmatter are always included. The `_parse_frontmatter()` and
 
 **CI/CD**: GitHub Actions (Ruff lint, pytest, Trivy security scan, Railway deploy, GHCR Docker images)
 
-**Public URL**: `https://mombot.sierrastoryco.com`
+**Public URL**: `https://mombot.sierracodeco.com`
 
 ## Deployment
 
@@ -242,5 +245,6 @@ Features 001-028 are implemented and deployed. Spec artifacts for each live unde
 - 028: Template repo readiness (family config externalization, enhanced health check, onboarding/pricing docs)
 
 ## Recent Changes
+- 032-siri-voice-access: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK, existing deps — no new Python dependencies
+- 031-generic-template-repo: Added Python 3.12 (existing) + FastAPI, anthropic SDK, PyYAML (existing — no new deps)
 - 030-quick-start-onboarding: Added `src/integrations.py` integration registry (9 integrations, 77 tools mapped). Dynamic tool/prompt filtering based on configured integrations — minimal deployments (WhatsApp + AI only) exclude unconfigured features. YAML frontmatter on system prompt files (`requires`/`requires_any` tags). Pre-deployment validation script (`scripts/validate_setup.py`). Health endpoint uses registry for integration detection. Quick Start section in ONBOARDING.md.
-- 028-template-repo-readiness: Externalized all hardcoded family references into `config/family.yaml`. Added `src/family_config.py` YAML config loader, `render_system_prompt()`/`render_tool_descriptions()` with placeholder injection, enhanced `/health` endpoint with per-integration status, operator docs (WHATSAPP_SETUP.md, ONBOARDING.md, PRICING.md, SERVICE_AGREEMENT.md)
