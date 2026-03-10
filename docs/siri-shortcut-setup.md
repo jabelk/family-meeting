@@ -6,7 +6,7 @@ Set up hands-free voice access to the family assistant via Apple Shortcuts and S
 
 - iPhone with iOS 15 or later
 - The family assistant server running and publicly accessible
-- Your server URL (e.g., `https://mombot.sierrastoryco.com`)
+- Your server URL (e.g., `https://mombot.sierracodeco.com`)
 
 ## Step 1: Generate API Tokens
 

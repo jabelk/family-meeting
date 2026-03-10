@@ -1338,8 +1338,11 @@ async def voice_message(request: Request):
             error="Too many requests. Try again in a moment.",
         ).model_dump()
 
-    body = await request.json()
-    voice_req = VoiceRequest(**body)
+    try:
+        body = await request.json()
+        voice_req = VoiceRequest(**body)
+    except Exception:
+        return VoiceResponse(success=False, error="Invalid request.").model_dump()
 
     if not voice_req.text:
         return VoiceResponse(success=False, error="No voice input received.").model_dump()
@@ -1380,8 +1383,11 @@ async def voice_preset(request: Request):
             error="Too many requests. Try again in a moment.",
         ).model_dump()
 
-    body = await request.json()
-    voice_req = VoiceRequest(**body)
+    try:
+        body = await request.json()
+        voice_req = VoiceRequest(**body)
+    except Exception:
+        return VoiceResponse(success=False, error="Invalid request.").model_dump()
 
     valid_presets = {"calendar", "grocery_add", "dinner", "remind"}
     if not voice_req.preset_action or voice_req.preset_action not in valid_presets:
