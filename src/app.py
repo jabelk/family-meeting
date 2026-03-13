@@ -38,10 +38,15 @@ from src.tools.calendar import delete_assistant_events
 from src.transcribe import MAX_DURATION_SECONDS, get_audio_duration, transcribe_voice_note
 from src.whatsapp import download_media, extract_message, send_message
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+# Configure logging explicitly so uvicorn cannot override the root handler.
+# logging.basicConfig() is a no-op if the root logger already has handlers
+# (which uvicorn may add before our app code runs on reload).
+_root = logging.getLogger()
+_root.setLevel(logging.INFO)
+if not _root.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    _root.addHandler(_handler)
 logger = logging.getLogger(__name__)
 
 _APP_START_TIME = time.time()
@@ -205,14 +210,21 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
     parsed = extract_message(payload)
 
     if not parsed:
+        logger.info("Webhook received — no processable message (status update or empty)")
         return {"status": "ok"}
 
     phone = parsed["phone"]
     sender_name = parsed["name"]
+    logger.info("Webhook parsed — phone=%s name=%s type=%s", phone, sender_name, parsed.get("type"))
 
     # Reject unrecognized phone numbers
     if phone not in PHONE_TO_NAME:
-        logger.warning("Message from unrecognized number: %s (%s)", phone, sender_name)
+        logger.warning(
+            "Message from unrecognized number: %s (%s) — known phones: %s",
+            phone,
+            sender_name,
+            list(PHONE_TO_NAME.keys()),
+        )
         return {"status": "ok"}
 
     # Per-phone rate limiting
