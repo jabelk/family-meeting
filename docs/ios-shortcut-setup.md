@@ -54,7 +54,7 @@ Every Sunday at 7 PM, this shortcut:
 ### Step 4: Send to the Bot
 
 1. Add **"Get Contents of URL"** action
-2. Set URL to: `https://mombot.sierrastoryco.com/api/v1/calendar/work-events`
+2. Set URL to: `https://mombot.sierracodeco.com/api/v1/calendar/work-events`
 3. Set Method to **POST**
 4. Add Header:
    - **Key**: `X-N8N-Auth`
