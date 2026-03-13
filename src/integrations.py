@@ -43,6 +43,7 @@ INTEGRATION_REGISTRY: dict[str, Integration] = {
             "get_routine",
             "delete_routine",
             "get_help",
+            "check_system_logs",
         ),
         prompt_tag="core",
         always_enabled=True,
