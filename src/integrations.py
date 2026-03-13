@@ -263,3 +263,19 @@ def get_integration_status(name: str) -> str:
     if integration.always_enabled:
         return "enabled"
     return _check_env_vars(integration.env_vars)
+
+
+# Reverse map: tool_name → integration display_name (built once at import time)
+_TOOL_TO_INTEGRATION: dict[str, str] = {}
+for _integ_name, _integ in INTEGRATION_REGISTRY.items():
+    for _tool in _integ.tools:
+        _TOOL_TO_INTEGRATION[_tool] = _integ.display_name
+
+
+def get_integration_for_tool(tool_name: str) -> str:
+    """Return the display name of the integration that owns a tool.
+
+    E.g. "create_quick_event" → "Google Calendar", "add_action_item" → "Notion".
+    Returns "Unknown" for tools not in any integration.
+    """
+    return _TOOL_TO_INTEGRATION.get(tool_name, "Unknown")

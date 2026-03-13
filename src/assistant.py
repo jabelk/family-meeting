@@ -19,6 +19,7 @@ from src.config import (
 )
 from src.integrations import get_tools_for_integrations
 from src.prompts import render_system_prompt, render_tool_descriptions
+from src.tool_resilience import execute_with_retry
 from src.tools import (
     amazon_sync,
     calendar,
@@ -1844,15 +1845,20 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                                 "split_receipt_transaction",
                             ):
                                 tool_input["_phone"] = sender_phone
-                            result = func(**tool_input)
+                            result = execute_with_retry(func, tool_name, tool_input)
                             # Track usage for feature discovery suggestions
                             if sender_phone != "system":
                                 discovery.record_usage(sender_phone, tool_name)
                         else:
                             result = f"Unknown tool: {tool_name}"
                     except Exception as e:
-                        logger.error("Tool %s failed: %s", tool_name, e)
-                        result = f"Error: {tool_name} is currently unavailable. Skip this section."
+                        # Safety net — if resilience wrapper itself fails
+                        logger.error("Resilience wrapper failed for %s: %s", tool_name, e)
+                        result = (
+                            f"TOOL FAILED: {tool_name} — unexpected error. "
+                            f"DO NOT skip this — tell the user that something went wrong "
+                            f"with {tool_name} and their request was NOT completed."
+                        )
 
                     tool_results.append(
                         {
