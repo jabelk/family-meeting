@@ -33,11 +33,11 @@ def test_render_system_prompt_with_config():
     assert "{bot_name}" not in rendered
 
 
-def test_load_tool_descriptions_returns_77():
-    """All 77 tool descriptions load from external Markdown files."""
+def test_load_tool_descriptions_returns_78():
+    """All 78 tool descriptions load from external Markdown files."""
     descs = load_tool_descriptions()
     assert isinstance(descs, dict)
-    assert len(descs) == 77, f"Expected 77 tool descriptions, got {len(descs)}"
+    assert len(descs) == 78, f"Expected 78 tool descriptions, got {len(descs)}"
 
 
 def test_load_tool_descriptions_has_key_tools():
@@ -145,4 +145,4 @@ class TestFilteredToolDescriptions:
 
     def test_none_returns_all(self):
         descs = load_tool_descriptions()
-        assert len(descs) == 77
+        assert len(descs) == 78
