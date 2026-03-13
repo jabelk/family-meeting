@@ -221,7 +221,9 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
     if phone not in PHONE_TO_NAME:
         logger.warning(
             "Message from unrecognized number: %s (%s) — known phones: %s",
-            phone, sender_name, list(PHONE_TO_NAME.keys()),
+            phone,
+            sender_name,
+            list(PHONE_TO_NAME.keys()),
         )
         return {"status": "ok"}
 
