@@ -162,10 +162,21 @@ class TestExecuteWithRetry:
     def test_non_retryable_no_retry(self):
         response = httpx.Response(403, request=httpx.Request("GET", "https://example.com"))
         func = MagicMock(side_effect=httpx.HTTPStatusError("forbidden", request=response.request, response=response))
-        result = execute_with_retry(func, "create_quick_event", {"title": "test"})
+        # Use a tool without fallback mapping to test pure non-retryable behavior
+        result = execute_with_retry(func, "get_calendar_events", {"date": "today"})
         assert func.call_count == 1
         assert "TOOL FAILED" in result
         assert "Google Calendar" in result
+
+    def test_non_retryable_write_tool_tries_fallback(self):
+        """Non-retryable error on a write tool should attempt fallback."""
+        response = httpx.Response(403, request=httpx.Request("GET", "https://example.com"))
+        func = MagicMock(side_effect=httpx.HTTPStatusError("forbidden", request=response.request, response=response))
+        fallback_result = (True, "FALLBACK USED: test", "add_action_item")
+        with patch("src.tool_resilience.attempt_fallback", return_value=fallback_result):
+            result = execute_with_retry(func, "create_quick_event", {"title": "test"})
+        assert func.call_count == 1  # No retry for non-retryable
+        assert "FALLBACK" in result
 
     def test_input_error_no_retry(self):
         func = MagicMock(side_effect=ValueError("bad date"))
