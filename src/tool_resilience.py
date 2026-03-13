@@ -161,6 +161,9 @@ def execute_with_retry(
 
             if category == ExceptionCategory.NON_RETRYABLE:
                 logger.warning("Tool %s non-retryable error: %s", tool_name, exc)
+                # Try fallback for write tools before returning error
+                if tool_name in FALLBACK_MAPPINGS:
+                    return _handle_exhausted_retries(tool_name, tool_input, exc)
                 return format_error_message(tool_name, exc, category)
 
             # RETRYABLE — retry if attempts remain
