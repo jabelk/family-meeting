@@ -50,7 +50,8 @@ def _query_axiom(apl: str) -> list[dict[str, Any]]:
 
 def query_recent_errors(minutes: int = 5, limit: int = 20) -> list[dict[str, Any]]:
     """Query recent error-level logs from the last N minutes."""
-    apl = f"['{AXIOM_DATASET}'] | where data.severity == \"error\" | order by _time desc | limit {limit}"
+    # APL field names are top-level (severity, message) — NOT data.severity
+    apl = f"['{AXIOM_DATASET}'] | where severity == 'error' | order by _time desc | limit {limit}"
     return _query_axiom(apl)
 
 
