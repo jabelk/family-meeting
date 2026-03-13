@@ -294,12 +294,13 @@ def _adapt_params_for_fallback(primary_tool: str, fallback_tool: str, tool_input
         title = tool_input.get("title", tool_input.get("summary", "Calendar reminder"))
         date = tool_input.get("date", tool_input.get("start_date", ""))
         time_str = tool_input.get("time", tool_input.get("start_time", ""))
-        description = f"[Calendar fallback] {title}"
+        desc = f"[Calendar fallback] {title}"
         if date:
-            description += f" on {date}"
+            desc += f" on {date}"
         if time_str:
-            description += f" at {time_str}"
-        adapted = {"title": description}
+            desc += f" at {time_str}"
+        # add_action_item requires: assignee (str), description (str)
+        adapted: dict[str, Any] = {"assignee": "Family", "description": desc}
         # Pass through _phone if present
         if "_phone" in tool_input:
             adapted["_phone"] = tool_input["_phone"]
