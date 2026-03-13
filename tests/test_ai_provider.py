@@ -153,6 +153,7 @@ class TestCreateMessage:
         )
         assert provider == "claude"
 
+    @patch("src.ai_provider.OPENAI_API_KEY", "test-key")
     @patch("src.ai_provider.OpenAI")
     @patch("src.ai_provider.anthropic.Anthropic")
     def test_failover_to_openai_on_529(self, mock_anthropic_cls, mock_openai_cls):
@@ -183,6 +184,7 @@ class TestCreateMessage:
         assert provider == "openai"
         assert response.content[0].text == "Backup response"
 
+    @patch("src.ai_provider.OPENAI_API_KEY", "test-key")
     @patch("src.ai_provider.OpenAI")
     @patch("src.ai_provider.anthropic.Anthropic")
     def test_both_down_raises(self, mock_anthropic_cls, mock_openai_cls):

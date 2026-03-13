@@ -1397,8 +1397,7 @@ def _handle_amazon_sync_trigger() -> str:
         orders, auth_failed = amazon_sync.get_amazon_orders()
         if auth_failed:
             return (
-                "Error: Amazon sync paused — Gmail OAuth token expired. "
-                "Ask the operator to re-run setup_calendar.py."
+                "Error: Amazon sync paused — Gmail OAuth token expired. Ask the operator to re-run setup_calendar.py."
             )
         if not orders:
             return "No Amazon orders found in the last 30 days."
