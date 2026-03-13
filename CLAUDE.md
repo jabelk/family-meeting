@@ -112,6 +112,10 @@ Sections without frontmatter are always included. The `_parse_frontmatter()` and
 - Python 3.12 (existing) + FastAPI, anthropic SDK, PyYAML (existing — no new deps) (031-generic-template-repo)
 - Python 3.12 (existing codebase) + FastAPI, anthropic SDK, existing deps — no new Python dependencies (032-siri-voice-access)
 - JSON files in `data/` (existing pattern for conversation logs) (032-siri-voice-access)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK, httpx, notion-client, google-api-python-client — no new dependencies (033-tool-failure-resilience)
+- N/A (no new storage; existing JSON files in `data/` unchanged) (033-tool-failure-resilience)
+- Python 3.12 (existing codebase) + FastAPI, anthropic SDK, openai SDK (new), httpx, PyYAML (034-ai-failover-resilience)
+- JSON files in `data/` (existing pattern, unchanged) (034-ai-failover-resilience)
 
 **Core stack**: Python 3.12 + FastAPI, anthropic SDK (Claude Haiku 4.5 for chat, Claude vision for OCR), uvicorn, httpx, Pydantic
 
@@ -245,6 +249,6 @@ Features 001-028 are implemented and deployed. Spec artifacts for each live unde
 - 028: Template repo readiness (family config externalization, enhanced health check, onboarding/pricing docs)
 
 ## Recent Changes
+- 034-ai-failover-resilience: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK, openai SDK (new), httpx, PyYAML
+- 033-tool-failure-resilience: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK, httpx, notion-client, google-api-python-client — no new dependencies
 - 032-siri-voice-access: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK, existing deps — no new Python dependencies
-- 031-generic-template-repo: Added Python 3.12 (existing) + FastAPI, anthropic SDK, PyYAML (existing — no new deps)
-- 030-quick-start-onboarding: Added `src/integrations.py` integration registry (9 integrations, 77 tools mapped). Dynamic tool/prompt filtering based on configured integrations — minimal deployments (WhatsApp + AI only) exclude unconfigured features. YAML frontmatter on system prompt files (`requires`/`requires_any` tags). Pre-deployment validation script (`scripts/validate_setup.py`). Health endpoint uses registry for integration detection. Quick Start section in ONBOARDING.md.

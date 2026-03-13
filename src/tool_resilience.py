@@ -145,6 +145,63 @@ def _get_diagnosis(tool_name: str, error_msg: str) -> str:
         return ""
 
 
+# ---------------------------------------------------------------------------
+# Tool result auditing — detect error strings that look like success
+# ---------------------------------------------------------------------------
+
+# Patterns that indicate a tool result is actually an error
+_ERROR_PREFIXES = ("error:", "tool failed:", "failed:", "exception:")
+_ERROR_SUBSTRINGS = (
+    "unavailable",
+    "unauthorized",
+    "forbidden",
+    "not found",
+    "error occurred",
+    "permission denied",
+    "rate limit",
+    "timed out",
+    "connection refused",
+)
+
+
+def audit_tool_result(tool_name: str, result_str: str) -> tuple[bool, str]:
+    """Check if a tool result string contains hidden error indicators.
+
+    Returns (is_error, result_with_warning) where result_with_warning prepends
+    a warning prefix if an error is detected, or returns the original string.
+    """
+    if not result_str:
+        return True, (
+            f"TOOL WARNING: {tool_name} returned an empty result — this likely indicates a failure. "
+            f"Tell the user the action may not have completed. Original result: (empty)"
+        )
+
+    lower = result_str.lower().strip()
+
+    # Check for known error prefixes
+    for prefix in _ERROR_PREFIXES:
+        if lower.startswith(prefix):
+            # Already has TOOL FAILED prefix — no double-wrapping needed
+            if lower.startswith("tool failed:"):
+                return True, result_str
+            return True, (
+                f"TOOL WARNING: The result from {tool_name} may indicate a failure — "
+                f"check the details and inform the user if the action did not succeed. "
+                f"Result: {result_str}"
+            )
+
+    # Check for error substrings
+    for substr in _ERROR_SUBSTRINGS:
+        if substr in lower:
+            return True, (
+                f"TOOL WARNING: The result from {tool_name} may indicate a failure — "
+                f"check the details and inform the user if the action did not succeed. "
+                f"Result: {result_str}"
+            )
+
+    return False, result_str
+
+
 # Retry delays in seconds for attempt 1 and attempt 2
 _RETRY_DELAYS = (1, 2)
 _MAX_RETRIES = 2

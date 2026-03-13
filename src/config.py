@@ -179,8 +179,9 @@ if PARTNER2_API_TOKEN and PARTNER2_PHONE:
 # Gmail API is used for Feature 010 Amazon-YNAB sync (reads Amazon order emails).
 # Auth handled via token.json (shared with Google Calendar OAuth).
 
-# OpenAI (optional — used for voice note transcription, Feature 019)
+# OpenAI (optional — used for voice note transcription and AI failover backup)
 OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 # Google OAuth (optional — for loading Calendar credentials from env vars in containers)
 GOOGLE_TOKEN_JSON: str = os.environ.get("GOOGLE_TOKEN_JSON", "")

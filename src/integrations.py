@@ -201,6 +201,14 @@ INTEGRATION_REGISTRY: dict[str, Integration] = {
         tools=(),  # Voice is a transport, not a tool provider
         prompt_tag="voice_access",
     ),
+    "openai_backup": Integration(
+        name="openai_backup",
+        display_name="OpenAI Backup",
+        required=False,
+        env_vars=("OPENAI_API_KEY",),
+        tools=(),  # Backup borrows tools from primary's filtered set — no owned tools
+        prompt_tag="openai_backup",
+    ),
 }
 
 

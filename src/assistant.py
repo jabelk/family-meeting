@@ -5,12 +5,11 @@ import logging
 from datetime import datetime
 
 import httpx
-from anthropic import Anthropic
 
 from src import context, conversation, drive_times, preferences, routines
+from src.ai_provider import create_message as ai_create_message
 from src.config import (
     ALL_CALENDAR_NAMES,
-    ANTHROPIC_API_KEY,
     DEFAULT_CALENDAR,
     ENABLED_INTEGRATIONS,
     FAMILY_CONFIG,
@@ -19,7 +18,7 @@ from src.config import (
 )
 from src.integrations import get_tools_for_integrations
 from src.prompts import render_system_prompt, render_tool_descriptions
-from src.tool_resilience import execute_with_retry
+from src.tool_resilience import audit_tool_result, execute_with_retry
 from src.tools import (
     amazon_sync,
     calendar,
@@ -38,8 +37,6 @@ from src.tools import (
 )
 
 logger = logging.getLogger(__name__)
-
-client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # Module-level storage for images in the current conversation.
 # Set by handle_message, consumed by extract_and_save_recipe tool handler.
@@ -1399,7 +1396,10 @@ def _handle_amazon_sync_trigger() -> str:
 
         orders, auth_failed = amazon_sync.get_amazon_orders()
         if auth_failed:
-            return "Amazon sync paused — Gmail OAuth token expired. Ask the operator to re-run setup_calendar.py."
+            return (
+                "Error: Amazon sync paused — Gmail OAuth token expired. "
+                "Ask the operator to re-run setup_calendar.py."
+            )
         if not orders:
             return "No Amazon orders found in the last 30 days."
 
@@ -1817,6 +1817,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
     # Agentic tool-use loop (capped to prevent runaway API costs)
     MAX_TOOL_ITERATIONS = 25
     iteration = 0
+    provider_used = "claude"
 
     while True:
         iteration += 1
@@ -1826,9 +1827,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                 conversation.save_turn(sender_phone, messages[history_len:])
             return "I hit my processing limit for this request. Please try a simpler question or break it into parts."
 
-        response = client.messages.create(
-            model="claude-opus-4-20250514",
-            max_tokens=2048,
+        response, provider_used = ai_create_message(
             system=system,
             tools=TOOLS,
             messages=messages,
@@ -1870,6 +1869,8 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                             ):
                                 tool_input["_phone"] = sender_phone
                             result = execute_with_retry(func, tool_name, tool_input)
+                            # Audit result for hidden error strings
+                            _is_error, result = audit_tool_result(tool_name, result)
                             # Track usage for feature discovery suggestions
                             if sender_phone != "system":
                                 discovery.record_usage(sender_phone, tool_name)
@@ -1902,7 +1903,11 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
         if sender_phone != "system":
             conversation.save_turn(sender_phone, messages[history_len:])
         text_parts = [block.text for block in response.content if hasattr(block, "text")]
-        return "\n".join(text_parts) if text_parts else "I'm not sure how to help with that."
+        result_text = "\n".join(text_parts) if text_parts else "I'm not sure how to help with that."
+        # Append backup indicator if response came from OpenAI
+        if provider_used == "openai":
+            result_text += "\n\n_Note: using backup assistant today_"
+        return result_text
 
 
 def generate_daily_plan(target: str = DEFAULT_CALENDAR) -> str:
