@@ -910,6 +910,21 @@ _ALL_TOOLS = [
         "description": _tool_descs.get("get_help", "get_help"),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "name": "check_system_logs",
+        "description": _tool_descs.get("check_system_logs", "check_system_logs"),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "minutes": {
+                    "type": "integer",
+                    "description": "How many minutes of recent logs to check. Default 10.",
+                    "default": 10,
+                },
+            },
+            "required": [],
+        },
+    },
     # Amazon-YNAB Sync (Feature 010)
     {
         "name": "amazon_sync_status",
@@ -1568,6 +1583,7 @@ TOOL_FUNCTIONS = {
     "handle_meal_swap": lambda **kw: proactive.handle_meal_swap(kw["plan"], kw["day"], kw["new_meal"]),
     # Feature discovery
     "get_help": lambda **kw: discovery.get_help(kw.get("_phone", "")),
+    "check_system_logs": lambda **kw: _handle_check_system_logs(**kw),
     # Amazon-YNAB Sync (Feature 010)
     "amazon_spending_breakdown": lambda **kw: amazon_sync.get_amazon_spending_breakdown(kw.get("month", "")),
     "amazon_sync_status": lambda **kw: amazon_sync.get_sync_status(),
@@ -1701,6 +1717,14 @@ def _handle_remove_preference(**kw) -> str:
             f"I couldn't find a preference matching '{search_text}'. "
             "Try 'what are my preferences?' to see your current list."
         )
+
+
+def _handle_check_system_logs(**kw) -> str:
+    """Handle check_system_logs tool — query recent logs for system health."""
+    from src.log_diagnostics import check_system_logs
+
+    minutes = int(kw.get("minutes", 10))
+    return check_system_logs(minutes=minutes)
 
 
 def handle_message(sender_phone: str, message_text: str, image_data: dict | None = None) -> str:

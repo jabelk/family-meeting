@@ -123,3 +123,67 @@ def diagnose_tool_failure(tool_name: str, error_msg: str) -> str:
             )
 
     return " ".join(diagnoses)
+
+
+def check_system_logs(minutes: int = 10) -> str:
+    """Query recent logs and return a human-readable system status report.
+
+    This is the tool-callable function that lets the bot inspect its own
+    health on demand (e.g., when a user asks "what's going on?" or
+    "are you seeing any errors?").
+    """
+    if not AXIOM_QUERY_TOKEN:
+        return "Log diagnostics not configured (AXIOM_QUERY_TOKEN not set)."
+
+    # Get recent logs (all severities for overview)
+    all_logs = _query_axiom(f"['{AXIOM_DATASET}'] | order by _time desc | limit 50")
+
+    if not all_logs:
+        return "No recent logs found — the log pipeline may not be active yet."
+
+    # Build status report
+    lines: list[str] = []
+    lines.append(f"System logs review ({len(all_logs)} entries, last {minutes} min):")
+
+    # Count by type
+    errors = [entry for entry in all_logs if "ERROR" in entry["message"]]
+    warnings = [entry for entry in all_logs if "WARNING" in entry["message"]]
+    lines.append(f"- {len(errors)} errors, {len(warnings)} warnings")
+
+    # Detect specific issues
+    all_text = "\n".join(entry["message"] for entry in all_logs).lower()
+
+    issues: list[str] = []
+    if "invalid_grant" in all_text or "token has been expired or revoked" in all_text:
+        issues.append("Google Calendar auth token is expired (needs setup_calendar.py refresh)")
+    if "anthropic" in all_text and ("overloaded" in all_text or "529" in all_text):
+        issues.append("Claude AI service had errors (may be overloaded)")
+    if "notion" in all_text and "apiresponseerror" in all_text:
+        issues.append("Notion API returned errors")
+    if "anylist" in all_text and ("connection refused" in all_text or "connect timeout" in all_text):
+        issues.append("AnyList sidecar is not responding")
+    if "ynab" in all_text and ("401" in all_text or "403" in all_text):
+        issues.append("YNAB authentication failed")
+    if "rate limit" in all_text or "429" in all_text:
+        issues.append("An API rate limit was hit")
+    if "fallback succeeded" in all_text:
+        issues.append("Tool fallbacks were used (a primary service was down, but backup worked)")
+
+    if issues:
+        lines.append("Known issues:")
+        for issue in issues:
+            lines.append(f"  * {issue}")
+    else:
+        lines.append("No known issues detected.")
+
+    # Show webhook activity
+    webhooks = [entry for entry in all_logs if "Webhook parsed" in entry["message"]]
+    if webhooks:
+        lines.append(f"- {len(webhooks)} messages processed recently")
+
+    # Show last health check
+    health = [entry for entry in all_logs if "/health" in entry["message"]]
+    if health:
+        lines.append(f"- Health checks responding OK ({len(health)} in window)")
+
+    return "\n".join(lines)
