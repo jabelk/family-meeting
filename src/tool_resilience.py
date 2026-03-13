@@ -103,6 +103,9 @@ def format_error_message(tool_name: str, exc: Exception, category: ExceptionCate
     display_name = get_integration_for_tool(tool_name)
     reason = _human_readable_reason(exc)
 
+    # Query logs for a specific diagnosis of what went wrong
+    diagnosis = _get_diagnosis(tool_name, str(exc))
+
     if category == ExceptionCategory.INPUT_ERROR:
         return (
             f"TOOL FAILED: {tool_name} — invalid input: {reason}. "
@@ -110,22 +113,36 @@ def format_error_message(tool_name: str, exc: Exception, category: ExceptionCate
             f"and ask them to clarify or correct the input."
         )
 
+    diagnosis_suffix = f" Diagnosis: {diagnosis}" if diagnosis else ""
+
     if category == ExceptionCategory.RETRYABLE:
         return (
             f"TOOL FAILED: {tool_name} ({display_name}) — {reason} "
-            f"(failed after retries). "
+            f"(failed after retries).{diagnosis_suffix} "
             f"DO NOT skip this — you MUST tell the user that {display_name} is "
             f"currently having issues and their request was NOT completed. "
+            f"Include the diagnosis details so the user understands the root cause. "
             f"Suggest an alternative."
         )
 
     # NON_RETRYABLE
     return (
-        f"TOOL FAILED: {tool_name} ({display_name}) — {reason}. "
+        f"TOOL FAILED: {tool_name} ({display_name}) — {reason}.{diagnosis_suffix} "
         f"DO NOT skip this — you MUST tell the user that {display_name} "
         f"encountered an error and their request was NOT completed. "
+        f"Include the diagnosis details so the user understands the root cause. "
         f"Suggest an alternative."
     )
+
+
+def _get_diagnosis(tool_name: str, error_msg: str) -> str:
+    """Get log-based diagnosis, swallowing any errors."""
+    try:
+        from src.log_diagnostics import diagnose_tool_failure
+
+        return diagnose_tool_failure(tool_name, error_msg)
+    except Exception:
+        return ""
 
 
 # Retry delays in seconds for attempt 1 and attempt 2
@@ -238,6 +255,7 @@ def attempt_fallback(
     tool_name: str,
     tool_input: dict[str, Any],
     available_tools: dict[str, Callable[..., Any]],
+    original_error: str = "",
 ) -> tuple[bool, str, str | None]:
     """Attempt a fallback action for a failed write tool.
 
@@ -259,6 +277,10 @@ def attempt_fallback(
     # Adapt parameters for the fallback tool
     fallback_input = _adapt_params_for_fallback(tool_name, fallback_tool, tool_input)
 
+    # Get diagnosis for why the primary tool failed
+    diagnosis = _get_diagnosis(tool_name, original_error)
+    diagnosis_detail = f" Root cause: {diagnosis}" if diagnosis else ""
+
     try:
         result = available_tools[fallback_tool](**fallback_input)
         logger.info(
@@ -272,7 +294,9 @@ def attempt_fallback(
             (
                 f"FALLBACK USED: {primary_display} is down, so I used "
                 f"{fallback_display} instead. Result: {result}\n"
+                f"{diagnosis_detail}\n"
                 f'Tell the user: "{primary_display} is having issues right now — '
+                f"explain the root cause if known. "
                 f'I added this as a {fallback_display} item instead so nothing is lost."'
             ),
             fallback_tool,
@@ -325,7 +349,9 @@ def _handle_exhausted_retries(
         try:
             from src.assistant import TOOL_FUNCTIONS
 
-            success, result_msg, fallback_used = attempt_fallback(tool_name, tool_input, TOOL_FUNCTIONS)
+            success, result_msg, fallback_used = attempt_fallback(
+                tool_name, tool_input, TOOL_FUNCTIONS, original_error=str(last_exc) if last_exc else ""
+            )
             if success:
                 return result_msg
 
