@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 
+from src.ai_provider import AllProvidersDownError
 from src.assistant import generate_daily_plan, generate_meeting_prep, handle_message
 from src.config import (
     ANTHROPIC_API_KEY,
@@ -313,6 +314,13 @@ async def _process_and_reply(phone: str, text: str):
         elapsed = time.time() - start
         logger.info("Response generated in %.1fs (%d chars)", elapsed, len(reply))
         await send_message(phone, reply)
+    except AllProvidersDownError:
+        logger.error("Both AI providers down — sending static fallback to %s", phone)
+        await send_message(
+            phone,
+            "I'm having trouble connecting to my AI services right now. "
+            "Please try again in a few minutes. If this keeps happening, let Jason know.",
+        )
     except Exception:
         logger.exception("Error processing message from %s", phone)
         await send_message(phone, "Sorry, something went wrong. Please try again.")

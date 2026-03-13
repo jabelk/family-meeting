@@ -266,3 +266,53 @@ class TestFallbackMappings:
     def test_tools_without_fallback_have_last_resort(self):
         for tool, (fallback, last_resort) in FALLBACK_MAPPINGS.items():
             assert last_resort, f"{tool} missing last_resort_type"
+
+
+# ---------------------------------------------------------------------------
+# audit_tool_result tests
+# ---------------------------------------------------------------------------
+
+
+class TestAuditToolResult:
+    def test_normal_result_passes(self):
+        from src.tool_resilience import audit_tool_result
+
+        is_err, result = audit_tool_result("get_calendar_events", '[{"summary": "Meeting"}]')
+        assert not is_err
+        assert result == '[{"summary": "Meeting"}]'
+
+    def test_error_prefix_detected(self):
+        from src.tool_resilience import audit_tool_result
+
+        is_err, result = audit_tool_result("create_quick_event", "Error: currently unavailable")
+        assert is_err
+        assert "TOOL WARNING" in result
+
+    def test_tool_failed_prefix_passthrough(self):
+        from src.tool_resilience import audit_tool_result
+
+        is_err, result = audit_tool_result("add_action_item", "TOOL FAILED: add_action_item — server error")
+        assert is_err
+        # Should not double-wrap with TOOL WARNING
+        assert result.startswith("TOOL FAILED:")
+
+    def test_unavailable_substring_detected(self):
+        from src.tool_resilience import audit_tool_result
+
+        is_err, result = audit_tool_result("get_budget_summary", "Service unavailable, try later")
+        assert is_err
+        assert "TOOL WARNING" in result
+
+    def test_empty_result_detected(self):
+        from src.tool_resilience import audit_tool_result
+
+        is_err, result = audit_tool_result("save_meal_plan", "")
+        assert is_err
+        assert "empty result" in result
+
+    def test_forbidden_detected(self):
+        from src.tool_resilience import audit_tool_result
+
+        is_err, result = audit_tool_result("get_action_items", "403 Forbidden")
+        assert is_err
+        assert "TOOL WARNING" in result
