@@ -10,6 +10,8 @@ from src import context, conversation, drive_times, preferences, routines
 from src.ai_provider import (
     MODEL_OPUS,
     MODEL_SONNET,
+)
+from src.ai_provider import (
     create_message as ai_create_message,
 )
 from src.config import (
@@ -1736,9 +1738,17 @@ def _handle_check_system_logs(**kw) -> str:
 
 # Keywords/phrases that signal complex reasoning requiring Opus
 _OPUS_TRIGGERS = {
-    "weekly meeting", "family meeting", "meeting prep", "meeting agenda",
-    "budget review", "financial", "rebalance", "prioritize",
-    "plan the week", "weekly plan", "analyze",
+    "weekly meeting",
+    "family meeting",
+    "meeting prep",
+    "meeting agenda",
+    "budget review",
+    "financial",
+    "rebalance",
+    "prioritize",
+    "plan the week",
+    "weekly plan",
+    "analyze",
 }
 
 
