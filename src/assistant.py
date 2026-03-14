@@ -7,7 +7,13 @@ from datetime import datetime
 import httpx
 
 from src import context, conversation, drive_times, preferences, routines
-from src.ai_provider import create_message as ai_create_message
+from src.ai_provider import (
+    MODEL_OPUS,
+    MODEL_SONNET,
+)
+from src.ai_provider import (
+    create_message as ai_create_message,
+)
 from src.config import (
     ALL_CALENDAR_NAMES,
     DEFAULT_CALENDAR,
@@ -1726,6 +1732,42 @@ def _handle_check_system_logs(**kw) -> str:
     return check_system_logs(minutes=minutes)
 
 
+# ---------------------------------------------------------------------------
+# Model routing — use Opus only for tasks that genuinely need it
+# ---------------------------------------------------------------------------
+
+# Keywords/phrases that signal complex reasoning requiring Opus
+_OPUS_TRIGGERS = {
+    "weekly meeting",
+    "family meeting",
+    "meeting prep",
+    "meeting agenda",
+    "budget review",
+    "financial",
+    "rebalance",
+    "prioritize",
+    "plan the week",
+    "weekly plan",
+    "analyze",
+}
+
+
+def _select_model(message_text: str, sender_phone: str) -> str:
+    """Route to Opus for complex reasoning, Sonnet for everything else.
+
+    Opus is used for: weekly meeting prep, budget analysis, complex planning.
+    Sonnet handles: daily briefings, calendar lookups, grocery lists, chores,
+    action items, recipe OCR, simple questions — the vast majority of requests.
+    """
+    text_lower = message_text.lower()
+    for trigger in _OPUS_TRIGGERS:
+        if trigger in text_lower:
+            logger.info("Model routing: Opus (matched trigger '%s')", trigger)
+            return MODEL_OPUS
+    logger.info("Model routing: Sonnet (no Opus triggers matched)")
+    return MODEL_SONNET
+
+
 def handle_message(sender_phone: str, message_text: str, image_data: dict | None = None) -> str:
     """Process a message from a family member and return the assistant's response.
 
@@ -1813,6 +1855,9 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
             "Then answer their actual request.]"
         )
 
+    # Select model based on task complexity
+    selected_model = _select_model(message_text, sender_phone)
+
     # Agentic tool-use loop (capped to prevent runaway API costs)
     MAX_TOOL_ITERATIONS = 25
     iteration = 0
@@ -1830,6 +1875,7 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
             system=system,
             tools=TOOLS,
             messages=messages,
+            model=selected_model,
         )
 
         # Check if Claude wants to use tools

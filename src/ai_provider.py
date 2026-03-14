@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 # Primary timeout: 45 seconds before failover triggers
 _PRIMARY_TIMEOUT = 45.0
 
+# Model tier constants for routing
+MODEL_OPUS = "claude-opus-4-20250514"
+MODEL_SONNET = "claude-sonnet-4-5-20250514"
+MODEL_HAIKU = "claude-haiku-4-5-20250901"
+MODEL_DEFAULT = MODEL_SONNET  # Default to Sonnet — Opus only when explicitly requested
+
 # Core tool subset available on the backup provider (~10 most-used tools).
 # Advanced integrations (YNAB, recipes, AnyList, etc.) are deferred until
 # the primary recovers.
@@ -274,6 +280,7 @@ def create_message(
     tools: list[dict],
     messages: list[dict],
     max_tokens: int = 2048,
+    model: str = MODEL_DEFAULT,
 ) -> tuple[ProviderResponse, str]:
     """Create an AI message with automatic failover.
 
@@ -288,12 +295,36 @@ def create_message(
         claude_client = anthropic.Anthropic(
             api_key=ANTHROPIC_API_KEY,
             timeout=httpx.Timeout(_PRIMARY_TIMEOUT),
+            default_headers={
+                "anthropic-beta": "token-efficient-tools-2025-02-19",
+            },
         )
+        # Build system prompt with cache_control on the static portion.
+        # The system text and tool definitions are identical across calls,
+        # so caching them saves ~90% on input token costs for those blocks.
+        system_blocks = [
+            {
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+
+        # Mark the last tool with cache_control so the entire tool list
+        # is included in the cached prefix.
+        cached_tools = [dict(t) for t in tools]
+        if cached_tools:
+            cached_tools[-1] = {
+                **cached_tools[-1],
+                "cache_control": {"type": "ephemeral"},
+            }
+
+        logger.info("Claude request using model=%s", model)
         response = claude_client.messages.create(
-            model="claude-opus-4-20250514",
+            model=model,
             max_tokens=max_tokens,
-            system=system,
-            tools=tools,
+            system=system_blocks,
+            tools=cached_tools,
             messages=messages,
         )
         return ProviderResponse(
