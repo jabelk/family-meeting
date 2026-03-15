@@ -749,12 +749,9 @@ async def nudge_scan():
     Called by n8n every 15 minutes (7am-8:30pm Pacific).
     Creates departure nudges for upcoming events, then delivers all due nudges.
     """
-    from src.tools.chores import detect_free_windows, suggest_chore
     from src.tools.notion import (
         check_quiet_day,
         count_sent_today,
-        create_nudge,
-        get_backlog_for_nudge,
         seed_default_chores,
     )
     from src.tools.nudges import process_pending_nudges, scan_upcoming_departures
@@ -791,75 +788,11 @@ async def nudge_scan():
         logger.error("Departure scan failed: %s", e)
         result["errors"].append(f"departure_scan: {e}")
 
-    # Detect free windows and suggest chores
-    try:
-        import json as _json
-        from datetime import datetime as _dt
+    # Chore suggestions and backlog nudges DISABLED (038-responsive-assistant-mode).
+    # Erin explicitly asked to stop unsolicited activity suggestions.
+    # Chore/backlog suggestions are now pull-only via WhatsApp conversation.
 
-        from src.config import TIMEZONE as _TZ
-
-        _now = _dt.now(tz=_TZ)
-        windows = detect_free_windows(_now.date())
-
-        # Find the next upcoming free window (starts after now)
-        for window in windows:
-            if window["start"] > _now and window["duration_minutes"] >= 15:
-                suggestions = suggest_chore(window["duration_minutes"])
-                for suggestion in suggestions:
-                    context = _json.dumps(
-                        {
-                            "chore_id": suggestion["id"],
-                            "chore_name": suggestion["name"],
-                            "duration": suggestion["duration"],
-                            "window_start": window["start"].isoformat(),
-                            "window_end": window["end"].isoformat(),
-                        }
-                    )
-                    msg = f"Free window coming up! How about: {suggestion['name']} (~{suggestion['duration']} min)?"
-                    create_nudge(
-                        summary=f"Chore: {suggestion['name']}",
-                        nudge_type="chore",
-                        scheduled_time=window["start"].isoformat(),
-                        message=msg,
-                        context=context,
-                    )
-                    result["chores_suggested"] += 1
-                break  # Only suggest for the next upcoming window
-    except Exception as e:
-        logger.error("Chore suggestion failed: %s", e)
-        result["errors"].append(f"chore_suggestion: {e}")
-
-    # Surface a backlog item alongside chore suggestions (max 1 per day)
-    try:
-        from src.tools.notion import query_nudges_by_type
-
-        existing_backlog = query_nudges_by_type("backlog", statuses=["Pending", "Sent"])
-        backlog = get_backlog_for_nudge() if not existing_backlog else None
-        if backlog:
-            msg = f"Backlog reminder: {backlog['description']}"
-            if backlog["priority"] == "High":
-                msg = f"High priority: {backlog['description']}"
-            context = _json.dumps(
-                {
-                    "backlog_id": backlog["id"],
-                    "description": backlog["description"],
-                    "category": backlog["category"],
-                }
-            )
-            create_nudge(
-                summary=f"Backlog: {backlog['description'][:50]}",
-                nudge_type="backlog",
-                scheduled_time=_now.isoformat(),
-                message=msg,
-                context=context,
-            )
-            result["backlog_surfaced"] = 1
-            logger.info("Surfaced backlog item: %s", backlog["description"][:60])
-    except Exception as e:
-        logger.error("Backlog suggestion failed: %s", e)
-        result["errors"].append(f"backlog_suggestion: {e}")
-
-    # Process and deliver pending nudges
+    # Process and deliver pending nudges (departure reminders only now)
     try:
         delivery = await process_pending_nudges()
         result["nudges_sent"] = delivery["nudges_sent"]
