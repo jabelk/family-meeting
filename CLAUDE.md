@@ -213,6 +213,64 @@ ruff format --check src/  # Format check
 pytest tests/             # Tests
 ```
 
+## Scheduler & Proactive Message Architecture
+
+The assistant has two message channels: **conversational** (user sends WhatsApp message → LLM responds) and **proactive** (scheduled jobs send messages without user input). Understanding this split is critical for debugging.
+
+### Message Flow
+
+```
+┌─ CONVERSATIONAL (pull — user-initiated) ─────────────────────────┐
+│  WhatsApp message → webhook → handle_message() → Claude LLM     │
+│  → tool calls (calendar, notion, recipes, etc.) → WhatsApp reply │
+│                                                                   │
+│  Governed by: system prompts (src/prompts/system/*.md)            │
+│  Rules 12, 13, 23, 55, 68 control what LLM suggests              │
+└───────────────────────────────────────────────────────────────────┘
+
+┌─ PROACTIVE (push — system-initiated) ────────────────────────────┐
+│  APScheduler (src/scheduler.py) → cron jobs → code-generated     │
+│  messages → WhatsApp (bypasses LLM entirely for most jobs)       │
+│                                                                   │
+│  NOT governed by system prompts — must be disabled in code        │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### Scheduled Jobs (`data/schedules.json` → `src/scheduler.py`)
+
+| Job | Schedule | LLM-driven? | Sends WhatsApp? | Status |
+|-----|----------|-------------|-----------------|--------|
+| `daily_briefing` | Mon-Fri 7 AM | Yes (Claude) | Yes | Active |
+| `nudge_scan` | Every 15 min, 7am-8pm | No (code) | Yes (departure reminders only) | Chore/backlog nudges disabled (038) |
+| `budget_scan` | Daily 9 AM | No (code) | Yes (overspend warnings) | Active |
+| `populate_week` | Sun 7 PM | Yes (Claude) | No (writes calendar only) | Active |
+| `meal_plan` | Sat 9 AM | Yes (Claude) | Yes | Active |
+| `grandma_prompt` | Mon 9 AM | No (hard-coded) | Yes | Active |
+| `conflict_check` | Sun 7:30 PM | Yes (Claude) | Yes | Active |
+| `action_item_reminder` | Wed 12 PM | No (code) | Yes | Active |
+| `grocery_reorder` | Sat 10 AM | No (code) | Yes | Active |
+| `grocery_confirmation` | Daily 10 AM | No (code) | Yes | Active |
+| `budget_summary` | Sun 5 PM | Yes (Claude) | Yes | Active |
+| `amazon_sync` | Daily 10 PM | No (code) | Conditional | Active |
+| `email_sync` | Daily 10:05 PM | No (code) | No | Active |
+| `budget_health` | 1st/month 9 AM | No (code) | Yes | Active |
+
+### Nudge System (`src/tools/nudges.py`)
+
+The nudge system is a **queuing mechanism** for proactive messages:
+1. Scheduler jobs create nudge records in Notion's Nudge Queue DB
+2. `process_pending_nudges()` delivers due nudges via WhatsApp
+3. Controls: quiet day (`set_quiet_day`), user preferences, daily cap (8 msgs), batch window (5 min)
+4. **Chore/backlog nudge creation disabled** (038) — only departure reminders remain
+
+### Key Insight for Debugging
+
+If the user complains about unsolicited messages, check **both** paths:
+- **LLM saying things unprompted** → fix in system prompts (`src/prompts/system/`)
+- **Scheduled job sending messages** → fix in `src/scheduler.py` or `data/schedules.json`
+
+Changing prompts alone will NOT stop code-generated scheduled messages. This was learned the hard way in Feature 038.
+
 ## API Safety Thresholds
 
 All destructive operations have hard caps to prevent accidental mass changes. Thresholds are module-level constants — adjust if legitimate use cases exceed them.
