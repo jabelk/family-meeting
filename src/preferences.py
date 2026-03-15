@@ -26,6 +26,7 @@ VALID_CATEGORIES = {
     "topic_filter",
     "communication_style",
     "quiet_hours",
+    "dietary",
 }
 
 # ---------------------------------------------------------------------------

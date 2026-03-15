@@ -64,12 +64,8 @@ async def _run_daily_briefing():
 
 async def _run_nudge_scan():
     """Nudge scan — mirrors app.py nudge_scan() endpoint logic."""
-    from src.tools.chores import detect_free_windows, suggest_chore
     from src.tools.notion import (
         check_quiet_day,
-        create_nudge,
-        get_backlog_for_nudge,
-        query_nudges_by_type,
         seed_default_chores,
     )
     from src.tools.nudges import process_pending_nudges, scan_upcoming_departures
@@ -88,60 +84,12 @@ async def _run_nudge_scan():
     except Exception as e:
         logger.error("Departure scan failed: %s", e)
 
-    # Detect free windows and suggest chores
-    try:
-        _now = datetime.now(tz=TIMEZONE)
-        windows = detect_free_windows(_now.date())
-        for window in windows:
-            if window["start"] > _now and window["duration_minutes"] >= 15:
-                suggestions = suggest_chore(window["duration_minutes"])
-                for suggestion in suggestions:
-                    context = json.dumps(
-                        {
-                            "chore_id": suggestion["id"],
-                            "chore_name": suggestion["name"],
-                            "duration": suggestion["duration"],
-                            "window_start": window["start"].isoformat(),
-                            "window_end": window["end"].isoformat(),
-                        }
-                    )
-                    msg = f"Free window coming up! How about: {suggestion['name']} (~{suggestion['duration']} min)?"
-                    create_nudge(
-                        summary=f"Chore: {suggestion['name']}",
-                        nudge_type="chore",
-                        scheduled_time=window["start"].isoformat(),
-                        message=msg,
-                        context=context,
-                    )
-                break
-    except Exception as e:
-        logger.error("Chore suggestion failed: %s", e)
-
-    # Surface a backlog item
-    try:
-        _now = datetime.now(tz=TIMEZONE)
-        existing_backlog = query_nudges_by_type("backlog", statuses=["Pending", "Sent"])
-        backlog = get_backlog_for_nudge() if not existing_backlog else None
-        if backlog:
-            msg = f"Backlog reminder: {backlog['description']}"
-            if backlog["priority"] == "High":
-                msg = f"High priority: {backlog['description']}"
-            context = json.dumps(
-                {
-                    "backlog_id": backlog["id"],
-                    "description": backlog["description"],
-                    "category": backlog["category"],
-                }
-            )
-            create_nudge(
-                summary=f"Backlog: {backlog['description'][:50]}",
-                nudge_type="backlog",
-                scheduled_time=_now.isoformat(),
-                message=msg,
-                context=context,
-            )
-    except Exception as e:
-        logger.error("Backlog suggestion failed: %s", e)
+    # Chore suggestions and backlog nudges DISABLED (038-responsive-assistant-mode).
+    # Erin explicitly asked to stop unsolicited activity suggestions:
+    #   Turn 44: "Stop suggesting things to do when I have a free window unless I ask you."
+    #   Turn 59: "I don't want you to tell me that I need to wipe my kitchen."
+    # Chore/backlog suggestions are now pull-only — the user asks via WhatsApp and
+    # the LLM calls get_backlog_items or get_chore_history on demand.
 
     try:
         await process_pending_nudges()

@@ -30,10 +30,10 @@ CHILDCARE_KEYWORDS: set[str] = set(FAMILY_CONFIG.get("_childcare_keywords", []))
 # Communication mode time boundaries (hour in Pacific time)
 # morning: 7-12, afternoon: 12-17, evening: 17-21, late_night: 21-7
 MODE_BOUNDARIES: list[tuple[int, int, str, str]] = [
-    (7, 12, "morning", "energetic, proactive suggestions welcome"),
-    (12, 17, "afternoon", "normal, responsive to requests"),
-    (17, 21, "evening", "winding down, respond to questions but limit proactive content"),
-    (21, 7, "late_night", "direct answers only, no proactive suggestions"),
+    (7, 12, "morning", "responsive, answer questions directly"),
+    (12, 17, "afternoon", "responsive, answer questions directly"),
+    (17, 21, "evening", "responsive, answer questions directly, no unsolicited content"),
+    (21, 7, "late_night", "direct answers only, no follow-up prompts"),
 ]
 
 
