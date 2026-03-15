@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 _PRIMARY_TIMEOUT = 45.0
 
 # Model tier constants for routing
-MODEL_OPUS = "claude-opus-4-20250514"
-MODEL_SONNET = "claude-sonnet-4-5-20250514"
-MODEL_HAIKU = "claude-haiku-4-5-20250901"
+MODEL_OPUS = "claude-opus-4-6"
+MODEL_SONNET = "claude-sonnet-4-6"
+MODEL_HAIKU = "claude-haiku-4-5-20251001"
 MODEL_DEFAULT = MODEL_SONNET  # Default to Sonnet — Opus only when explicitly requested
 
 # Core tool subset available on the backup provider (~10 most-used tools).
@@ -334,10 +334,11 @@ def create_message(
         ), "claude"
 
     except anthropic.APIStatusError as exc:
-        # Only failover on server errors (500, 529 overloaded) — not client errors (400, 401)
-        if exc.status_code < 500 and exc.status_code != 429:
+        # Failover on server errors (500, 529), rate limits (429), and model-not-found (404).
+        # Do NOT failover on auth errors (401) or bad request (400) — those need fixing.
+        if exc.status_code < 500 and exc.status_code not in (404, 429):
             raise
-        logger.warning("Claude server error (HTTP %d), failing over to OpenAI: %s", exc.status_code, exc)
+        logger.warning("Claude API error (HTTP %d), failing over to OpenAI: %s", exc.status_code, exc)
 
     except anthropic.APITimeoutError:
         logger.warning("Claude timed out after %ds, failing over to OpenAI", _PRIMARY_TIMEOUT)
