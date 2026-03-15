@@ -40,6 +40,69 @@ COLOR_BACKLOG = "1"  # Lavender
 
 CREATED_BY_TAG = "family-meeting-assistant"
 
+# Early-morning allowlist: events with these keywords in the summary are
+# legitimate before 8 AM and should NOT be shifted +12 hours.
+EARLY_MORNING_ALLOWLIST: tuple[str, ...] = (
+    "workout",
+    "gym",
+    "exercise",
+    "run",
+    "jog",
+    "walk",
+    "wake up",
+    "wake",
+    "alarm",
+    "morning routine",
+    "breakfast",
+    "coffee",
+    "ski",
+    "skiing",
+    "flight",
+    "airport",
+    "travel",
+    "drive",
+    "feed",
+    "nursing",
+)
+
+
+def _is_early_morning_allowed(summary: str) -> bool:
+    """Return True if *summary* matches an early-morning allowlist keyword."""
+    lower = summary.lower()
+    return any(kw in lower for kw in EARLY_MORNING_ALLOWLIST)
+
+
+def _validate_event_time(start_time: str, end_time: str, summary: str) -> tuple[str, str, list[str]]:
+    """Validate event times and correct likely AM/PM errors.
+
+    Any event between midnight and 8 AM (hour 0-7) is shifted +12 hours
+    unless the summary matches the early-morning allowlist.
+
+    Returns (corrected_start, corrected_end, list_of_correction_messages).
+    """
+    corrections: list[str] = []
+
+    def _maybe_shift(time_str: str, label: str) -> str:
+        try:
+            dt_obj = datetime.fromisoformat(time_str)
+        except (ValueError, TypeError):
+            logger.warning("Could not parse time string '%s' — passing through unchanged", time_str)
+            return time_str
+
+        if dt_obj.hour < 8 and not _is_early_morning_allowed(summary):
+            original_fmt = dt_obj.strftime("%-I:%M %p")
+            shifted = dt_obj.replace(hour=dt_obj.hour + 12)
+            shifted_fmt = shifted.strftime("%-I:%M %p")
+            corrections.append(f'"{summary}" corrected: {original_fmt} → {shifted_fmt}')
+            return shifted.isoformat()
+
+        return time_str
+
+    corrected_start = _maybe_shift(start_time, "start")
+    corrected_end = _maybe_shift(end_time, "end")
+    return corrected_start, corrected_end, corrections
+
+
 # Safety thresholds for destructive operations
 MAX_CALENDAR_DELETES = 50  # refuse to delete more than this in a single call
 MAX_CALENDAR_CREATES = 50  # refuse to create more than this in a single call
@@ -371,6 +434,14 @@ def create_quick_event(
         except ValueError:
             end_time = start_time
 
+    # Validate and correct likely AM/PM errors before API submission
+    corrected_start, corrected_end, corrections = _validate_event_time(start_time, end_time, summary)
+    if corrections:
+        for c in corrections:
+            logger.warning("Time correction: %s", c)
+    start_time = corrected_start
+    end_time = corrected_end
+
     service = _get_service()
     event_body = {
         "summary": summary,
@@ -394,19 +465,41 @@ def create_quick_event(
 
     event = service.events().insert(calendarId=cal_id, body=event_body).execute()
     kind = "recurring event" if recurrence else "reminder"
-    return f"Created {kind} on {calendar_name} calendar: {summary} ({event.get('id', '')})"
+    result = f"Created {kind} on {calendar_name} calendar: {summary} ({event.get('id', '')})"
+
+    # For recurring events, fetch and show the next few upcoming dates
+    if recurrence and event.get("id"):
+        try:
+            instances = service.events().instances(calendarId=cal_id, eventId=event["id"], maxResults=4).execute()
+            upcoming = instances.get("items", [])
+            if upcoming:
+                date_strs = []
+                for inst in upcoming:
+                    dt_str = inst.get("start", {}).get("dateTime", "")
+                    if dt_str:
+                        dt_obj = datetime.fromisoformat(dt_str)
+                        date_strs.append(dt_obj.strftime("%b %-d"))
+                if date_strs:
+                    result += f"\nNext dates: {', '.join(date_strs)}"
+        except Exception:
+            logger.debug("Could not fetch recurring event instances for confirmation")
+
+    if corrections:
+        correction_notes = "\n".join(f"  - {c}" for c in corrections)
+        result += f"\n⚠️ Time corrections applied:\n{correction_notes}"
+    return result
 
 
-def batch_create_events(events_data: list[dict], calendar_name: str = DEFAULT_CALENDAR) -> int:
-    """Create multiple events on a calendar. Returns count of events created.
+def batch_create_events(events_data: list[dict], calendar_name: str = DEFAULT_CALENDAR) -> tuple[int, list[str]]:
+    """Create multiple events on a calendar.
 
+    Returns (count_created, list_of_correction_messages).
     Each item in events_data should have: summary, start_time, end_time, color_id.
-    Uses individual insert calls (Google Batch API requires http library changes).
-    For 25-40 events this takes ~10-15 seconds which is acceptable for weekly population.
+    Times are validated before submission — likely AM/PM errors are auto-corrected.
     """
     cal_id = CALENDAR_IDS.get(calendar_name)
     if not cal_id:
-        return 0
+        return 0, []
 
     if len(events_data) > MAX_CALENDAR_CREATES:
         logger.error(
@@ -421,12 +514,22 @@ def batch_create_events(events_data: list[dict], calendar_name: str = DEFAULT_CA
 
     service = _get_service()
     created = 0
+    all_corrections: list[str] = []
     for evt in events_data:
+        # Validate and correct likely AM/PM errors before API submission
+        corrected_start, corrected_end, corrections = _validate_event_time(
+            evt["start_time"], evt["end_time"], evt["summary"]
+        )
+        if corrections:
+            for c in corrections:
+                logger.warning("Time correction: %s", c)
+            all_corrections.extend(corrections)
+
         try:
             event_body = {
                 "summary": evt["summary"],
-                "start": {"dateTime": evt["start_time"], "timeZone": TIMEZONE_STR},
-                "end": {"dateTime": evt["end_time"], "timeZone": TIMEZONE_STR},
+                "start": {"dateTime": corrected_start, "timeZone": TIMEZONE_STR},
+                "end": {"dateTime": corrected_end, "timeZone": TIMEZONE_STR},
                 "colorId": evt.get("color_id", COLOR_CHORES),
                 "extendedProperties": {"private": {"createdBy": CREATED_BY_TAG}},
             }
@@ -435,7 +538,7 @@ def batch_create_events(events_data: list[dict], calendar_name: str = DEFAULT_CA
         except Exception as e:
             logger.warning("Failed to create event '%s': %s", evt.get("summary"), e)
     logger.info("Created %d events on '%s'", created, calendar_name)
-    return created
+    return created, all_corrections
 
 
 def delete_assistant_events(
@@ -581,3 +684,97 @@ def list_recurring_events(calendar_name: str = "family") -> str:
         lines.append(f"- {ev['summary']} | {rrule} | starts {start} | id: {ev['id']}")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Cleanup: scan and fix corrupted AM/PM events
+# ---------------------------------------------------------------------------
+
+
+def scan_corrupted_events() -> list[dict]:
+    """Scan all calendars for future-dated assistant-created events with likely AM/PM errors.
+
+    Returns list of dicts with event details and proposed corrections.
+    """
+    service = _get_service()
+    now = datetime.now(tz=TIMEZONE)
+    time_min = now.isoformat()
+    suspects: list[dict] = []
+
+    for cal_name, cal_id in CALENDAR_IDS.items():
+        try:
+            result = (
+                service.events()
+                .list(
+                    calendarId=cal_id,
+                    timeMin=time_min,
+                    maxResults=200,
+                    singleEvents=True,
+                    orderBy="startTime",
+                    privateExtendedProperty=f"createdBy={CREATED_BY_TAG}",
+                )
+                .execute()
+            )
+            for event in result.get("items", []):
+                start_str = event.get("start", {}).get("dateTime", "")
+                end_str = event.get("end", {}).get("dateTime", "")
+                summary = event.get("summary", "")
+                if not start_str:
+                    continue
+                try:
+                    start_dt = datetime.fromisoformat(start_str)
+                except (ValueError, TypeError):
+                    continue
+                if start_dt.hour < 8 and not _is_early_morning_allowed(summary):
+                    shifted_start = start_dt.replace(hour=start_dt.hour + 12)
+                    shifted_end = None
+                    if end_str:
+                        try:
+                            end_dt = datetime.fromisoformat(end_str)
+                            shifted_end = end_dt.replace(hour=end_dt.hour + 12)
+                        except (ValueError, TypeError):
+                            pass
+                    suspects.append(
+                        {
+                            "event_id": event["id"],
+                            "calendar_name": cal_name,
+                            "calendar_id": cal_id,
+                            "summary": summary,
+                            "current_start": start_dt.strftime("%-I:%M %p"),
+                            "proposed_start": shifted_start.strftime("%-I:%M %p"),
+                            "current_end": end_str,
+                            "proposed_end": shifted_end.isoformat() if shifted_end else "",
+                            "date": start_dt.strftime("%b %-d"),
+                        }
+                    )
+        except Exception as e:
+            logger.warning("Error scanning calendar '%s' for corrupted events: %s", cal_name, e)
+
+    return suspects
+
+
+def fix_corrupted_event(event_id: str, calendar_id: str) -> bool:
+    """Fix a single corrupted event by shifting start and end times +12 hours."""
+    service = _get_service()
+    try:
+        event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        start_str = event.get("start", {}).get("dateTime", "")
+        end_str = event.get("end", {}).get("dateTime", "")
+
+        if start_str:
+            start_dt = datetime.fromisoformat(start_str)
+            event["start"]["dateTime"] = start_dt.replace(hour=start_dt.hour + 12).isoformat()
+        if end_str:
+            end_dt = datetime.fromisoformat(end_str)
+            event["end"]["dateTime"] = end_dt.replace(hour=end_dt.hour + 12).isoformat()
+
+        service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
+        logger.info(
+            "Fixed corrupted event: '%s' — shifted +12h (id=%s)",
+            event.get("summary", ""),
+            event_id,
+        )
+        return True
+    except Exception as e:
+        logger.error("Failed to fix corrupted event %s: %s", event_id, e)
+        return False

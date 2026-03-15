@@ -1343,9 +1343,13 @@ def _handle_write_calendar_blocks(**kw) -> str:
             }
         )
 
-    created = calendar.batch_create_events(events_data, calendar_name=DEFAULT_CALENDAR)
+    created, corrections = calendar.batch_create_events(events_data, calendar_name=DEFAULT_CALENDAR)
     p2 = FAMILY_CONFIG.get("partner2_name", "Partner2")
-    return f"Created {created} calendar blocks on {p2}'s calendar."
+    result = f"Created {created} calendar blocks on {p2}'s calendar."
+    if corrections:
+        correction_notes = "\n".join(f"  - {c}" for c in corrections)
+        result += f"\n⚠️ Time corrections applied:\n{correction_notes}"
+    return result
 
 
 def _handle_push_grocery_list(**kw) -> str:
@@ -1916,6 +1920,20 @@ def handle_message(sender_phone: str, message_text: str, image_data: dict | None
                             result = execute_with_retry(func, tool_name, tool_input)
                             # Audit result for hidden error strings
                             _is_error, result = audit_tool_result(tool_name, result)
+                            # Nudge toward RRULE if creating repeated individual events
+                            if tool_name == "create_quick_event" and not tool_input.get("recurrence"):
+                                _recent_summaries = [
+                                    tr.get("content", "")
+                                    for tr in tool_results
+                                    if "create_quick_event" in tr.get("content", "")
+                                    and "recurring event" not in tr.get("content", "")
+                                ]
+                                if len(_recent_summaries) >= 2:
+                                    result += (
+                                        "\n⚠️ You've created 3+ individual events with similar names in this "
+                                        "conversation. Consider using the `recurrence` parameter with an RRULE "
+                                        "to create a single recurring event instead."
+                                    )
                             # Track usage for feature discovery suggestions
                             if sender_phone != "system":
                                 discovery.record_usage(sender_phone, tool_name)

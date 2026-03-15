@@ -22,6 +22,11 @@ For recurring events, generate an RRULE from the user's natural language and pas
 - "Tuesdays and Thursdays" → `["RRULE:FREQ=WEEKLY;BYDAY=TU,TH"]`
 - "every day until June 1" → `["RRULE:FREQ=DAILY;UNTIL=20260601T235959Z"]`
 
+- "every weekday at 9am" → `["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"]`
+- "twice a month on the 1st and 15th" → `["RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15"]`
+
+⚠️ IMPORTANT: If the user describes a repeating event, you MUST use the `recurrence` parameter. Creating 3+ individual events for the same recurring activity is WRONG. One recurring event with RRULE replaces all of them.
+
 Omit `recurrence` entirely for one-time events. Use `calendar_name` to target a specific calendar (family, {partner1_name_lower}, {partner2_name_lower}). After creating a recurring event, confirm the pattern and list the next 3-4 upcoming dates so the user can verify.
 
 Use `location` for events with a physical address (doctor offices, schools, restaurants, service appointments). The location appears in the calendar event details and enables map links on mobile devices.
