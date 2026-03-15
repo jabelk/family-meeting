@@ -249,6 +249,6 @@ Features 001-028 are implemented and deployed. Spec artifacts for each live unde
 - 028: Template repo readiness (family config externalization, enhanced health check, onboarding/pricing docs)
 
 ## Recent Changes
+- 037-calendar-reliability: Code-level time validation for calendar events (AM/PM correction), time-aware daily context, recurring event enforcement, one-time cleanup scan — no new dependencies
 - 034-ai-failover-resilience: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK, openai SDK (new), httpx, PyYAML
 - 033-tool-failure-resilience: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK, httpx, notion-client, google-api-python-client — no new dependencies
-- 032-siri-voice-access: Added Python 3.12 (existing codebase) + FastAPI, anthropic SDK, existing deps — no new Python dependencies

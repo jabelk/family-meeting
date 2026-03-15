@@ -35,7 +35,7 @@ from src.config import (
     YNAB_ACCESS_TOKEN,
 )
 from src.integrations import is_integration_enabled
-from src.tools.calendar import delete_assistant_events
+from src.tools.calendar import delete_assistant_events, fix_corrupted_event, scan_corrupted_events
 from src.transcribe import MAX_DURATION_SECONDS, get_audio_duration, transcribe_voice_note
 from src.whatsapp import download_media, extract_message, send_message
 
@@ -98,6 +98,9 @@ RATE_LIMIT_MAX = 5  # max messages per window
 RATE_LIMIT_WINDOW = 60.0  # window in seconds
 
 _rate_limit_log: dict[str, list[float]] = defaultdict(list)
+
+# Cleanup session state (ephemeral — lost on restart, re-trigger endpoint if needed)
+_cleanup_sessions: dict[str, dict] = {}  # phone -> {batches, current_batch, review_index}
 
 
 def _check_rate_limit(phone: str) -> bool:
@@ -232,6 +235,11 @@ async def receive_message(request: Request, background_tasks: BackgroundTasks):
     if not _check_rate_limit(phone):
         logger.warning("Rate limit exceeded for %s (%s)", PHONE_TO_NAME[phone], phone)
         return {"status": "ok"}  # Silently drop — don't waste API calls replying
+
+    # Intercept cleanup session responses before normal message processing
+    if phone in _cleanup_sessions and parsed.get("type") == "text":
+        background_tasks.add_task(_handle_cleanup_response, phone, parsed["text"])
+        return {"status": "ok"}
 
     if parsed["type"] == "unsupported":
         friendly_type = parsed.get("original_type", "that type of message")
@@ -1456,3 +1464,123 @@ async def voice_preset(request: Request):
     )
 
     return result.model_dump()
+
+
+# ---------------------------------------------------------------------------
+# Calendar cleanup endpoint (one-time admin operation)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/admin/calendar-cleanup")
+async def calendar_cleanup(background_tasks: BackgroundTasks, _=Depends(verify_n8n_auth)):
+    """Scan for corrupted calendar events and send fix proposals to user via WhatsApp."""
+    suspects = scan_corrupted_events()
+    if not suspects:
+        logger.info("Calendar cleanup: no corrupted events found")
+        return {"status": "complete", "events_scanned": 0, "suspects_found": 0, "batches_queued": 0}
+
+    # Group into batches of 5
+    batches = [suspects[i : i + 5] for i in range(0, len(suspects), 5)]
+    target_phone = PRIMARY_PHONE
+
+    _cleanup_sessions[target_phone] = {
+        "batches": batches,
+        "current_batch": 0,
+        "review_index": None,
+    }
+
+    background_tasks.add_task(_send_cleanup_batch, target_phone, 0)
+
+    return {
+        "status": "started",
+        "events_scanned": len(suspects),
+        "suspects_found": len(suspects),
+        "batches_queued": len(batches),
+    }
+
+
+async def _send_cleanup_batch(phone: str, batch_idx: int):
+    """Send a single cleanup batch to the user via WhatsApp."""
+    session = _cleanup_sessions.get(phone)
+    if not session or batch_idx >= len(session["batches"]):
+        _cleanup_sessions.pop(phone, None)
+        await send_message(phone, "\U0001f527 Calendar cleanup complete!")
+        return
+
+    batch = session["batches"][batch_idx]
+    total = len(session["batches"])
+    session["current_batch"] = batch_idx
+
+    lines = [f"\U0001f527 Calendar Cleanup (Batch {batch_idx + 1}/{total})", ""]
+    lines.append(f"I found {len(batch)} events that might have wrong times:")
+    lines.append("")
+    for i, evt in enumerate(batch, 1):
+        lines.append(
+            f'{i}. "{evt["summary"]}" \u2014 {evt["current_start"]} \u2192 {evt["proposed_start"]} ({evt["date"]})'
+        )
+    lines.append("")
+    lines.append("A: Fix all")
+    lines.append("B: Skip these")
+    lines.append("C: Let me review each one")
+
+    await send_message(phone, "\n".join(lines))
+
+
+async def _handle_cleanup_response(phone: str, text: str):
+    """Handle user's response to a cleanup batch."""
+    session = _cleanup_sessions.get(phone)
+    if not session:
+        return
+
+    choice = text.strip().upper()
+    batch_idx = session["current_batch"]
+    batch = session["batches"][batch_idx]
+
+    if session.get("review_index") is not None:
+        # Individual review mode
+        idx = session["review_index"]
+        if choice in ("Y", "YES"):
+            evt = batch[idx]
+            ok = fix_corrupted_event(evt["event_id"], evt["calendar_id"])
+            if ok:
+                await send_message(phone, f'\u2705 Fixed: "{evt["summary"]}"')
+            else:
+                await send_message(phone, f'\u274c Could not fix: "{evt["summary"]}"')
+        # Advance to next event or next batch
+        if idx + 1 < len(batch):
+            session["review_index"] = idx + 1
+            next_evt = batch[idx + 1]
+            msg = (
+                f'"{next_evt["summary"]}" \u2014 '
+                f"{next_evt['current_start']} \u2192 {next_evt['proposed_start']} "
+                f"({next_evt['date']})\n\nY: Fix / N: Skip"
+            )
+            await send_message(phone, msg)
+        else:
+            session["review_index"] = None
+            await _send_cleanup_batch(phone, batch_idx + 1)
+        return
+
+    if choice == "A":
+        fixed = 0
+        for evt in batch:
+            if fix_corrupted_event(evt["event_id"], evt["calendar_id"]):
+                fixed += 1
+        await send_message(phone, f"\u2705 Fixed {fixed}/{len(batch)} events!")
+        await _send_cleanup_batch(phone, batch_idx + 1)
+
+    elif choice == "B":
+        await send_message(phone, "\u23ed\ufe0f Skipped this batch.")
+        await _send_cleanup_batch(phone, batch_idx + 1)
+
+    elif choice == "C":
+        session["review_index"] = 0
+        evt = batch[0]
+        msg = (
+            f'"{evt["summary"]}" \u2014 '
+            f"{evt['current_start']} \u2192 {evt['proposed_start']} "
+            f"({evt['date']})\n\nY: Fix / N: Skip"
+        )
+        await send_message(phone, msg)
+    else:
+        await send_message(phone, "Please reply A (fix all), B (skip), or C (review each).")

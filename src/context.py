@@ -179,31 +179,19 @@ def get_daily_context(phone: str) -> str:
         )
         lines.append("")
     else:
-        # Partner 1's events
+        # Partner 1's events (split by completed/upcoming)
         lines.append(f"\U0001f464 {FAMILY_CONFIG.get('partner1_name', 'Partner1')}'s events today:")
-        if partner1_events:
-            for event in partner1_events:
-                lines.append(f"- {_format_event(event)}")
-        else:
-            lines.append("- No events")
+        lines.extend(_format_events_split(partner1_events, now))
         lines.append("")
 
-        # Partner 2's events
+        # Partner 2's events (split by completed/upcoming)
         lines.append(f"\U0001f464 {FAMILY_CONFIG.get('partner2_name', 'Partner2')}'s events today:")
-        if partner2_events:
-            for event in partner2_events:
-                lines.append(f"- {_format_event(event)}")
-        else:
-            lines.append("- No events")
+        lines.extend(_format_events_split(partner2_events, now))
         lines.append("")
 
-        # Family events
+        # Family events (split by completed/upcoming)
         lines.append("\U0001f468\u200d\U0001f469\u200d\U0001f467\u200d\U0001f466 Family events today:")
-        if family_events:
-            for event in family_events:
-                lines.append(f"- {_format_event(event)}")
-        else:
-            lines.append("- No family events")
+        lines.extend(_format_events_split(family_events, now))
         lines.append("")
 
         # Childcare inference
@@ -238,6 +226,52 @@ def get_daily_context(phone: str) -> str:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _split_events_by_time(events: list[dict], now: datetime) -> tuple[list[dict], list[dict]]:
+    """Split events into (completed, upcoming) based on current time.
+
+    Completed: event's end time is before now.
+    Upcoming: event's start time is at or after now, OR event is in progress.
+    All-day events always go in upcoming.
+    """
+    completed: list[dict] = []
+    upcoming: list[dict] = []
+    for event in events:
+        end_str = event.get("end", {}).get("dateTime")
+        start_str = event.get("start", {}).get("dateTime")
+        if not start_str:
+            # All-day event → upcoming
+            upcoming.append(event)
+            continue
+        try:
+            end_dt = datetime.fromisoformat(end_str) if end_str else None
+            if end_dt and end_dt <= now:
+                completed.append(event)
+            else:
+                upcoming.append(event)
+        except (ValueError, TypeError):
+            upcoming.append(event)
+    return completed, upcoming
+
+
+def _format_events_split(events: list[dict], now: datetime) -> list[str]:
+    """Format events into completed/upcoming sections."""
+    completed, upcoming = _split_events_by_time(events, now)
+    lines: list[str] = []
+    if completed:
+        lines.append("  \u2705 Completed:")
+        for event in completed:
+            lines.append(f"  - {_format_event(event)}")
+    if upcoming:
+        lines.append("  \U0001f4cb Upcoming:")
+        for event in upcoming:
+            lines.append(f"  - {_format_event(event)}")
+    elif completed:
+        lines.append("  \u2705 All done for today!")
+    if not completed and not upcoming:
+        lines.append("- No events")
+    return lines
 
 
 def _format_event(event: dict) -> str:
