@@ -520,7 +520,8 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
         try:
             memo_url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/transactions/{txn['id']}"
             ynab._ynab_request(
-                "patch", memo_url,
+                "patch",
+                memo_url,
                 json={"transaction": {"memo": new_memo[:200]}},  # YNAB memo limit
             )
         except Exception as e:
@@ -599,12 +600,14 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
                             }
                         )
                     ynab._ynab_request(
-                        "patch", cat_url,
+                        "patch",
+                        cat_url,
                         json={"transaction": {"subtransactions": subtxns}},
                     )
                 else:
                     ynab._ynab_request(
-                        "patch", cat_url,
+                        "patch",
+                        cat_url,
                         json={"transaction": {"category_id": classified_items[0].classified_category_id}},
                     )
             except Exception as e:
@@ -1017,7 +1020,8 @@ def handle_email_sync_reply(message_text: str) -> str:
             try:
                 cat_url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/transactions/{txn['id']}"
                 ynab._ynab_request(
-                    "patch", cat_url,
+                    "patch",
+                    cat_url,
                     json={"transaction": {"category_id": items[0].classified_category_id}},
                 )
             except Exception as e:
@@ -1082,7 +1086,8 @@ def handle_email_sync_reply(message_text: str) -> str:
         try:
             cat_url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/transactions/{txn['id']}"
             ynab._ynab_request(
-                "patch", cat_url,
+                "patch",
+                cat_url,
                 json={"transaction": {"category_id": resolved["id"]}},
             )
         except Exception as e:

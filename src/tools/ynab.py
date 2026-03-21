@@ -48,8 +48,9 @@ def _ynab_request(method: str, url: str, **kwargs) -> httpx.Response:
         if _rate_limit_request_count >= 180:
             wait = 3600 - (now - _rate_limit_window_start)
             if wait > 0:
-                logger.warning("YNAB rate limit approaching (%d/200 used), waiting %.0fs",
-                               _rate_limit_request_count, wait)
+                logger.warning(
+                    "YNAB rate limit approaching (%d/200 used), waiting %.0fs", _rate_limit_request_count, wait
+                )
                 time.sleep(min(wait, 300))
                 _rate_limit_request_count = 0
                 _rate_limit_window_start = time.time()
@@ -72,6 +73,8 @@ def _ynab_request(method: str, url: str, **kwargs) -> httpx.Response:
             logger.error("YNAB 429 after retry — giving up")
 
     return resp
+
+
 CACHE_TTL = 3600  # 1 hour in seconds
 
 # --- Caches ---
@@ -369,7 +372,8 @@ def recategorize_transaction(
         # Update the transaction
         put_url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{txn['id']}"
         put_resp = _ynab_request(
-            "put", put_url,
+            "put",
+            put_url,
             json={"transaction": {"category_id": cat_id}},
         )
         put_resp.raise_for_status()
@@ -512,7 +516,8 @@ def update_category_budget(category: str = "", amount: float = 0) -> str:
 
     # PATCH
     patch_resp = _ynab_request(
-        "patch", url,
+        "patch",
+        url,
         json={"category": {"budgeted": new_budgeted}},
     )
     patch_resp.raise_for_status()
@@ -573,14 +578,16 @@ def move_money(from_category: str = "", to_category: str = "", amount: float = 0
 
     # PATCH source (decrease)
     patch_from = _ynab_request(
-        "patch", from_url,
+        "patch",
+        from_url,
         json={"category": {"budgeted": from_budgeted - amount_milli}},
     )
     patch_from.raise_for_status()
 
     # PATCH destination (increase)
     patch_to = _ynab_request(
-        "patch", to_url,
+        "patch",
+        to_url,
         json={"category": {"budgeted": to_budgeted + amount_milli}},
     )
     patch_to.raise_for_status()
@@ -720,7 +727,8 @@ def split_transaction(transaction_id: str, subtransactions: list[dict]) -> str:
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{transaction_id}"
     try:
         resp = _ynab_request(
-            "put", url,
+            "put",
+            url,
             json={"transaction": {"subtransactions": ynab_subs}},
         )
         resp.raise_for_status()
@@ -756,7 +764,8 @@ def update_transaction_memo(transaction_id: str, memo: str) -> str:
             new_memo = new_memo[:197] + "..."
 
         put_resp = _ynab_request(
-            "put", url,
+            "put",
+            url,
             json={"transaction": {"memo": new_memo}},
         )
         put_resp.raise_for_status()
@@ -1150,7 +1159,8 @@ def _update_goal_target(category_id: str, goal_target_milliunits: int) -> str:
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/categories/{category_id}"
     try:
         resp = _ynab_request(
-            "patch", url,
+            "patch",
+            url,
             json={"category": {"goal_target": goal_target_milliunits}},
         )
         resp.raise_for_status()
