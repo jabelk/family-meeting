@@ -80,8 +80,6 @@ def find_provider_transactions(provider: str, days: int = 30) -> list[dict]:
 
     Returns list of unprocessed transaction dicts with id, amount, date, memo, payee_name.
     """
-    import httpx
-
     from src.tools import ynab
 
     config = PROVIDER_CONFIGS[provider]
@@ -89,7 +87,7 @@ def find_provider_transactions(provider: str, days: int = 30) -> list[dict]:
 
     since_date = (date.today() - timedelta(days=days)).isoformat()
     url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/transactions"
-    resp = httpx.get(url, headers=ynab.HEADERS, params={"since_date": since_date})
+    resp = ynab._ynab_request("get", url, params={"since_date": since_date})
     resp.raise_for_status()
     txns = resp.json()["data"]["transactions"]
 
@@ -450,8 +448,6 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
 
     Takes output of match_emails_to_transactions, returns enriched list.
     """
-    import httpx
-
     from src.tools import ynab
 
     config = PROVIDER_CONFIGS[provider]
@@ -469,12 +465,10 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
             if unmatched_tag not in existing_memo:
                 new_memo = f"{unmatched_tag} | {existing_memo}" if existing_memo.strip() else unmatched_tag
                 try:
-                    import httpx as _hx
-
                     from src.tools import ynab as _yn
 
                     memo_url = f"{_yn.BASE_URL}/budgets/{_yn.YNAB_BUDGET_ID}/transactions/{txn['id']}"
-                    _hx.patch(memo_url, headers=_yn.HEADERS, json={"transaction": {"memo": new_memo[:200]}})
+                    _yn._ynab_request("patch", memo_url, json={"transaction": {"memo": new_memo[:200]}})
                 except Exception as e:
                     logger.warning("Failed to tag unmatched memo for %s: %s", txn["id"], e)
 
@@ -525,9 +519,8 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
         # Update YNAB memo
         try:
             memo_url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/transactions/{txn['id']}"
-            httpx.patch(
-                memo_url,
-                headers=ynab.HEADERS,
+            ynab._ynab_request(
+                "patch", memo_url,
                 json={"transaction": {"memo": new_memo[:200]}},  # YNAB memo limit
             )
         except Exception as e:
@@ -605,15 +598,13 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
                                 "memo": ci.title[:100],
                             }
                         )
-                    httpx.patch(
-                        cat_url,
-                        headers=ynab.HEADERS,
+                    ynab._ynab_request(
+                        "patch", cat_url,
                         json={"transaction": {"subtransactions": subtxns}},
                     )
                 else:
-                    httpx.patch(
-                        cat_url,
-                        headers=ynab.HEADERS,
+                    ynab._ynab_request(
+                        "patch", cat_url,
                         json={"transaction": {"category_id": classified_items[0].classified_category_id}},
                     )
             except Exception as e:
@@ -654,13 +645,11 @@ def enrich_and_classify_email(matched_transactions: list[dict], provider: str) -
 
 def _get_ynab_categories() -> list[dict]:
     """Fetch YNAB budget categories."""
-    import httpx
-
     from src.tools import ynab
 
     try:
         url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/categories"
-        resp = httpx.get(url, headers=ynab.HEADERS)
+        resp = ynab._ynab_request("get", url)
         resp.raise_for_status()
         groups = resp.json()["data"]["category_groups"]
         categories = []
@@ -985,8 +974,6 @@ def handle_email_sync_reply(message_text: str) -> str:
     """
     import re
 
-    import httpx
-
     from src.tools import ynab
 
     pending = _load_email_pending_suggestions()
@@ -1029,9 +1016,8 @@ def handle_email_sync_reply(message_text: str) -> str:
         if items:
             try:
                 cat_url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/transactions/{txn['id']}"
-                httpx.patch(
-                    cat_url,
-                    headers=ynab.HEADERS,
+                ynab._ynab_request(
+                    "patch", cat_url,
                     json={"transaction": {"category_id": items[0].classified_category_id}},
                 )
             except Exception as e:
@@ -1095,9 +1081,8 @@ def handle_email_sync_reply(message_text: str) -> str:
         # Apply corrected category
         try:
             cat_url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/transactions/{txn['id']}"
-            httpx.patch(
-                cat_url,
-                headers=ynab.HEADERS,
+            ynab._ynab_request(
+                "patch", cat_url,
                 json={"transaction": {"category_id": resolved["id"]}},
             )
         except Exception as e:
@@ -1279,8 +1264,6 @@ def handle_email_undo(transaction_index: int) -> str:
 
     Restores original memo and category from SyncRecord.
     """
-    import httpx
-
     from src.tools import ynab
 
     records = load_sync_records()
@@ -1312,7 +1295,7 @@ def handle_email_undo(transaction_index: int) -> str:
         if data.get("original_category_id"):
             update["category_id"] = data["original_category_id"]
         if update:
-            httpx.patch(url, headers=ynab.HEADERS, json={"transaction": update})
+            ynab._ynab_request("patch", url, json={"transaction": update})
     except Exception as e:
         return f"Failed to undo: {e}"
 

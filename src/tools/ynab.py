@@ -1,8 +1,10 @@
 """YNAB API wrapper — budget data, transactions, and write operations."""
 
+import hashlib
 import json
 import logging
 import math
+import threading
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -16,6 +18,60 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.ynab.com/v1"
 HEADERS = {"Authorization": f"Bearer {YNAB_ACCESS_TOKEN}"}
+
+# ---------------------------------------------------------------------------
+# Rate-limit-aware request helper
+# YNAB allows 200 requests/hour. We track remaining quota from response
+# headers and back off when nearing the limit.
+# ---------------------------------------------------------------------------
+
+_rate_limit_lock = threading.Lock()
+_rate_limit_request_count: int = 0  # requests made in current tracking window
+_rate_limit_window_start: float = 0.0  # time.time() when window started
+
+
+def _ynab_request(method: str, url: str, **kwargs) -> httpx.Response:
+    """Make an HTTP request to YNAB with rate-limit awareness and retry on 429.
+
+    YNAB allows 200 requests/hour. Rate limit headers are only returned on
+    429 responses, so we track request count locally and back off proactively.
+    """
+    global _rate_limit_request_count, _rate_limit_window_start
+
+    with _rate_limit_lock:
+        now = time.time()
+        # Reset counter every hour
+        if now - _rate_limit_window_start > 3600:
+            _rate_limit_request_count = 0
+            _rate_limit_window_start = now
+
+        if _rate_limit_request_count >= 180:
+            wait = 3600 - (now - _rate_limit_window_start)
+            if wait > 0:
+                logger.warning("YNAB rate limit approaching (%d/200 used), waiting %.0fs",
+                               _rate_limit_request_count, wait)
+                time.sleep(min(wait, 300))
+                _rate_limit_request_count = 0
+                _rate_limit_window_start = time.time()
+
+        _rate_limit_request_count += 1
+
+    kwargs.setdefault("headers", HEADERS)
+    kwargs.setdefault("timeout", 30)
+
+    resp = getattr(httpx, method)(url, **kwargs)
+
+    if resp.status_code == 429:
+        logger.warning("YNAB 429 rate limited, waiting 60s and retrying once")
+        time.sleep(60)
+        with _rate_limit_lock:
+            _rate_limit_request_count = 0
+            _rate_limit_window_start = time.time()
+        resp = getattr(httpx, method)(url, **kwargs)
+        if resp.status_code == 429:
+            logger.error("YNAB 429 after retry — giving up")
+
+    return resp
 CACHE_TTL = 3600  # 1 hour in seconds
 
 # --- Caches ---
@@ -86,7 +142,7 @@ def _get_categories() -> dict:
         return _category_cache
 
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/categories"
-    resp = httpx.get(url, headers=HEADERS)
+    resp = _ynab_request("get", url)
     resp.raise_for_status()
     groups = resp.json()["data"]["category_groups"]
 
@@ -116,7 +172,7 @@ def _get_payees() -> dict:
         return _payee_cache
 
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/payees"
-    resp = httpx.get(url, headers=HEADERS)
+    resp = _ynab_request("get", url)
     resp.raise_for_status()
     payees = resp.json()["data"]["payees"]
 
@@ -138,7 +194,7 @@ def _get_accounts() -> list:
         return _account_cache
 
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/accounts"
-    resp = httpx.get(url, headers=HEADERS)
+    resp = _ynab_request("get", url)
     resp.raise_for_status()
     accounts = resp.json()["data"]["accounts"]
 
@@ -227,7 +283,7 @@ def search_transactions(
         params["type"] = "uncategorized"
 
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions"
-    resp = httpx.get(url, headers=HEADERS, params=params)
+    resp = _ynab_request("get", url, params=params)
     resp.raise_for_status()
     txns = resp.json()["data"]["transactions"]
 
@@ -287,7 +343,7 @@ def recategorize_transaction(
     today = date.today()
     since = today.replace(day=1).isoformat()
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions"
-    resp = httpx.get(url, headers=HEADERS, params={"since_date": since})
+    resp = _ynab_request("get", url, params={"since_date": since})
     resp.raise_for_status()
     txns = resp.json()["data"]["transactions"]
 
@@ -312,9 +368,8 @@ def recategorize_transaction(
         txn = txns[0]
         # Update the transaction
         put_url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{txn['id']}"
-        put_resp = httpx.put(
-            put_url,
-            headers=HEADERS,
+        put_resp = _ynab_request(
+            "put", put_url,
             json={"transaction": {"category_id": cat_id}},
         )
         put_resp.raise_for_status()
@@ -388,6 +443,12 @@ def create_transaction(
     # Amount is positive from user, make negative for outflow (milliunits)
     amount_milli = -int(abs(amount) * 1000)
 
+    # Generate idempotency key to prevent duplicate transactions.
+    # YNAB deduplicates on import_id — if the same import_id is sent twice,
+    # only one transaction is created. Max 36 chars.
+    import_id_raw = f"mombot:{payee}:{amount_milli}:{date_str}:{cat_id}"
+    import_id = "mb:" + hashlib.sha256(import_id_raw.encode()).hexdigest()[:33]
+
     txn_data = {
         "transaction": {
             "account_id": account_id,
@@ -397,13 +458,16 @@ def create_transaction(
             "category_id": cat_id,
             "cleared": "uncleared",
             "approved": True,
+            "import_id": import_id,
         }
     }
     if memo:
         txn_data["transaction"]["memo"] = memo
 
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions"
-    resp = httpx.post(url, headers=HEADERS, json=txn_data)
+    resp = _ynab_request("post", url, json=txn_data)
+    if resp.status_code == 409:
+        return f"Transaction already exists (duplicate prevented): {payee} ${abs(amount):,.2f} on {date_str}"
     resp.raise_for_status()
 
     return (
@@ -437,7 +501,7 @@ def update_category_budget(category: str = "", amount: float = 0) -> str:
 
     # GET current budgeted amount
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{month_str}/categories/{cat_id}"
-    resp = httpx.get(url, headers=HEADERS)
+    resp = _ynab_request("get", url)
     resp.raise_for_status()
     cat_data = resp.json()["data"]["category"]
     current_budgeted = cat_data["budgeted"]
@@ -447,9 +511,8 @@ def update_category_budget(category: str = "", amount: float = 0) -> str:
     new_budgeted = current_budgeted + amount_milli
 
     # PATCH
-    patch_resp = httpx.patch(
-        url,
-        headers=HEADERS,
+    patch_resp = _ynab_request(
+        "patch", url,
         json={"category": {"budgeted": new_budgeted}},
     )
     patch_resp.raise_for_status()
@@ -493,12 +556,12 @@ def move_money(from_category: str = "", to_category: str = "", amount: float = 0
     from_url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{month_str}/categories/{from_id}"
     to_url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{month_str}/categories/{to_id}"
 
-    from_resp = httpx.get(from_url, headers=HEADERS)
+    from_resp = _ynab_request("get", from_url)
     from_resp.raise_for_status()
     from_data = from_resp.json()["data"]["category"]
     from_budgeted = from_data["budgeted"]
 
-    to_resp = httpx.get(to_url, headers=HEADERS)
+    to_resp = _ynab_request("get", to_url)
     to_resp.raise_for_status()
     to_data = to_resp.json()["data"]["category"]
     to_budgeted = to_data["budgeted"]
@@ -509,17 +572,15 @@ def move_money(from_category: str = "", to_category: str = "", amount: float = 0
         return f"*{from_name}* only has ${available:,.2f} budgeted. Would you like to move ${available:,.2f} instead?"
 
     # PATCH source (decrease)
-    patch_from = httpx.patch(
-        from_url,
-        headers=HEADERS,
+    patch_from = _ynab_request(
+        "patch", from_url,
         json={"category": {"budgeted": from_budgeted - amount_milli}},
     )
     patch_from.raise_for_status()
 
     # PATCH destination (increase)
-    patch_to = httpx.patch(
-        to_url,
-        headers=HEADERS,
+    patch_to = _ynab_request(
+        "patch", to_url,
         json={"category": {"budgeted": to_budgeted + amount_milli}},
     )
     patch_to.raise_for_status()
@@ -549,7 +610,7 @@ def get_budget_summary(month: str = "", category: str = "") -> str:
 
     try:
         url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{month}"
-        resp = httpx.get(url, headers=HEADERS)
+        resp = _ynab_request("get", url)
         resp.raise_for_status()
         data = resp.json()
         month_data = data["data"]["month"]
@@ -658,9 +719,8 @@ def split_transaction(transaction_id: str, subtransactions: list[dict]) -> str:
 
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{transaction_id}"
     try:
-        resp = httpx.put(
-            url,
-            headers=HEADERS,
+        resp = _ynab_request(
+            "put", url,
             json={"transaction": {"subtransactions": ynab_subs}},
         )
         resp.raise_for_status()
@@ -685,7 +745,7 @@ def update_transaction_memo(transaction_id: str, memo: str) -> str:
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{transaction_id}"
     try:
         # Fetch current transaction to check existing memo
-        resp = httpx.get(url, headers=HEADERS)
+        resp = _ynab_request("get", url)
         resp.raise_for_status()
         txn = resp.json()["data"]["transaction"]
         existing_memo = txn.get("memo") or ""
@@ -695,9 +755,8 @@ def update_transaction_memo(transaction_id: str, memo: str) -> str:
         if len(new_memo) > 200:
             new_memo = new_memo[:197] + "..."
 
-        put_resp = httpx.put(
-            url,
-            headers=HEADERS,
+        put_resp = _ynab_request(
+            "put", url,
             json={"transaction": {"memo": new_memo}},
         )
         put_resp.raise_for_status()
@@ -718,7 +777,7 @@ def delete_transaction(transaction_id: str) -> str:
     """
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions/{transaction_id}"
     try:
-        resp = httpx.delete(url, headers=HEADERS)
+        resp = _ynab_request("delete", url)
         resp.raise_for_status()
         return "Transaction deleted."
     except httpx.HTTPStatusError as e:
@@ -742,7 +801,7 @@ def check_overspend_warnings() -> list:
 
     month_str = today.replace(day=1).isoformat()
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{month_str}"
-    resp = httpx.get(url, headers=HEADERS)
+    resp = _ynab_request("get", url)
     resp.raise_for_status()
     categories = resp.json()["data"]["month"].get("categories", [])
 
@@ -781,7 +840,7 @@ def check_uncategorized_pileup() -> dict | None:
     today = date.today()
     since = today.replace(day=1).isoformat()
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/transactions"
-    resp = httpx.get(url, headers=HEADERS, params={"since_date": since, "type": "uncategorized"})
+    resp = _ynab_request("get", url, params={"since_date": since, "type": "uncategorized"})
     resp.raise_for_status()
     txns = resp.json()["data"]["transactions"]
 
@@ -824,7 +883,7 @@ def check_spending_anomalies() -> list:
     history: dict[str, list[float]] = {}  # name → [activity1, activity2, activity3]
     for m in months:
         url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{m}"
-        resp = httpx.get(url, headers=HEADERS)
+        resp = _ynab_request("get", url)
         resp.raise_for_status()
         cats = resp.json()["data"]["month"].get("categories", [])
         for cat in cats:
@@ -838,7 +897,7 @@ def check_spending_anomalies() -> list:
     # Get current month
     current_month = today.replace(day=1).isoformat()
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{current_month}"
-    resp = httpx.get(url, headers=HEADERS)
+    resp = _ynab_request("get", url)
     resp.raise_for_status()
     current_cats = resp.json()["data"]["month"].get("categories", [])
 
@@ -876,7 +935,7 @@ def check_savings_goals() -> list:
 
     current_month = today.replace(day=1).isoformat()
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{current_month}"
-    resp = httpx.get(url, headers=HEADERS)
+    resp = _ynab_request("get", url)
     resp.raise_for_status()
     categories = resp.json()["data"]["month"].get("categories", [])
 
@@ -919,7 +978,7 @@ def _fetch_month_data(month: str) -> list[dict]:
         List of category dicts with fields converted to dollars.
     """
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/months/{month}"
-    resp = httpx.get(url, headers=HEADERS)
+    resp = _ynab_request("get", url)
     resp.raise_for_status()
     categories = resp.json()["data"]["month"].get("categories", [])
 
@@ -1090,9 +1149,8 @@ def _update_goal_target(category_id: str, goal_target_milliunits: int) -> str:
     """
     url = f"{BASE_URL}/budgets/{YNAB_BUDGET_ID}/categories/{category_id}"
     try:
-        resp = httpx.patch(
-            url,
-            headers=HEADERS,
+        resp = _ynab_request(
+            "patch", url,
             json={"category": {"goal_target": goal_target_milliunits}},
         )
         resp.raise_for_status()
