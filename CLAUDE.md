@@ -22,7 +22,9 @@ Features are developed through a phased pipeline using slash commands, executed 
 
 ## Conventions
 
-**Branch naming**: `###-short-name` (e.g., `001-user-auth`). The 3-digit prefix auto-increments from the highest existing feature number across branches and `specs/`.
+**Branch protection**: `main` is protected — never commit directly to it. Always create a branch first, push, open a PR, wait for CI (`gate` check), then merge.
+
+**Branch naming**: `###-short-name` (e.g., `001-user-auth`). The 3-digit prefix auto-increments from the highest existing feature number across branches and `specs/`. For non-feature work (fixes, docs), use descriptive prefixes like `fix/`, `docs/`.
 
 **Feature artifacts** live under `specs/###-feature-name/`:
 - `spec.md`, `plan.md`, `research.md`, `data-model.md`, `quickstart.md`, `tasks.md`
