@@ -30,7 +30,7 @@ Claude (Anthropic) — agentic tool loop
 
 You text the bot in WhatsApp. Claude reads your message, decides which tools to call (calendar, budget, recipes, etc.), executes them, and sends back a formatted response. It remembers conversation context for 24 hours.
 
-Scheduled workflows run via in-app APScheduler (Railway) or n8n (NUC):
+Scheduled workflows run via in-app APScheduler:
 - **7:00am** — Daily briefing with calendar, chores, meals, and cross-domain insights
 - **10:00pm** — Amazon order sync (matches orders to YNAB transactions)
 - **10:05pm** — Email sync (PayPal, Venmo, Apple charges matched to YNAB)
@@ -98,7 +98,7 @@ family-meeting/
 │   ├── family.yaml          # Family config (names, prefs — edit this!)
 │   └── family.yaml.example  # Blank template for new deployments
 ├── src/
-│   ├── app.py              # FastAPI — webhook + n8n endpoints
+│   ├── app.py              # FastAPI — webhook + API endpoints
 │   ├── assistant.py         # Claude system prompt, 50+ tools, message loop
 │   ├── config.py            # Environment variables
 │   ├── family_config.py     # YAML config loader + placeholder builder
@@ -121,36 +121,29 @@ family-meeting/
 │       └── outlook.py       # Outlook ICS feed parser
 ├── anylist-sidecar/         # Node.js Express server for AnyList API
 ├── scripts/
-│   ├── nuc.sh               # Deployment helper (logs, restart, deploy)
-│   ├── setup_calendar.py    # Google OAuth setup
-│   └── n8n-workflows/       # n8n workflow JSON files
+│   └── setup_calendar.py    # Google OAuth setup
 ├── specs/                   # Feature specifications (speckit)
 ├── .specify/                # Speckit templates + scripts
 ├── data/                    # Persistent JSON files (sync records, etc.)
-├── docker-compose.yml       # 4 services: fastapi, anylist, cloudflared, n8n
+├── docker-compose.yml       # Local dev (fastapi + anylist sidecar)
 ├── Dockerfile
 └── .env                     # All credentials (not in git)
 ```
 
 ## Deployment
 
-**Primary: Railway (cloud).** CI/CD pipeline auto-deploys on push to main. See `ONBOARDING.md` for self-service setup.
+**Railway (cloud).** CI/CD pipeline auto-deploys on push to main. See `ONBOARDING.md` for self-service setup.
 
-**Secondary: NUC home server** (Intel NUC, Ubuntu 24.04) via Docker Compose with Cloudflare Tunnel for HTTPS. Uses n8n for scheduling instead of in-app APScheduler. Deploy via `./scripts/nuc.sh deploy`.
-
-**Services** (both environments):
+**Services**:
 - `fastapi` — Python app (port 8000)
 - `anylist-sidecar` — Node.js AnyList bridge (port 3000)
-- NUC also runs: `cloudflared` (tunnel), `n8n-mombot` (scheduling)
 
 ## Setup Guide
 
 ### Prerequisites
 
-- A server or always-on machine (NUC, Raspberry Pi, cloud VM, etc.)
-- Docker and Docker Compose
-- A domain name (for Cloudflare Tunnel)
 - Accounts: Anthropic, Meta (WhatsApp Business), Notion, Google Cloud, YNAB
+- Railway account (for cloud deployment)
 
 ### 1. Clone and configure
 
@@ -262,19 +255,6 @@ docker compose up -d --build
 # Configure tunnel to point to http://fastapi:8000
 ```
 
-### 7. Import n8n workflows
-
-```bash
-# Copy workflow files into n8n container
-docker compose cp scripts/n8n-workflows/. n8n-mombot:/tmp/workflows/
-
-# Import each workflow
-docker compose exec n8n-mombot n8n import:workflow --input=/tmp/workflows/daily-briefing.json
-# ... repeat for each workflow file
-
-# Activate workflows via n8n UI at http://your-server:5679
-```
-
 ## Customizing for Your Family
 
 All family-specific values live in one file: `config/family.yaml`. No code changes needed.
@@ -323,7 +303,7 @@ See [docs/ONBOARDING.md](docs/ONBOARDING.md) for the full setup guide. Only What
 ### 3. Further customization
 
 - **Tools**: Enable/disable features by adding/removing tools from the `TOOLS` list and `TOOL_FUNCTIONS` dict in `assistant.py`. Each tool module in `src/tools/` is independent.
-- **Schedules**: Update `data/schedules.json` (Railway) or n8n workflows (NUC) for your timezone and preferred automation times.
+- **Schedules**: Update `data/schedules.json` for your timezone and preferred automation times.
 - **Categories**: YNAB category mappings, recipe tags, chore lists — all configurable through the bot itself via natural language.
 
 ## How This Was Built — Claude Code + Speckit

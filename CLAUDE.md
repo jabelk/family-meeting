@@ -143,45 +143,19 @@ Sections without frontmatter are always included. The `_parse_frontmatter()` and
 
 ## Deployment
 
-> **Primary deployment: Railway (cloud).** NUC is a secondary home-server option.
-
-### Railway (Cloud) — Primary
+> **Deployment: Railway (cloud only).** NUC home server was decommissioned 2026-03-19.
 
 CI/CD pipeline auto-deploys on push to main after checks pass.
 
 - **Config**: `railway.toml` (build config, healthcheck)
 - **Storage**: Railway Volume mounted at `/app/data` (persistent JSON files)
 - **Scheduling**: In-app APScheduler (`src/scheduler.py`) — loads jobs from `data/schedules.json`
-- **Google OAuth**: `GOOGLE_TOKEN_JSON` env var loaded via `Credentials.from_authorized_user_info()`; refreshed tokens written back to volume
+- **Google OAuth**: Published app (tokens don't expire). `GOOGLE_TOKEN_JSON` env var loaded via `Credentials.from_authorized_user_info()`; refreshed tokens written back to volume
 - **Services**: FastAPI (public domain) + optional AnyList sidecar (private networking via `*.railway.internal`)
 - **Required env vars**: `ANTHROPIC_API_KEY`, `WHATSAPP_*`, `N8N_WEBHOOK_SECRET` (reused as general API auth)
 - **Optional integrations**: Notion, Google Calendar, YNAB, AnyList — app works as standalone chat assistant without them
 - **Hard constraint**: Single uvicorn worker only (APScheduler requirement)
 - **Onboarding**: See `ONBOARDING.md` for self-service setup guide
-
-### NUC (Home Server — Secondary)
-
-Alternative deployment on `warp-nuc` (Ubuntu 24.04, Intel NUC at 192.168.4.152) via Docker Compose. Uses n8n for scheduling instead of APScheduler. SSH access via `ssh warp-nuc`.
-
-**Helper script** — use `./scripts/nuc.sh` for all NUC operations:
-```bash
-./scripts/nuc.sh logs [service] [n]  # Show last n log lines (default: fastapi, 30)
-./scripts/nuc.sh follow [service]    # Follow logs in real-time
-./scripts/nuc.sh ps                  # Show container status
-./scripts/nuc.sh restart [service]   # Restart service (or all)
-./scripts/nuc.sh deploy              # Pull latest, rebuild, restart
-./scripts/nuc.sh env                 # Push .env from laptop to NUC + restart fastapi
-./scripts/nuc.sh ssh                 # Open SSH session
-./scripts/nuc.sh shell [service]     # Shell into container
-./scripts/nuc.sh chat-logs           # List archived conversation dates
-./scripts/nuc.sh chat-logs <date>    # Pull archive for YYYY-MM-DD
-./scripts/nuc.sh chat-logs latest    # Pull most recent archive
-```
-
-**Services**: fastapi (port 8000), anylist-sidecar (port 3000), cloudflared (tunnel), n8n (port 5678).
-
-**Updating code**: Edit locally, commit, push to main, then `./scripts/nuc.sh deploy`.
-**Updating .env**: Edit locally, then `./scripts/nuc.sh env` (copies .env and restarts fastapi).
 
 ## CI/CD Pipeline
 
@@ -270,6 +244,16 @@ If the user complains about unsolicited messages, check **both** paths:
 - **Scheduled job sending messages** → fix in `src/scheduler.py` or `data/schedules.json`
 
 Changing prompts alone will NOT stop code-generated scheduled messages. This was learned the hard way in Feature 038.
+
+## YNAB Rate Limiting
+
+YNAB API allows **200 requests/hour** (rolling window). All YNAB API calls go through `_ynab_request()` in `src/tools/ynab.py`, which:
+- Reads `X-Rate-Limit` response headers to track remaining quota
+- Logs warnings when quota drops below 20
+- Auto-retries once on 429 after a 60s wait
+- Pre-emptively pauses when remaining < 5
+
+`create_transaction()` includes an `import_id` (SHA-256 hash of payee+amount+date+category) for idempotency — YNAB deduplicates on this field, preventing duplicate transactions even if called twice.
 
 ## API Safety Thresholds
 

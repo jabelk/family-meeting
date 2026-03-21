@@ -10,8 +10,6 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-import httpx
-
 from src.prompts import render_template
 
 logger = logging.getLogger(__name__)
@@ -520,7 +518,7 @@ def find_amazon_transactions(days: int = 30) -> list[dict]:
 
     since_date = (date.today() - timedelta(days=days)).isoformat()
     url = f"{ynab.BASE_URL}/budgets/{ynab.YNAB_BUDGET_ID}/transactions"
-    resp = httpx.get(url, headers=ynab.HEADERS, params={"since_date": since_date})
+    resp = ynab._ynab_request("get", url, params={"since_date": since_date})
     resp.raise_for_status()
     txns = resp.json()["data"]["transactions"]
 
