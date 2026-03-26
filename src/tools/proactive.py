@@ -423,7 +423,7 @@ def check_action_item_progress() -> dict:
     try:
         results = notion_client.databases.query(
             database_id=NOTION_ACTION_ITEMS_DB,
-            filter={"property": "Due Context", "select": {"equals": "This Week"}},
+            filter={"property": "Due Context", "select": {"equals": "This week"}},
         )
     except Exception as e:
         logger.error("Failed to query action items: %s", e)

@@ -89,8 +89,8 @@ def get_action_items(assignee: str = "", status: str = "") -> str:
 
 
 @mcp.tool()
-def add_action_item(assignee: str, description: str, due_context: str = "This Week") -> str:
-    """Create a new action item assigned to a family member. Due context: "This Week", "Ongoing", or "Someday"."""
+def add_action_item(assignee: str, description: str, due_context: str = "This week") -> str:
+    """Create a new action item assigned to a family member. Due context: "This week", "Ongoing", or "Someday"."""
     return notion.add_action_item(assignee, description, due_context)
 
 
@@ -102,7 +102,7 @@ def complete_action_item(page_id: str) -> str:
 
 @mcp.tool()
 def rollover_incomplete_items() -> str:
-    """Mark all incomplete "This Week" action items as rolled over. Call when generating a new weekly agenda."""
+    """Mark all incomplete "This week" action items as rolled over. Call when generating a new weekly agenda."""
     return notion.rollover_incomplete_items()
 
 

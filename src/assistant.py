@@ -144,8 +144,8 @@ _ALL_TOOLS = [
                 "description": {"type": "string", "description": "What needs to be done."},
                 "due_context": {
                     "type": "string",
-                    "description": "When: 'This Week', 'Ongoing', or 'Someday'. Default 'This Week'.",
-                    "default": "This Week",
+                    "description": "When: 'This week', 'Ongoing', or 'Someday'. Default 'This week'.",
+                    "default": "This week",
                 },
             },
             "required": ["assignee", "description"],
@@ -1486,7 +1486,7 @@ TOOL_FUNCTIONS = {
     "get_outlook_events": lambda **kw: outlook.get_outlook_events(kw.get("date", "")),
     "get_action_items": lambda **kw: notion.get_action_items(kw.get("assignee", ""), kw.get("status", "")),
     "add_action_item": lambda **kw: notion.add_action_item(
-        kw["assignee"], kw["description"], kw.get("due_context", "This Week")
+        kw["assignee"], kw["description"], kw.get("due_context", "This week")
     ),
     "complete_action_item": lambda **kw: notion.complete_action_item(kw["page_id"]),
     "add_topic": lambda **kw: notion.add_topic(kw["description"]),
