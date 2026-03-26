@@ -142,7 +142,7 @@ def get_action_items(assignee: str = "", status: str = "") -> str:
 def add_action_item(
     assignee: str,
     description: str,
-    due_context: str = "This Week",
+    due_context: str = "This week",
     meeting_id: str = "",
 ) -> str:
     """Create a new action item in the Action Items database."""
@@ -211,7 +211,7 @@ def rollover_incomplete_items() -> str:
         filter={
             "and": [
                 {"property": "Status", "status": {"does_not_equal": "Done"}},
-                {"property": "Due Context", "select": {"equals": "This Week"}},
+                {"property": "Due Context", "select": {"equals": "This week"}},
             ]
         },
     )

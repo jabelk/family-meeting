@@ -28,7 +28,7 @@ Create a new meeting record in Notion for today (or a specific date). Returns th
 
 ## rollover_incomplete_items
 
-Mark all incomplete 'This Week' action items as rolled over. Call this when generating a new weekly agenda.
+Mark all incomplete 'This week' action items as rolled over. Call this when generating a new weekly agenda.
 
 ## save_meal_plan
 
